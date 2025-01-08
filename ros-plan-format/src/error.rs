@@ -1,0 +1,107 @@
+use crate::key::KeyOwned;
+
+#[derive(Debug, thiserror::Error)]
+#[error("cannot create a identifier from `{string}`")]
+pub struct IdentifierCreationError {
+    pub string: String,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ParseArgDefError {
+    #[error("invalid argument name `{name}`")]
+    InvalidName { name: String },
+    #[error("invalid argument type `{ty}`")]
+    InvalidType { ty: String },
+    #[error("unable to parse argument definition `{expr}`")]
+    MalformedDecl { expr: String },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum InvalidArgumentDeclaration {
+    #[error("argument value type mismatches")]
+    ValueTypeMismatch,
+
+    #[error("argument value type is not supported")]
+    ValueTypeNotSupported,
+
+    #[error("repeated argument definition `{name}`")]
+    RepeatedDefinition { name: String },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum InvalidNodeDeclaration {
+    #[error("repeated node definition `{name}`")]
+    RepeatedDefinition { name: String },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum InvalidLinkDeclaration {
+    #[error("repeated link definition `{name}`")]
+    RepeatedDefinition { name: String },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum InvalidSocketDeclaration {
+    #[error("repeated socket definition `{name}`")]
+    RepeatedDefinition { name: String },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum InvalidSubplanDeclaration {
+    #[error("repeated node definition `{key}`")]
+    RepeatedDefinition { key: String },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ParseParamDefError {
+    #[error("invalid parameter name `{name}`")]
+    InvalidName { name: String },
+    #[error("invalid parameter type `{ty}`")]
+    InvalidType { ty: String },
+    #[error("unable to parse parameter definition `{expr}`")]
+    MalformedDecl { expr: String },
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("invalid parameter declaration: {reason}")]
+pub enum InvalidParameterDeclaration {
+    #[error("parameter value type mismatches")]
+    ValueTypeMismatch,
+
+    #[error("parameter value type is not supported")]
+    ValueTypeNotSupported,
+
+    #[error("repeated parameter definition `{name}`")]
+    RepeatedDefinition { name: String },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum InvalidParameterValue {
+    #[error("empty value is not allowed")]
+    EmptyValueNotAllowed,
+
+    #[error("expect a single type, but multiple types are assigned")]
+    MultipleTypesNotAllowed,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum KeyCreationError {
+    #[error("cannot create a key from string `{key}: {reason}`")]
+    InitializationError { key: String, reason: String },
+
+    #[error("fail to concatenate key `{lhs}` with `{rhs}`")]
+    ConcatenationError { lhs: KeyOwned, rhs: String },
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("`{bad_type}` is not a valid ROS type: {reason}")]
+pub struct InvalidRosType {
+    pub bad_type: String,
+    pub reason: String,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("invalid byte array data: {reason}")]
+pub struct InvalidByteArrayData {
+    pub reason: String,
+}

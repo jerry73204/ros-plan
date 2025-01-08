@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = [
+  "ros-plan-format",
+  "ros-plan-parse",
+  "ros2plan",
+]

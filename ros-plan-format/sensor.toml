@@ -1,0 +1,7 @@
+[arg]
+
+[node.ros.imu]
+pkg = "pkg1"
+exec = "exec1"
+param.param0 = "yaya"
+param.param1 = 123

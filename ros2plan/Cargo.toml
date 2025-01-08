@@ -1,0 +1,9 @@
+[package]
+name = "ros2plan"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.23", features = ["derive"] }
+eyre = "0.6.12"
+ros-plan-parse = { version = "0.1.0", path = "../ros-plan-parse" }

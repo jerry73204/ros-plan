@@ -1,0 +1,94 @@
+[arg]
+arg1.default = 3
+arg2.default = "xxx"
+arg3.default = true
+arg4.default = 3.14
+arg5.default = [1, 2, 3]
+# arg6 = { require = "i64", help = "this is help text" }
+arg7.default.bytes = "base64:YQo="
+arg8.default.bytes = "hex:10ffa3"
+arg9.default.bytes = [1, 2, 255]
+
+[var]
+var1 = "xxx"
+var2.eval = "arg4 / 3"
+var3.eval = 'arg2 == "xxx"'
+var4.eval = '{ type = "bool" }'
+var5 = 3
+var6.eval = "2"
+var7.eval = '"/comp1/" .. arg2 .. "/comp2"'
+var8.eval = '''
+local a = 3
+if a > 0 then
+  return true
+else
+  return false
+end
+'''
+var9.eval = "pkg_dir('autoware_launch')"
+
+[socket.pub.output]
+src = [
+  { node = "preprocessor", topic = "~/fuse" }
+]
+
+[node.ros]
+lidar_driver = { pkg = "velodyne_driver", exec = "exec0" }
+camera_driver = { pkg = "v4l2_driver", exec = "exec1" }
+
+[node.ros.preprocessor]
+pkg = "pkg2"
+exec = "exec2"
+param.param0 = "yaya"
+param.param1 = 123
+param.param2.bytes = "hex:ff"
+param.param3.eval = "var3"
+
+[link.pubsub.pointcloud_link]
+qos.preset = "default"
+type = "sensor_msgs/msg/PointCloud2"
+src = [
+  { node = "lidar_driver", topic = "~/pointcloud" },
+]
+dst = [
+  { node = "preprocessor", topic = "~/pcd_in" },
+]
+
+[link.pubsub.image_link]
+qos.preset = "default"
+type = "sensor_msgs/msg/Image"
+src = [
+  { node = "camera_driver", topic = "~/image" },
+]
+dst = [
+  { node = "preprocessor", topic = "~/image_in" },
+]
+
+[link.pubsub.wtf_link]
+qos.preset = "default"
+type = "sensor_msgs/msg/Image"
+src = [
+  { node = "my_group/anode", topic = "~/out" },
+]
+dst = [
+  { node = "my_group/bnode", topic = "~/in" },
+]
+
+[include]
+sensor = { path = "sensor.toml", when.eval = "var3" }
+# localization = { pkg = "autoware_launch", file = "wtf.toml" }
+
+[include.sensor2]
+path = "sensor.toml"
+when.eval = "false"
+arg.a = "3333"
+arg.b = true
+
+
+[group.my_group]
+  when = true
+  
+  [group.my_group.node.ros]
+  anode = { pkg = "wtf", exec = "xxx" }
+  bnode = { pkg = "twf", exec = "yyy" }
+  
