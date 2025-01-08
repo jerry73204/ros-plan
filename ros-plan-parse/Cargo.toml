@@ -10,6 +10,6 @@ itertools = "0.13.0"
 mlua = { version = "0.10.2", features = ["luau"] }
 parking_lot = "0.12.3"
 ros-plan-format = { version = "0.1.0", path = "../ros-plan-format" }
-serde = { version = "1.0.217", features = ["derive"] }
-thiserror = "2.0.9"
+serde.workspace = true
+thiserror.workspace = true
 toml = { version = "0.8.19", features = ["indexmap"] }

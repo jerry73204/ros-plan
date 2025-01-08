@@ -1,7 +1,6 @@
-use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use serde::Deserialize;
-
 use crate::error::Error;
+use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use std::{
     ffi::OsString,
     fs,
@@ -44,12 +43,48 @@ impl<T> From<T> for ArcRwLock<T> {
     }
 }
 
+impl<T> Serialize for ArcRwLock<T>
+where
+    T: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let addr = Arc::as_ptr(&self.0) as usize;
+        let addr_text = format!("arc@{addr:x}");
+
+        let guard = self.read();
+        let mut struct_ = serializer.serialize_struct("Arc", 2)?;
+        struct_.serialize_field("addr", &addr_text)?;
+        struct_.serialize_field("data", &*guard)?;
+        struct_.end()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct WeakRwLock<T>(Weak<RwLock<T>>);
 
 impl<T> WeakRwLock<T> {
     pub fn upgrade(&self) -> Option<ArcRwLock<T>> {
         Some(ArcRwLock(self.0.upgrade()?))
+    }
+}
+
+impl<T> Serialize for WeakRwLock<T>
+where
+    T: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let addr = self.upgrade().map(|arc| {
+            let ptr = Arc::as_ptr(&arc.0);
+            let addr = ptr as usize;
+            format!("weak@{addr:x}")
+        });
+        addr.serialize(serializer)
     }
 }
 

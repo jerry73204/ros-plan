@@ -1,17 +1,19 @@
 use crate::{
     context::{
-        GlobalContextV1, GlobalContextV2, HerePlanContextV1, HerePlanContextV2, LinkArc,
-        LinkContext, NodeArc, NodeTopicUri, PlanContextV2, PlanContextV3, PubSubLinkContext,
-        ServiceLinkContext, SocketArc, SocketContext, TrieContext, TrieRef,
+        link::{LinkContext, PubSubLinkContext, ServiceLinkContext},
+        node::NodeArc,
+        socket::{SocketArc, SocketContext},
+        uri::NodeTopicUri,
     },
     error::Error,
+    resource::{HerePlanContext, PlanContext, PlanResource, TrieContext, TrieRef},
 };
 use itertools::Itertools;
 use ros_plan_format::{
     key::{Key, KeyOwned},
-    link::{Link, PubSubLink, ServiceLink, TopicUri},
+    link::TopicUri,
 };
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 
 macro_rules! bail_resolve_key_error {
     ($key:expr, $reason:expr) => {
@@ -33,21 +35,7 @@ impl LinkResolver {
         }
     }
 
-    pub fn traverse(&mut self, context: GlobalContextV1) -> Result<GlobalContextV2, Error> {
-        let mut context = {
-            let GlobalContextV1 {
-                namespace,
-                root,
-                node_map,
-            } = context;
-            GlobalContextV2 {
-                namespace,
-                root,
-                node_map,
-                link_map: HashMap::new(),
-            }
-        };
-
+    pub fn traverse(&mut self, context: &mut PlanResource) -> Result<(), Error> {
         // Schedule the job to visit the root
         self.queue.push_back(
             VisitNodeJob {
@@ -64,12 +52,12 @@ impl LinkResolver {
                     self.visit_node(job)?;
                 }
                 Job::ResolveLink(job) => {
-                    self.resolve_link(&mut context, job)?;
+                    self.resolve_link(context, job)?;
                 }
             }
         }
 
-        Ok(context)
+        Ok(())
     }
 
     pub fn visit_node(&mut self, job: VisitNodeJob) -> Result<(), Error> {
@@ -97,7 +85,7 @@ impl LinkResolver {
         // hereplan context.
         if let Some(ctx) = &guard.context {
             match ctx {
-                TrieContext::PlanV2(_) => {
+                TrieContext::Plan(_) => {
                     self.queue.push_back(
                         ResolveLinkJob {
                             current: current.clone(),
@@ -106,7 +94,7 @@ impl LinkResolver {
                         .into(),
                     );
                 }
-                TrieContext::HerePlanV1(_) => {
+                TrieContext::HerePlan(_) => {
                     self.queue.push_back(
                         ResolveLinkJob {
                             current: current.clone(),
@@ -115,7 +103,6 @@ impl LinkResolver {
                         .into(),
                     );
                 }
-                _ => unreachable!(),
             };
         }
 
@@ -124,7 +111,7 @@ impl LinkResolver {
 
     pub fn resolve_link(
         &mut self,
-        context: &mut GlobalContextV2,
+        context: &mut PlanResource,
         job: ResolveLinkJob,
     ) -> Result<(), Error> {
         let ResolveLinkJob {
@@ -133,28 +120,25 @@ impl LinkResolver {
         } = job;
 
         // Take the link_map out of the node context.
-        let link_map = {
+        let mut link_map = {
             let mut guard = current.write();
             let Some(node_ctx) = &mut guard.context else {
                 unreachable!();
             };
 
             match node_ctx {
-                TrieContext::PlanV2(plan_ctx) => std::mem::take(&mut plan_ctx.link_map),
-                TrieContext::HerePlanV1(hereplan_ctx) => std::mem::take(&mut hereplan_ctx.link_map),
-                _ => unreachable!(),
+                TrieContext::Plan(plan_ctx) => std::mem::take(&mut plan_ctx.link_map),
+                TrieContext::HerePlan(hereplan_ctx) => std::mem::take(&mut hereplan_ctx.link_map),
             }
         };
 
         // Resolve links
-        let link_map: HashMap<_, _> = link_map
-            .into_iter()
-            .map(|(link_ident, link_cfg)| -> Result<_, Error> {
-                let link_ctx = resolve_link(context, current.clone(), link_cfg)?;
-                let link_arc: LinkArc = link_ctx.into();
-                Ok((link_ident, link_arc))
-            })
-            .try_collect()?;
+        link_map
+            .values_mut()
+            .try_for_each(|link_ctx| -> Result<_, Error> {
+                let mut guard = link_ctx.write();
+                resolve_link(context, current.clone(), &mut guard)
+            })?;
 
         // Insert links to the global table
         {
@@ -174,8 +158,8 @@ impl LinkResolver {
             };
 
             let node_ctx: TrieContext = match node_ctx {
-                TrieContext::PlanV2(plan_ctx) => {
-                    let PlanContextV2 {
+                TrieContext::Plan(plan_ctx) => {
+                    let PlanContext {
                         path,
                         arg,
                         socket_map,
@@ -183,7 +167,7 @@ impl LinkResolver {
                         ..
                     } = plan_ctx;
 
-                    PlanContextV3 {
+                    PlanContext {
                         path,
                         arg,
                         socket_map,
@@ -192,41 +176,42 @@ impl LinkResolver {
                     }
                     .into()
                 }
-                TrieContext::HerePlanV1(hereplan_ctx) => {
-                    let HerePlanContextV1 { node_map, .. } = hereplan_ctx;
+                TrieContext::HerePlan(hereplan_ctx) => {
+                    let HerePlanContext { node_map, .. } = hereplan_ctx;
 
-                    HerePlanContextV2 { node_map, link_map }.into()
+                    HerePlanContext { node_map, link_map }.into()
                 }
-                _ => unreachable!(),
             };
             guard.context = Some(node_ctx);
-        };
+        }
 
         Ok(())
     }
 }
 
 fn resolve_link(
-    context: &GlobalContextV2,
+    context: &PlanResource,
     current: TrieRef,
-    link: Link,
-) -> Result<LinkContext, Error> {
-    let link_ctx: LinkContext = match link {
-        Link::Pubsub(link) => resolve_pubsub_link(context, current, link)?.into(),
-        Link::Service(link) => resolve_service_link(context, current, link)?.into(),
-    };
-    Ok(link_ctx)
+    link: &mut LinkContext,
+) -> Result<(), Error> {
+    match link {
+        LinkContext::Pubsub(link) => resolve_pubsub_link(context, current, link)?,
+        LinkContext::Service(link) => resolve_service_link(context, current, link)?,
+    }
+    Ok(())
 }
 
 fn resolve_pubsub_link(
-    context: &GlobalContextV2,
+    context: &PlanResource,
     current: TrieRef,
-    link: PubSubLink,
-) -> Result<PubSubLinkContext, Error> {
-    let PubSubLink { ty, qos, src, dst } = link;
+    link: &mut PubSubLinkContext,
+) -> Result<(), Error> {
+    // let PubSubLink { ty, qos, src, dst } = link;
 
-    let src: Vec<_> = src
-        .into_iter()
+    let src: Vec<_> = link
+        .config
+        .src
+        .iter()
         .map(|uri| {
             let TopicUri {
                 node: node_key,
@@ -239,14 +224,14 @@ fn resolve_pubsub_link(
             let uris: Vec<_> = match resolve {
                 ResolveNode::Node(node_arc) => vec![NodeTopicUri {
                     node: node_arc.downgrade(),
-                    topic,
+                    topic: topic.clone(),
                 }],
                 ResolveNode::Socket(socket_arc) => {
                     let guard = socket_arc.read();
                     let SocketContext::Pub(pub_ctx) = &*guard else {
                         bail_resolve_key_error!(node_key, "expect a pub socket");
                     };
-                    pub_ctx.src.clone()
+                    pub_ctx.src.clone().unwrap()
                 }
             };
 
@@ -255,8 +240,10 @@ fn resolve_pubsub_link(
         .flatten_ok()
         .try_collect()?;
 
-    let dst: Vec<_> = dst
-        .into_iter()
+    let dst: Vec<_> = link
+        .config
+        .dst
+        .iter()
         .map(|uri| {
             let TopicUri {
                 node: node_key,
@@ -269,14 +256,14 @@ fn resolve_pubsub_link(
             let uris: Vec<_> = match resolve {
                 ResolveNode::Node(node_arc) => vec![NodeTopicUri {
                     node: node_arc.downgrade(),
-                    topic,
+                    topic: topic.clone(),
                 }],
                 ResolveNode::Socket(socket_arc) => {
                     let guard = socket_arc.read();
                     let SocketContext::Sub(sub_ctx) = &*guard else {
                         bail_resolve_key_error!(node_key, "expect a sub socket");
                     };
-                    sub_ctx.dst.clone()
+                    sub_ctx.dst.clone().unwrap()
                 }
             };
 
@@ -285,25 +272,22 @@ fn resolve_pubsub_link(
         .flatten_ok()
         .try_collect()?;
 
-    Ok(PubSubLinkContext { src, dst, ty, qos })
+    link.src = Some(src);
+    link.dst = Some(dst);
+
+    Ok(())
 }
 
 fn resolve_service_link(
-    context: &GlobalContextV2,
+    context: &PlanResource,
     current: TrieRef,
-    link: ServiceLink,
-) -> Result<ServiceLinkContext, Error> {
-    let ServiceLink {
-        ty,
-        listen,
-        connect,
-    } = link;
-
+    link: &mut ServiceLinkContext,
+) -> Result<(), Error> {
     let listen = {
         let TopicUri {
             node: node_key,
             topic,
-        } = listen;
+        } = &link.config.listen;
         let Some(resolve) = resolve_node_key(context, current.clone(), &node_key) else {
             bail_resolve_key_error!(node_key, "unable to resolve key");
         };
@@ -311,22 +295,24 @@ fn resolve_service_link(
         let uri = match resolve {
             ResolveNode::Node(node_arc) => NodeTopicUri {
                 node: node_arc.downgrade(),
-                topic,
+                topic: topic.clone(),
             },
             ResolveNode::Socket(socket_arc) => {
                 let guard = socket_arc.read();
                 let SocketContext::Srv(srv_ctx) = &*guard else {
                     bail_resolve_key_error!(node_key, "expect a qry socket");
                 };
-                srv_ctx.listen.clone()
+                srv_ctx.listen.clone().unwrap()
             }
         };
 
         uri
     };
 
-    let connect: Vec<_> = connect
-        .into_iter()
+    let connect: Vec<_> = link
+        .config
+        .connect
+        .iter()
         .map(|uri| {
             let TopicUri {
                 node: node_key,
@@ -339,14 +325,14 @@ fn resolve_service_link(
             let uris: Vec<_> = match resolve {
                 ResolveNode::Node(node_arc) => vec![NodeTopicUri {
                     node: node_arc.downgrade(),
-                    topic,
+                    topic: topic.clone(),
                 }],
                 ResolveNode::Socket(socket_arc) => {
                     let guard = socket_arc.read();
                     let SocketContext::Qry(qry_ctx) = &*guard else {
                         bail_resolve_key_error!(node_key, "expect a qry socket");
                     };
-                    qry_ctx.connect.clone()
+                    qry_ctx.connect.clone().unwrap()
                 }
             };
 
@@ -355,15 +341,14 @@ fn resolve_service_link(
         .flatten_ok()
         .try_collect()?;
 
-    Ok(ServiceLinkContext {
-        ty,
-        listen,
-        connect,
-    })
+    link.listen = Some(listen);
+    link.connect = Some(connect);
+
+    Ok(())
 }
 
 fn resolve_node_key(
-    context: &GlobalContextV2,
+    context: &PlanResource,
     plan_or_hereplan_root: TrieRef,
     key: &Key,
 ) -> Option<ResolveNode> {
@@ -389,7 +374,7 @@ fn resolve_node_key(
                 for comp in comp_iter {
                     let next = {
                         let guard = curr.read();
-                        if matches!(guard.context, Some(TrieContext::PlanV1(_))) {
+                        if matches!(guard.context, Some(TrieContext::Plan(_))) {
                             return None;
                         }
                         let next = guard.children.get(comp)?;
@@ -401,15 +386,14 @@ fn resolve_node_key(
                 {
                     let guard = curr.read();
                     match guard.context.as_ref()? {
-                        TrieContext::PlanV2(ctx) => {
+                        TrieContext::Plan(ctx) => {
                             let socket_arc = ctx.socket_map.get(node_name)?;
                             socket_arc.clone().into()
                         }
-                        TrieContext::HerePlanV1(ctx) => {
+                        TrieContext::HerePlan(ctx) => {
                             let node_arc = ctx.node_map.get(node_name)?;
                             node_arc.clone().into()
                         }
-                        _ => unreachable!(),
                     }
                 }
             }
@@ -419,9 +403,8 @@ fn resolve_node_key(
                     unreachable!();
                 };
                 let node_map = match node_ctx {
-                    TrieContext::PlanV2(plan_ctx) => &plan_ctx.node_map,
-                    TrieContext::HerePlanV1(hereplan_ctx) => &hereplan_ctx.node_map,
-                    _ => unreachable!(),
+                    TrieContext::Plan(plan_ctx) => &plan_ctx.node_map,
+                    TrieContext::HerePlan(hereplan_ctx) => &hereplan_ctx.node_map,
                 };
                 let node_arc = node_map.get(node_name)?;
                 node_arc.clone().into()

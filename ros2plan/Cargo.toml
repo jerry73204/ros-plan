@@ -6,4 +6,6 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.5.23", features = ["derive"] }
 eyre = "0.6.12"
+ros-plan-format = { version = "0.1.0", path = "../ros-plan-format" }
 ros-plan-parse = { version = "0.1.0", path = "../ros-plan-parse" }
+serde_yaml = "0.9.34"

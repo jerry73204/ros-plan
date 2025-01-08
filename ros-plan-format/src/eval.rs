@@ -1,6 +1,6 @@
 use crate::error::InvalidByteArrayData;
 use base64::prelude::*;
-use serde::{de::Error as _, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{self, Debug, Display};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

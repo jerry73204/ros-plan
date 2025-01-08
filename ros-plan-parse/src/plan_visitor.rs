@@ -1,18 +1,25 @@
 use crate::{
     context::{
-        GlobalContextV1, HerePlanContextV1, NodeArc, NodeContext, PlanContextV1, TrieContext,
-        TrieRef,
+        link::{LinkArc, LinkContext, PubSubLinkContext, ServiceLinkContext},
+        node::{NodeArc, NodeContext},
+        socket::{
+            PubSocketContext, QuerySocketContext, ServerSocketContext, SocketArc, SocketContext,
+            SubSocketContext,
+        },
     },
     error::Error,
     eval::eval_plan,
+    resource::{HerePlanContext, PlanContext, PlanResource, TrieContext, TrieRef},
     utils::{find_plan_file_from_pkg, read_toml_file},
 };
 use ros_plan_format::{
     eval::Value,
     key::{Key, KeyOwned},
+    link::Link,
     parameter::ParamName,
     plan::Plan,
-    subplan::{HerePlan, Subplan},
+    socket::Socket,
+    subplan::{HerePlan, Subplan, SubplanTable},
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -34,20 +41,21 @@ impl PlanVisitor {
         &mut self,
         path: &Path,
         args: Option<HashMap<ParamName, Value>>,
-    ) -> Result<GlobalContextV1, Error> {
+    ) -> Result<PlanResource, Error> {
         let root = TrieRef::default();
         let assign_args = args.unwrap_or_default();
 
-        let mut context = GlobalContextV1 {
+        let mut context = PlanResource {
             namespace: KeyOwned::new_root(),
             root: root.clone(),
             node_map: HashMap::new(),
+            link_map: HashMap::new(),
         };
 
         self.insert_plan(
             &mut context,
             InsertPlanFileJob {
-                plan_parent: root.clone(),
+                // plan_parent: root.clone(),
                 current: root.clone(),
                 current_prefix: KeyOwned::new_root(),
                 child_suffix: KeyOwned::new_empty(),
@@ -72,11 +80,11 @@ impl PlanVisitor {
 
     fn insert_plan(
         &mut self,
-        context: &mut GlobalContextV1,
+        context: &mut PlanResource,
         job: InsertPlanFileJob,
     ) -> Result<(), Error> {
         let InsertPlanFileJob {
-            plan_parent: _,
+            // plan_parent: _,
             current,
             current_prefix,
             child_suffix,
@@ -93,25 +101,7 @@ impl PlanVisitor {
         eval_plan(&mut plan, assign_args)?;
 
         // Create the context for the inserted plan
-        let plan_ctx = {
-            let local_node_map: HashMap<_, _> = plan
-                .node
-                .0
-                .into_iter()
-                .map(|(node_ident, node_cfg)| {
-                    let node_arc: NodeArc = NodeContext { config: node_cfg }.into();
-                    (node_ident, node_arc)
-                })
-                .collect();
-
-            PlanContextV1 {
-                path: child_plan_path.to_owned(),
-                socket_map: plan.socket.0,
-                arg: plan.arg,
-                node_map: local_node_map,
-                link_map: plan.link.0,
-            }
-        };
+        let (plan_ctx, subplan_tab) = to_plan_context(child_plan_path, plan);
 
         // Insert node entries to the global context
         {
@@ -126,7 +116,7 @@ impl PlanVisitor {
         let plan_child = current.insert(&child_suffix, plan_ctx.into())?;
 
         // Schedule subplan insertion jobs
-        for (subplan_suffix, subplan) in plan.subplan.0 {
+        for (subplan_suffix, subplan) in subplan_tab.0 {
             self.schedule_subplan_insertion(
                 plan_child.clone(),
                 plan_child.clone(),
@@ -141,7 +131,7 @@ impl PlanVisitor {
 
     fn insert_hereplan(
         &mut self,
-        context: &mut GlobalContextV1,
+        context: &mut PlanResource,
         job: InsertHerePlanJob,
     ) -> Result<(), Error> {
         let InsertHerePlanJob {
@@ -167,10 +157,19 @@ impl PlanVisitor {
                     (node_ident, node_arc)
                 })
                 .collect();
+            let local_link_map: HashMap<_, _> = child_hereplan
+                .link
+                .0
+                .into_iter()
+                .map(|(link_ident, link_cfg)| {
+                    let link_arc: LinkArc = to_link_context(link_cfg).into();
+                    (link_ident, link_arc)
+                })
+                .collect();
 
-            HerePlanContextV1 {
+            HerePlanContext {
                 node_map: local_node_map,
-                link_map: child_hereplan.link.0,
+                link_map: local_link_map,
             }
         };
 
@@ -218,7 +217,7 @@ impl PlanVisitor {
                     let subplan_path = &subplan.path;
                     let subplan_path = if subplan_path.is_relative() {
                         let guard = plan_parent.read();
-                        let Some(TrieContext::PlanV1(plan_ctx)) = &guard.context else {
+                        let Some(TrieContext::Plan(plan_ctx)) = &guard.context else {
                             unreachable!("the plan context must be initialized");
                         };
                         let Some(parent_dir) = plan_ctx.path.parent() else {
@@ -242,7 +241,7 @@ impl PlanVisitor {
 
                 self.queue.push_back(
                     InsertPlanFileJob {
-                        plan_parent,
+                        // plan_parent,
                         current,
                         child_plan_path: subplan_path,
                         current_prefix: current_prefix.to_owned(),
@@ -265,7 +264,7 @@ impl PlanVisitor {
 
                 self.queue.push_back(
                     InsertPlanFileJob {
-                        plan_parent,
+                        // plan_parent,
                         current,
                         child_plan_path: path,
                         current_prefix: current_prefix.to_owned(),
@@ -318,10 +317,85 @@ pub struct InsertHerePlanJob {
 }
 
 pub struct InsertPlanFileJob {
-    plan_parent: TrieRef,
+    // plan_parent: TrieRef,
     current: TrieRef,
     current_prefix: KeyOwned,
     child_suffix: KeyOwned,
     child_plan_path: PathBuf,
     assign_args: HashMap<ParamName, Value>,
+}
+
+fn to_plan_context(path: PathBuf, plan_cfg: Plan) -> (PlanContext, SubplanTable) {
+    let local_node_map: HashMap<_, _> = plan_cfg
+        .node
+        .0
+        .into_iter()
+        .map(|(node_ident, node_cfg)| {
+            let node_arc: NodeArc = NodeContext { config: node_cfg }.into();
+            (node_ident, node_arc)
+        })
+        .collect();
+
+    let local_socket_map: HashMap<_, _> = plan_cfg
+        .socket
+        .0
+        .into_iter()
+        .map(|(socket_ident, socket_cfg)| {
+            let socket_arc: SocketArc = to_socket_context(socket_cfg).into();
+            (socket_ident, socket_arc)
+        })
+        .collect();
+
+    let local_link_map: HashMap<_, _> = plan_cfg
+        .link
+        .0
+        .into_iter()
+        .map(|(link_ident, link_cfg)| {
+            let link_arc: LinkArc = to_link_context(link_cfg).into();
+            (link_ident, link_arc)
+        })
+        .collect();
+
+    let plan_ctx = PlanContext {
+        path,
+        arg: plan_cfg.arg,
+        socket_map: local_socket_map,
+        node_map: local_node_map,
+        link_map: local_link_map,
+    };
+
+    (plan_ctx, plan_cfg.subplan)
+}
+fn to_socket_context(socket_ctx: Socket) -> SocketContext {
+    match socket_ctx {
+        Socket::Pub(config) => PubSocketContext { config, src: None }.into(),
+        Socket::Sub(config) => SubSocketContext { config, dst: None }.into(),
+        Socket::Srv(config) => ServerSocketContext {
+            config,
+            listen: None,
+        }
+        .into(),
+        Socket::Qry(config) => QuerySocketContext {
+            config,
+            connect: None,
+        }
+        .into(),
+    }
+}
+
+fn to_link_context(link: Link) -> LinkContext {
+    match link {
+        Link::Pubsub(link) => PubSubLinkContext {
+            config: link,
+            src: None,
+            dst: None,
+        }
+        .into(),
+        Link::Service(link) => ServiceLinkContext {
+            config: link,
+            listen: None,
+            connect: None,
+        }
+        .into(),
+    }
 }
