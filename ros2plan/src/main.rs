@@ -1,3 +1,5 @@
+pub mod config;
+
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -9,15 +11,15 @@ struct Args {
 
     /// The execution environment configuration file.
     #[clap(short = 'c', long)]
-    pub config_file: Option<PathBuf>,
+    pub config: Option<PathBuf>,
 }
 
 fn main() -> eyre::Result<()> {
     let args = Args::parse();
     let resource = ros_plan_parse::parse_plan_file(&args.plan_file, None)?;
 
-    let yaml_text = serde_yaml::to_string(&resource)?;
-    println!("{yaml_text}");
+    let json_text = serde_json::to_string_pretty(&resource)?;
+    println!("{json_text}");
 
     Ok(())
 }
