@@ -8,13 +8,15 @@ use crate::{
         },
     },
     error::Error,
-    eval::eval_plan,
-    resource::{HerePlanContext, PlanContext, PlanResource, TrieContext, TrieRef},
+    resource::{
+        HerePlanResource, PlanFileResource, PlanFileResourceWithArgs, Resource, ResourceTreeRef,
+        PlanResource,
+    },
     utils::{find_plan_file_from_pkg, read_toml_file},
 };
 use indexmap::IndexMap;
 use ros_plan_format::{
-    eval::Value,
+    eval::{Value, ValueOrEval},
     key::{Key, KeyOwned},
     link::Link,
     parameter::ParamName,
@@ -42,11 +44,15 @@ impl PlanVisitor {
         &mut self,
         path: &Path,
         args: Option<IndexMap<ParamName, Value>>,
-    ) -> Result<PlanResource, Error> {
-        let root = TrieRef::default();
-        let assign_args = args.unwrap_or_default();
+    ) -> Result<Resource, Error> {
+        let root = ResourceTreeRef::default();
+        let assign_args: IndexMap<ParamName, ValueOrEval> = args
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(name, value)| (name, ValueOrEval::from(value)))
+            .collect();
 
-        let mut context = PlanResource {
+        let mut context = Resource {
             root: root.clone(),
             // plan_map: HashMap::new(),
             node_map: IndexMap::new(),
@@ -71,14 +77,13 @@ impl PlanVisitor {
 
     fn insert_root_plan(
         &mut self,
-        context: &mut PlanResource,
-        root: TrieRef,
+        context: &mut Resource,
+        root: ResourceTreeRef,
         plan_path: &Path,
-        assign_args: IndexMap<ParamName, Value>,
+        assign_args: IndexMap<ParamName, ValueOrEval>,
     ) -> Result<(), Error> {
         // Read plan file
-        let mut plan: Plan = read_toml_file(&plan_path)?;
-        eval_plan(&mut plan, assign_args)?;
+        let plan: Plan = read_toml_file(&plan_path)?;
 
         // Create the context for the inserted plan
         let (plan_ctx, subplan_tab) = to_plan_context(plan_path.to_path_buf(), plan);
@@ -97,7 +102,13 @@ impl PlanVisitor {
         {
             let mut guard = root.write();
             assert!(guard.context.is_none());
-            guard.context = Some(plan_ctx.into());
+            guard.context = Some(
+                PlanFileResourceWithArgs {
+                    context: plan_ctx,
+                    args: assign_args,
+                }
+                .into(),
+            );
         }
 
         // Schedule subplan insertion jobs
@@ -116,7 +127,7 @@ impl PlanVisitor {
 
     fn insert_plan(
         &mut self,
-        context: &mut PlanResource,
+        context: &mut Resource,
         job: InsertPlanFileJob,
     ) -> Result<(), Error> {
         let InsertPlanFileJob {
@@ -133,8 +144,8 @@ impl PlanVisitor {
         };
 
         // Read plan file
-        let mut plan: Plan = read_toml_file(&child_plan_path)?;
-        eval_plan(&mut plan, assign_args)?;
+        let plan: Plan = read_toml_file(&child_plan_path)?;
+        // eval_plan(&mut plan, assign_args)?;
 
         // Create the context for the inserted plan
         let (plan_ctx, subplan_tab) = to_plan_context(child_plan_path.clone(), plan);
@@ -150,7 +161,14 @@ impl PlanVisitor {
         }
 
         // Create the child node for the plan
-        let plan_child = current.insert(&child_suffix, plan_ctx.into())?;
+        let plan_child = current.insert(
+            &child_suffix,
+            PlanFileResourceWithArgs {
+                context: plan_ctx,
+                args: assign_args,
+            }
+            .into(),
+        )?;
 
         // Insert the plan to the global table
         // {
@@ -174,7 +192,7 @@ impl PlanVisitor {
 
     fn insert_hereplan(
         &mut self,
-        context: &mut PlanResource,
+        context: &mut Resource,
         job: InsertHerePlanJob,
     ) -> Result<(), Error> {
         let InsertHerePlanJob {
@@ -221,8 +239,8 @@ impl PlanVisitor {
 
     fn schedule_subplan_insertion(
         &mut self,
-        plan_parent: TrieRef,
-        current: TrieRef,
+        plan_parent: ResourceTreeRef,
+        current: ResourceTreeRef,
         current_prefix: &Key,
         child_suffix: &Key,
         child_subplan: Subplan,
@@ -236,10 +254,10 @@ impl PlanVisitor {
                     let subplan_path = &subplan.path;
                     let subplan_path = if subplan_path.is_relative() {
                         let guard = plan_parent.read();
-                        let Some(TrieContext::Plan(plan_ctx)) = &guard.context else {
+                        let Some(PlanResource::PlanFile(plan_ctx)) = &guard.context else {
                             unreachable!("the plan context must be initialized");
                         };
-                        let Some(parent_dir) = plan_ctx.path.parent() else {
+                        let Some(parent_dir) = plan_ctx.context.path.parent() else {
                             unreachable!("the plan file must have a parent directory");
                         };
                         parent_dir.join(subplan_path)
@@ -249,15 +267,6 @@ impl PlanVisitor {
                     subplan_path
                 };
 
-                let assign_args: IndexMap<_, _> = subplan
-                    .arg
-                    .into_iter()
-                    .map(|(arg_name, assign)| {
-                        let value = assign.into_value().expect("value is not evaluated");
-                        (arg_name, value)
-                    })
-                    .collect();
-
                 self.queue.push_back(
                     InsertPlanFileJob {
                         // plan_parent,
@@ -265,21 +274,13 @@ impl PlanVisitor {
                         child_plan_path: subplan_path,
                         current_prefix: current_prefix.to_owned(),
                         child_suffix: subplan_suffix,
-                        assign_args,
+                        assign_args: subplan.arg,
                     }
                     .into(),
                 );
             }
             Subplan::Pkg(subplan) => {
                 let path = find_plan_file_from_pkg(&subplan.pkg, &subplan.file)?;
-                let assign_args: IndexMap<_, _> = subplan
-                    .arg
-                    .into_iter()
-                    .map(|(arg_name, assign)| {
-                        let value = assign.into_value().expect("value is not evaluated");
-                        (arg_name, value)
-                    })
-                    .collect();
 
                 self.queue.push_back(
                     InsertPlanFileJob {
@@ -288,7 +289,7 @@ impl PlanVisitor {
                         child_plan_path: path,
                         current_prefix: current_prefix.to_owned(),
                         child_suffix: subplan_suffix,
-                        assign_args,
+                        assign_args: subplan.arg,
                     }
                     .into(),
                 );
@@ -328,8 +329,8 @@ impl From<InsertHerePlanJob> for Job {
 }
 
 pub struct InsertHerePlanJob {
-    plan_parent: TrieRef,
-    current: TrieRef,
+    plan_parent: ResourceTreeRef,
+    current: ResourceTreeRef,
     current_prefix: KeyOwned,
     child_suffix: KeyOwned,
     child_hereplan: HerePlan,
@@ -337,14 +338,14 @@ pub struct InsertHerePlanJob {
 
 pub struct InsertPlanFileJob {
     // plan_parent: TrieRef,
-    current: TrieRef,
+    current: ResourceTreeRef,
     current_prefix: KeyOwned,
     child_suffix: KeyOwned,
     child_plan_path: PathBuf,
-    assign_args: IndexMap<ParamName, Value>,
+    assign_args: IndexMap<ParamName, ValueOrEval>,
 }
 
-fn to_plan_context(path: PathBuf, plan_cfg: Plan) -> (PlanContext, SubplanTable) {
+fn to_plan_context(path: PathBuf, plan_cfg: Plan) -> (PlanFileResource, SubplanTable) {
     let local_node_map: IndexMap<_, _> = plan_cfg
         .node
         .0
@@ -375,9 +376,10 @@ fn to_plan_context(path: PathBuf, plan_cfg: Plan) -> (PlanContext, SubplanTable)
         })
         .collect();
 
-    let plan_ctx = PlanContext {
+    let plan_ctx = PlanFileResource {
         path,
         arg: plan_cfg.arg,
+        var: plan_cfg.var,
         socket_map: local_socket_map,
         node_map: local_node_map,
         link_map: local_link_map,
@@ -386,7 +388,7 @@ fn to_plan_context(path: PathBuf, plan_cfg: Plan) -> (PlanContext, SubplanTable)
     (plan_ctx, plan_cfg.subplan)
 }
 
-fn to_hereplan_context(hereplan: HerePlan) -> (HerePlanContext, SubplanTable) {
+fn to_hereplan_context(hereplan: HerePlan) -> (HerePlanResource, SubplanTable) {
     let local_node_map: IndexMap<_, _> = hereplan
         .node
         .0
@@ -406,7 +408,7 @@ fn to_hereplan_context(hereplan: HerePlan) -> (HerePlanContext, SubplanTable) {
         })
         .collect();
 
-    let ctx = HerePlanContext {
+    let ctx = HerePlanResource {
         node_map: local_node_map,
         link_map: local_link_map,
     };

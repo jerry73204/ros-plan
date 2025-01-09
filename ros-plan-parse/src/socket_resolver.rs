@@ -8,7 +8,7 @@ use crate::{
         uri::NodeTopicUri,
     },
     error::Error,
-    resource::{PlanContext, PlanResource, TrieContext, TrieRef},
+    resource::{Resource, ResourceTreeRef, PlanResource},
 };
 use itertools::Itertools;
 use ros_plan_format::{
@@ -37,7 +37,7 @@ impl SocketResolver {
         }
     }
 
-    pub fn traverse(&mut self, context: &mut PlanResource) -> Result<(), Error> {
+    pub fn traverse(&mut self, context: &mut Resource) -> Result<(), Error> {
         self.queue.push_back(
             VisitNodeJob {
                 current: context.root.clone(),
@@ -84,7 +84,7 @@ impl SocketResolver {
             }
         }
 
-        if let Some(TrieContext::Plan(_)) = &guard.context {
+        if let Some(PlanResource::PlanFile { .. }) = &guard.context {
             self.queue.push_back(
                 ResolveSocketJob {
                     current: current.clone(),
@@ -106,11 +106,10 @@ impl SocketResolver {
         // Take out the socket_map from the plan context
         let mut socket_map = {
             let mut guard = current.write();
-            let Some(TrieContext::Plan(plan_ctx)) = &mut guard.context else {
+            let Some(PlanResource::PlanFile(plan_ctx)) = &mut guard.context else {
                 unreachable!("a plan context is expected");
             };
-            let plan_ctx: &mut PlanContext = plan_ctx;
-            std::mem::take(&mut plan_ctx.socket_map)
+            std::mem::take(&mut plan_ctx.context.socket_map)
         };
 
         // Resolve URIs in the socket_map
@@ -124,34 +123,20 @@ impl SocketResolver {
         // Update plan context
         {
             let mut guard = current.write();
-            let Some(TrieContext::Plan(plan_ctx)) = guard.context.take() else {
+            let Some(PlanResource::PlanFile(plan_ctx)) = guard.context.as_mut() else {
                 unreachable!("a plan context is expected");
             };
-
-            let PlanContext {
-                path,
-                arg,
-                node_map,
-                link_map,
-                ..
-            } = plan_ctx;
-            guard.context = Some(
-                PlanContext {
-                    path,
-                    arg,
-                    socket_map,
-                    node_map,
-                    link_map,
-                }
-                .into(),
-            );
+            plan_ctx.context.socket_map = socket_map;
         }
 
         Ok(())
     }
 }
 
-fn resolve_socket_topics(current: TrieRef, socket_ctx: &mut SocketContext) -> Result<(), Error> {
+fn resolve_socket_topics(
+    current: ResourceTreeRef,
+    socket_ctx: &mut SocketContext,
+) -> Result<(), Error> {
     match socket_ctx {
         SocketContext::Pub(pub_ctx) => resolve_pub_socket_topics(current, pub_ctx)?,
         SocketContext::Sub(sub_ctx) => resolve_sub_socket_topics(current, sub_ctx)?,
@@ -161,7 +146,10 @@ fn resolve_socket_topics(current: TrieRef, socket_ctx: &mut SocketContext) -> Re
     Ok(())
 }
 
-fn resolve_pub_socket_topics(current: TrieRef, pub_: &mut PubSocketContext) -> Result<(), Error> {
+fn resolve_pub_socket_topics(
+    current: ResourceTreeRef,
+    pub_: &mut PubSocketContext,
+) -> Result<(), Error> {
     let src: Vec<_> = pub_
         .config
         .src
@@ -202,7 +190,10 @@ fn resolve_pub_socket_topics(current: TrieRef, pub_: &mut PubSocketContext) -> R
     Ok(())
 }
 
-fn resolve_sub_socket_topics(current: TrieRef, sub: &mut SubSocketContext) -> Result<(), Error> {
+fn resolve_sub_socket_topics(
+    current: ResourceTreeRef,
+    sub: &mut SubSocketContext,
+) -> Result<(), Error> {
     let dst: Vec<_> = sub
         .config
         .dst
@@ -243,7 +234,10 @@ fn resolve_sub_socket_topics(current: TrieRef, sub: &mut SubSocketContext) -> Re
     Ok(())
 }
 
-fn resolve_srv_socket_topics(current: TrieRef, srv: &mut ServerSocketContext) -> Result<(), Error> {
+fn resolve_srv_socket_topics(
+    current: ResourceTreeRef,
+    srv: &mut ServerSocketContext,
+) -> Result<(), Error> {
     let TopicUri {
         node: node_key,
         topic,
@@ -274,7 +268,10 @@ fn resolve_srv_socket_topics(current: TrieRef, srv: &mut ServerSocketContext) ->
     Ok(())
 }
 
-fn resolve_qry_socket_topics(current: TrieRef, qry: &mut QuerySocketContext) -> Result<(), Error> {
+fn resolve_qry_socket_topics(
+    current: ResourceTreeRef,
+    qry: &mut QuerySocketContext,
+) -> Result<(), Error> {
     let connect: Vec<_> = qry
         .config
         .connect
@@ -315,10 +312,10 @@ fn resolve_qry_socket_topics(current: TrieRef, qry: &mut QuerySocketContext) -> 
     Ok(())
 }
 
-fn resolve_node_key(root: TrieRef, key: &Key) -> Option<ResolveNode> {
+fn resolve_node_key(root: ResourceTreeRef, key: &Key) -> Option<ResolveNode> {
     {
         let guard = root.read();
-        if !matches!(guard.context, Some(TrieContext::Plan(_))) {
+        if !matches!(guard.context, Some(PlanResource::PlanFile { .. })) {
             panic!("the search must starts at a plan node");
         }
     }
@@ -332,11 +329,11 @@ fn resolve_node_key(root: TrieRef, key: &Key) -> Option<ResolveNode> {
             let child = root.get_child(prefix)?;
             let guard = child.read();
             match guard.context.as_ref()? {
-                TrieContext::Plan(ctx) => {
-                    let socket_arc = ctx.socket_map.get(node_name)?;
+                PlanResource::PlanFile(ctx) => {
+                    let socket_arc = ctx.context.socket_map.get(node_name)?;
                     socket_arc.clone().into()
                 }
-                TrieContext::HerePlan(ctx) => {
+                PlanResource::HerePlan(ctx) => {
                     let node_arc = ctx.node_map.get(node_name)?;
                     node_arc.clone().into()
                 }
@@ -344,10 +341,10 @@ fn resolve_node_key(root: TrieRef, key: &Key) -> Option<ResolveNode> {
         }
         None => {
             let guard = root.read();
-            let Some(TrieContext::Plan(ctx)) = &guard.context else {
+            let Some(PlanResource::PlanFile(ctx)) = &guard.context else {
                 unreachable!();
             };
-            let node_arc = ctx.node_map.get(node_name)?;
+            let node_arc = ctx.context.node_map.get(node_name)?;
             node_arc.clone().into()
         }
     };
@@ -373,12 +370,12 @@ impl From<ResolveSocketJob> for Job {
 }
 
 pub struct VisitNodeJob {
-    current: TrieRef,
+    current: ResourceTreeRef,
     current_prefix: KeyOwned,
 }
 
 pub struct ResolveSocketJob {
-    current: TrieRef,
+    current: ResourceTreeRef,
     // current_prefix: KeyOwned,
 }
 

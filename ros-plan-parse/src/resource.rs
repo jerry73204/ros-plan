@@ -10,6 +10,7 @@ use crate::{
 use indexmap::IndexMap;
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use ros_plan_format::{
+    eval::ValueOrEval,
     key::{Key, KeyOwned},
     link::LinkIdent,
     node::NodeIdent,
@@ -20,20 +21,19 @@ use serde::Serialize;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize)]
-pub struct PlanResource {
-    pub root: TrieRef,
-    // pub plan_map: HashMap<PathBuf, TrieRef>,
+pub struct Resource {
+    pub root: ResourceTreeRef,
     pub node_map: IndexMap<KeyOwned, NodeWeak>,
     pub link_map: IndexMap<KeyOwned, LinkWeak>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct Trie {
-    pub context: Option<TrieContext>,
-    pub children: IndexMap<KeyOwned, TrieRef>,
+pub struct ResourceTree {
+    pub context: Option<PlanResource>,
+    pub children: IndexMap<KeyOwned, ResourceTreeRef>,
 }
 
-impl Default for Trie {
+impl Default for ResourceTree {
     fn default() -> Self {
         Self {
             children: IndexMap::new(),
@@ -44,16 +44,16 @@ impl Default for Trie {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(transparent)]
-pub struct TrieRef(ArcRwLock<Trie>);
+pub struct ResourceTreeRef(ArcRwLock<ResourceTree>);
 
-impl TrieRef {
-    pub fn get_child(&self, key: &Key) -> Option<TrieRef> {
+impl ResourceTreeRef {
+    pub fn get_child(&self, key: &Key) -> Option<ResourceTreeRef> {
         let guard = self.read();
         let child = guard.children.get(key)?;
         Some(child.clone())
     }
 
-    pub fn insert(&self, key: &Key, context: TrieContext) -> Result<TrieRef, Error> {
+    pub fn insert(&self, key: &Key, context: PlanResource) -> Result<ResourceTreeRef, Error> {
         use indexmap::map::Entry as E;
 
         // Reject absolute keys.
@@ -75,7 +75,7 @@ impl TrieRef {
         let child = {
             let mut guard = self.write();
             match guard.children.entry(key.to_owned()) {
-                E::Vacant(entry) => entry.insert(TrieRef::default()).clone(),
+                E::Vacant(entry) => entry.insert(ResourceTreeRef::default()).clone(),
                 E::Occupied(_) => {
                     return Err(Error::ConflictingKeys {
                         old: key.to_owned(),
@@ -99,56 +99,64 @@ impl TrieRef {
         Ok(child)
     }
 
-    pub(crate) fn read(&self) -> RwLockReadGuard<Trie> {
+    pub(crate) fn read(&self) -> RwLockReadGuard<ResourceTree> {
         self.0.read()
     }
 
-    pub(crate) fn write(&self) -> RwLockWriteGuard<Trie> {
+    pub(crate) fn write(&self) -> RwLockWriteGuard<ResourceTree> {
         self.0.write()
     }
 }
 
-impl Default for TrieRef {
+impl Default for ResourceTreeRef {
     fn default() -> Self {
-        Self(Trie::default().into())
+        Self(ResourceTree::default().into())
     }
 }
 
-impl From<Trie> for TrieRef {
-    fn from(inner: Trie) -> Self {
+impl From<ResourceTree> for ResourceTreeRef {
+    fn from(inner: ResourceTree) -> Self {
         Self(inner.into())
     }
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub enum TrieContext {
-    Plan(PlanContext),
-    HerePlan(HerePlanContext),
+pub enum PlanResource {
+    PlanFile(PlanFileResourceWithArgs),
+    HerePlan(HerePlanResource),
 }
 
-impl From<HerePlanContext> for TrieContext {
-    fn from(v: HerePlanContext) -> Self {
+impl From<PlanFileResourceWithArgs> for PlanResource {
+    fn from(v: PlanFileResourceWithArgs) -> Self {
+        Self::PlanFile(v)
+    }
+}
+
+impl From<HerePlanResource> for PlanResource {
+    fn from(v: HerePlanResource) -> Self {
         Self::HerePlan(v)
     }
 }
 
-impl From<PlanContext> for TrieContext {
-    fn from(v: PlanContext) -> Self {
-        Self::Plan(v)
-    }
+#[derive(Debug, Clone, Serialize)]
+pub struct PlanFileResourceWithArgs {
+    pub context: PlanFileResource,
+    pub args: IndexMap<ParamName, ValueOrEval>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct PlanContext {
+pub struct PlanFileResource {
     pub path: PathBuf,
     pub arg: IndexMap<ParamName, ArgEntry>,
+    pub var: IndexMap<ParamName, ValueOrEval>,
+    // pub assign_arg: IndexMap<ParamName, ValueOrEval>,
     pub socket_map: IndexMap<SocketIdent, SocketArc>,
     pub node_map: IndexMap<NodeIdent, NodeArc>,
     pub link_map: IndexMap<LinkIdent, LinkArc>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct HerePlanContext {
+pub struct HerePlanResource {
     pub node_map: IndexMap<NodeIdent, NodeArc>,
     pub link_map: IndexMap<LinkIdent, LinkArc>,
 }

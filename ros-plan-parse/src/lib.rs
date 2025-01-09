@@ -11,14 +11,14 @@ use crate::link_resolver::LinkResolver;
 use crate::socket_resolver::SocketResolver;
 use crate::{error::Error, plan_visitor::PlanVisitor};
 use indexmap::IndexMap;
-use resource::PlanResource;
+use resource::Resource;
 use ros_plan_format::{eval::Value, parameter::ParamName};
 use std::path::Path;
 
 pub fn parse_plan_file<P>(
     path: P,
     args: Option<IndexMap<ParamName, Value>>,
-) -> Result<PlanResource, Error>
+) -> Result<Resource, Error>
 where
     P: AsRef<Path>,
 {

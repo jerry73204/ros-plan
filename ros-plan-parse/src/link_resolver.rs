@@ -6,14 +6,14 @@ use crate::{
         uri::NodeTopicUri,
     },
     error::Error,
-    resource::{HerePlanContext, PlanContext, PlanResource, TrieContext, TrieRef},
+    resource::{Resource, ResourceTreeRef, PlanResource},
 };
 use itertools::Itertools;
 use ros_plan_format::{
     key::{Key, KeyOwned},
     link::TopicUri,
 };
-use std::collections::VecDeque;
+use std::{collections::VecDeque, mem};
 
 macro_rules! bail_resolve_key_error {
     ($key:expr, $reason:expr) => {
@@ -35,7 +35,7 @@ impl LinkResolver {
         }
     }
 
-    pub fn traverse(&mut self, context: &mut PlanResource) -> Result<(), Error> {
+    pub fn traverse(&mut self, context: &mut Resource) -> Result<(), Error> {
         // Schedule the job to visit the root
         self.queue.push_back(
             VisitNodeJob {
@@ -87,7 +87,7 @@ impl LinkResolver {
         // hereplan context.
         if let Some(ctx) = &guard.context {
             match ctx {
-                TrieContext::Plan(_) => {
+                PlanResource::PlanFile { .. } => {
                     self.queue.push_back(
                         ResolveLinkJob {
                             current: current.clone(),
@@ -96,7 +96,7 @@ impl LinkResolver {
                         .into(),
                     );
                 }
-                TrieContext::HerePlan(_) => {
+                PlanResource::HerePlan(_) => {
                     self.queue.push_back(
                         ResolveLinkJob {
                             current: current.clone(),
@@ -113,7 +113,7 @@ impl LinkResolver {
 
     pub fn resolve_link(
         &mut self,
-        context: &mut PlanResource,
+        context: &mut Resource,
         job: ResolveLinkJob,
     ) -> Result<(), Error> {
         let ResolveLinkJob {
@@ -129,8 +129,8 @@ impl LinkResolver {
             };
 
             match node_ctx {
-                TrieContext::Plan(plan_ctx) => std::mem::take(&mut plan_ctx.link_map),
-                TrieContext::HerePlan(hereplan_ctx) => std::mem::take(&mut hereplan_ctx.link_map),
+                PlanResource::PlanFile(ctx) => mem::take(&mut ctx.context.link_map),
+                PlanResource::HerePlan(hereplan_ctx) => mem::take(&mut hereplan_ctx.link_map),
             }
         };
 
@@ -155,36 +155,18 @@ impl LinkResolver {
         // Push the resolved links back to the node context
         {
             let mut guard = current.write();
-            let Some(node_ctx) = guard.context.take() else {
+            let Some(trie_ctx) = guard.context.as_mut() else {
                 unreachable!();
             };
 
-            let node_ctx: TrieContext = match node_ctx {
-                TrieContext::Plan(plan_ctx) => {
-                    let PlanContext {
-                        path,
-                        arg,
-                        socket_map,
-                        node_map,
-                        ..
-                    } = plan_ctx;
-
-                    PlanContext {
-                        path,
-                        arg,
-                        socket_map,
-                        node_map,
-                        link_map,
-                    }
-                    .into()
+            match trie_ctx {
+                PlanResource::PlanFile(ctx) => {
+                    ctx.context.link_map = link_map;
                 }
-                TrieContext::HerePlan(hereplan_ctx) => {
-                    let HerePlanContext { node_map, .. } = hereplan_ctx;
-
-                    HerePlanContext { node_map, link_map }.into()
+                PlanResource::HerePlan(hereplan_ctx) => {
+                    hereplan_ctx.link_map = link_map;
                 }
-            };
-            guard.context = Some(node_ctx);
+            }
         }
 
         Ok(())
@@ -192,8 +174,8 @@ impl LinkResolver {
 }
 
 fn resolve_link(
-    context: &PlanResource,
-    current: TrieRef,
+    context: &Resource,
+    current: ResourceTreeRef,
     link: &mut LinkContext,
 ) -> Result<(), Error> {
     match link {
@@ -204,8 +186,8 @@ fn resolve_link(
 }
 
 fn resolve_pubsub_link(
-    context: &PlanResource,
-    current: TrieRef,
+    context: &Resource,
+    current: ResourceTreeRef,
     link: &mut PubSubLinkContext,
 ) -> Result<(), Error> {
     // let PubSubLink { ty, qos, src, dst } = link;
@@ -281,8 +263,8 @@ fn resolve_pubsub_link(
 }
 
 fn resolve_service_link(
-    context: &PlanResource,
-    current: TrieRef,
+    context: &Resource,
+    current: ResourceTreeRef,
     link: &mut ServiceLinkContext,
 ) -> Result<(), Error> {
     let listen = {
@@ -350,8 +332,8 @@ fn resolve_service_link(
 }
 
 fn resolve_node_key(
-    context: &PlanResource,
-    plan_or_hereplan_root: TrieRef,
+    context: &Resource,
+    plan_or_hereplan_root: ResourceTreeRef,
     key: &Key,
 ) -> Option<ResolveNode> {
     if key.is_absolute() {
@@ -367,11 +349,11 @@ fn resolve_node_key(
                 let child = plan_or_hereplan_root.get_child(prefix)?;
                 let guard = child.read();
                 match guard.context.as_ref()? {
-                    TrieContext::Plan(ctx) => {
-                        let socket_arc = ctx.socket_map.get(node_name)?;
+                    PlanResource::PlanFile(ctx) => {
+                        let socket_arc = ctx.context.socket_map.get(node_name)?;
                         socket_arc.clone().into()
                     }
-                    TrieContext::HerePlan(ctx) => {
+                    PlanResource::HerePlan(ctx) => {
                         let node_arc = ctx.node_map.get(node_name)?;
                         node_arc.clone().into()
                     }
@@ -383,8 +365,8 @@ fn resolve_node_key(
                     unreachable!();
                 };
                 let node_map = match node_ctx {
-                    TrieContext::Plan(plan_ctx) => &plan_ctx.node_map,
-                    TrieContext::HerePlan(hereplan_ctx) => &hereplan_ctx.node_map,
+                    PlanResource::PlanFile(ctx) => &ctx.context.node_map,
+                    PlanResource::HerePlan(hereplan_ctx) => &hereplan_ctx.node_map,
                 };
                 let node_arc = node_map.get(node_name)?;
                 node_arc.clone().into()
@@ -413,12 +395,12 @@ impl From<VisitNodeJob> for Job {
 }
 
 pub struct VisitNodeJob {
-    current: TrieRef,
+    current: ResourceTreeRef,
     current_prefix: KeyOwned,
 }
 
 pub struct ResolveLinkJob {
-    current: TrieRef,
+    current: ResourceTreeRef,
     current_prefix: KeyOwned,
 }
 pub enum ResolveNode {

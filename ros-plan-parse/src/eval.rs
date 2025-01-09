@@ -6,7 +6,7 @@ use ros_plan_format::{
     eval::{Eval, Value, ValueOrEval, ValueType},
     link::Link,
     node::Node,
-    parameter::{ArgEntry, ParamName},
+    parameter::{ArgEntry, ArgSlot, ParamName},
     socket::Socket,
     subplan::Subplan,
     Plan,
@@ -141,8 +141,8 @@ fn load_arg_table(
         let asigned_value = assigned.get(name);
 
         // Use the assigned or default value if provided
-        let value = match entry {
-            ArgEntry::Required { ty, .. } => {
+        let value = match entry.slot {
+            ArgSlot::Required { ty } => {
                 // Check if the value is assigned for the required
                 // argument.
                 let Some(assigned_value) = asigned_value else {
@@ -150,17 +150,17 @@ fn load_arg_table(
                 };
 
                 // Check if the type is consistent.
-                if assigned_value.ty() != *ty {
+                if assigned_value.ty() != ty {
                     return Err(Error::ArgumentTypeMismatch {
                         name: name.clone(),
-                        expect: *ty,
+                        expect: ty,
                         found: assigned_value.ty(),
                     });
                 }
 
                 assigned_value
             }
-            ArgEntry::Optional { default, .. } => match asigned_value {
+            ArgSlot::Optional { ref default } => match asigned_value {
                 Some(assigned_value) => {
                     // If the value is assigned, check whether the
                     // type is consistent with the default value.
@@ -171,6 +171,7 @@ fn load_arg_table(
                             found: assigned_value.ty(),
                         });
                     }
+
                     assigned_value
                 }
                 None => default,
@@ -178,7 +179,7 @@ fn load_arg_table(
         };
 
         // Insert to the global variable table.
-        lua.globals().set(name.as_ref(), ValueToLua(value))?;
+        lua.globals().set(name.as_ref(), ValueToLua(&value))?;
     }
 
     Ok(())

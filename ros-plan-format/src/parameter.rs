@@ -16,15 +16,15 @@ pub static RE_PARAM_NAME: LazyLock<Regex> = LazyLock::new(|| {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "SerializedArgEntry", into = "SerializedArgEntry")]
-pub enum ArgEntry {
-    Required {
-        ty: ValueType,
-        help: Option<String>,
-    },
-    Optional {
-        default: Value,
-        help: Option<String>,
-    },
+pub struct ArgEntry {
+    pub slot: ArgSlot,
+    pub help: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ArgSlot {
+    Required { ty: ValueType },
+    Optional { default: Value },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,12 +45,15 @@ impl TryFrom<SerializedArgEntry> for ArgEntry {
             help,
         } = entry;
 
-        let entry = match (expect, default) {
+        let slot = match (expect, default) {
             (None, None) => unreachable!(),
-            (None, Some(default)) => ArgEntry::Optional { default, help },
-            (Some(ty), None) => ArgEntry::Required { ty, help },
-            (Some(_), Some(_)) => todo!(),
+            (None, Some(default)) => ArgSlot::Optional { default },
+            (Some(ty), None) => ArgSlot::Required { ty },
+            (Some(_), Some(_)) => {
+                return Err(InvalidParameterDeclaration::InvalidArgumentDefinition)
+            }
         };
+        let entry = ArgEntry { slot, help };
 
         Ok(entry)
     }
@@ -58,13 +61,15 @@ impl TryFrom<SerializedArgEntry> for ArgEntry {
 
 impl From<ArgEntry> for SerializedArgEntry {
     fn from(entry: ArgEntry) -> Self {
-        match entry {
-            ArgEntry::Required { ty, help } => Self {
+        let ArgEntry { slot, help } = entry;
+
+        match slot {
+            ArgSlot::Required { ty } => Self {
                 require: Some(ty),
                 default: None,
                 help,
             },
-            ArgEntry::Optional { default, help } => Self {
+            ArgSlot::Optional { default } => Self {
                 require: None,
                 default: Some(default),
                 help,

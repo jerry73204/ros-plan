@@ -79,6 +79,9 @@ pub enum InvalidParameterDeclaration {
 
     #[error("repeated parameter definition `{name}`")]
     RepeatedDefinition { name: String },
+
+    #[error("the argument must be either specified with a required or with a default value")]
+    InvalidArgumentDefinition,
 }
 
 #[derive(Debug, thiserror::Error)]
