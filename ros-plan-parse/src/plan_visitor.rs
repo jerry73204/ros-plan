@@ -12,6 +12,7 @@ use crate::{
     resource::{HerePlanContext, PlanContext, PlanResource, TrieContext, TrieRef},
     utils::{find_plan_file_from_pkg, read_toml_file},
 };
+use indexmap::IndexMap;
 use ros_plan_format::{
     eval::Value,
     key::{Key, KeyOwned},
@@ -22,7 +23,7 @@ use ros_plan_format::{
     subplan::{HerePlan, Subplan, SubplanTable},
 };
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     path::{Path, PathBuf},
 };
 
@@ -40,7 +41,7 @@ impl PlanVisitor {
     pub fn traverse(
         &mut self,
         path: &Path,
-        args: Option<HashMap<ParamName, Value>>,
+        args: Option<IndexMap<ParamName, Value>>,
     ) -> Result<PlanResource, Error> {
         let root = TrieRef::default();
         let assign_args = args.unwrap_or_default();
@@ -48,8 +49,9 @@ impl PlanVisitor {
         let mut context = PlanResource {
             namespace: KeyOwned::new_root(),
             root: root.clone(),
-            node_map: HashMap::new(),
-            link_map: HashMap::new(),
+            // plan_map: HashMap::new(),
+            node_map: IndexMap::new(),
+            link_map: IndexMap::new(),
         };
 
         self.insert_plan(
@@ -101,7 +103,7 @@ impl PlanVisitor {
         eval_plan(&mut plan, assign_args)?;
 
         // Create the context for the inserted plan
-        let (plan_ctx, subplan_tab) = to_plan_context(child_plan_path, plan);
+        let (plan_ctx, subplan_tab) = to_plan_context(child_plan_path.clone(), plan);
 
         // Insert node entries to the global context
         {
@@ -113,7 +115,14 @@ impl PlanVisitor {
             context.node_map.extend(node_entries);
         }
 
+        // Create the child node for the plan
         let plan_child = current.insert(&child_suffix, plan_ctx.into())?;
+
+        // Insert the plan to the global table
+        // {
+        //     let prev = context.plan_map.insert(child_plan_path, plan_child.clone());
+        //     if prev.is_some() {}
+        // }
 
         // Schedule subplan insertion jobs
         for (subplan_suffix, subplan) in subplan_tab.0 {
@@ -148,7 +157,7 @@ impl PlanVisitor {
 
         // Create the context
         let hereplan_ctx = {
-            let local_node_map: HashMap<_, _> = child_hereplan
+            let local_node_map: IndexMap<_, _> = child_hereplan
                 .node
                 .0
                 .into_iter()
@@ -157,7 +166,7 @@ impl PlanVisitor {
                     (node_ident, node_arc)
                 })
                 .collect();
-            let local_link_map: HashMap<_, _> = child_hereplan
+            let local_link_map: IndexMap<_, _> = child_hereplan
                 .link
                 .0
                 .into_iter()
@@ -230,7 +239,7 @@ impl PlanVisitor {
                     subplan_path
                 };
 
-                let assign_args: HashMap<_, _> = subplan
+                let assign_args: IndexMap<_, _> = subplan
                     .arg
                     .into_iter()
                     .map(|(arg_name, assign)| {
@@ -253,7 +262,7 @@ impl PlanVisitor {
             }
             Subplan::Pkg(subplan) => {
                 let path = find_plan_file_from_pkg(&subplan.pkg, &subplan.file)?;
-                let assign_args: HashMap<_, _> = subplan
+                let assign_args: IndexMap<_, _> = subplan
                     .arg
                     .into_iter()
                     .map(|(arg_name, assign)| {
@@ -322,11 +331,11 @@ pub struct InsertPlanFileJob {
     current_prefix: KeyOwned,
     child_suffix: KeyOwned,
     child_plan_path: PathBuf,
-    assign_args: HashMap<ParamName, Value>,
+    assign_args: IndexMap<ParamName, Value>,
 }
 
 fn to_plan_context(path: PathBuf, plan_cfg: Plan) -> (PlanContext, SubplanTable) {
-    let local_node_map: HashMap<_, _> = plan_cfg
+    let local_node_map: IndexMap<_, _> = plan_cfg
         .node
         .0
         .into_iter()
@@ -336,7 +345,7 @@ fn to_plan_context(path: PathBuf, plan_cfg: Plan) -> (PlanContext, SubplanTable)
         })
         .collect();
 
-    let local_socket_map: HashMap<_, _> = plan_cfg
+    let local_socket_map: IndexMap<_, _> = plan_cfg
         .socket
         .0
         .into_iter()
@@ -346,7 +355,7 @@ fn to_plan_context(path: PathBuf, plan_cfg: Plan) -> (PlanContext, SubplanTable)
         })
         .collect();
 
-    let local_link_map: HashMap<_, _> = plan_cfg
+    let local_link_map: IndexMap<_, _> = plan_cfg
         .link
         .0
         .into_iter()

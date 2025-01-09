@@ -1,7 +1,3 @@
-// pub mod v1;
-// pub mod v2;
-// pub mod v3;
-
 use crate::{
     context::{
         link::{LinkArc, LinkWeak},
@@ -23,26 +19,27 @@ use ros_plan_format::{
     socket::SocketIdent,
 };
 use serde::Serialize;
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PlanResource {
     pub namespace: KeyOwned,
     pub root: TrieRef,
-    pub node_map: HashMap<KeyOwned, NodeWeak>,
-    pub link_map: HashMap<KeyOwned, LinkWeak>,
+    // pub plan_map: HashMap<PathBuf, TrieRef>,
+    pub node_map: IndexMap<KeyOwned, NodeWeak>,
+    pub link_map: IndexMap<KeyOwned, LinkWeak>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Trie {
     pub context: Option<TrieContext>,
-    pub children: HashMap<IdentOwned, TrieRef>,
+    pub children: IndexMap<IdentOwned, TrieRef>,
 }
 
 impl Default for Trie {
     fn default() -> Self {
         Self {
-            children: HashMap::new(),
+            children: IndexMap::new(),
             context: None,
         }
     }
@@ -60,7 +57,7 @@ impl TrieRef {
     }
 
     pub fn insert(&self, key: &Key, context: TrieContext) -> Result<TrieRef, Error> {
-        use std::collections::hash_map::Entry as E;
+        use indexmap::map::Entry as E;
 
         // Reject absolute keys.
         if key.is_absolute() {
@@ -149,13 +146,13 @@ impl From<PlanContext> for TrieContext {
 pub struct PlanContext {
     pub path: PathBuf,
     pub arg: IndexMap<ParamName, ArgEntry>,
-    pub socket_map: HashMap<SocketIdent, SocketArc>,
-    pub node_map: HashMap<NodeIdent, NodeArc>,
-    pub link_map: HashMap<LinkIdent, LinkArc>,
+    pub socket_map: IndexMap<SocketIdent, SocketArc>,
+    pub node_map: IndexMap<NodeIdent, NodeArc>,
+    pub link_map: IndexMap<LinkIdent, LinkArc>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct HerePlanContext {
-    pub node_map: HashMap<NodeIdent, NodeArc>,
-    pub link_map: HashMap<LinkIdent, LinkArc>,
+    pub node_map: IndexMap<NodeIdent, NodeArc>,
+    pub link_map: IndexMap<LinkIdent, LinkArc>,
 }

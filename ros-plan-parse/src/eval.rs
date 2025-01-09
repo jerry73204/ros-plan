@@ -11,9 +11,8 @@ use ros_plan_format::{
     subplan::Subplan,
     Plan,
 };
-use std::collections::HashMap;
 
-pub fn eval_plan(plan: &mut Plan, args: HashMap<ParamName, Value>) -> Result<(), Error> {
+pub fn eval_plan(plan: &mut Plan, args: IndexMap<ParamName, Value>) -> Result<(), Error> {
     // Create a Lua interpreter
     let lua = Lua::new();
     lua.sandbox(true)?;
@@ -135,7 +134,7 @@ pub fn eval_plan(plan: &mut Plan, args: HashMap<ParamName, Value>) -> Result<(),
 fn load_arg_table(
     lua: &Lua,
     arg_table: &IndexMap<ParamName, ArgEntry>,
-    assigned: &HashMap<ParamName, Value>,
+    assigned: &IndexMap<ParamName, Value>,
 ) -> Result<(), Error> {
     for (name, entry) in arg_table {
         // Get the assigned value if any

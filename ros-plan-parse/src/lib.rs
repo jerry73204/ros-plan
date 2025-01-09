@@ -10,13 +10,14 @@ mod utils;
 use crate::link_resolver::LinkResolver;
 use crate::socket_resolver::SocketResolver;
 use crate::{error::Error, plan_visitor::PlanVisitor};
+use indexmap::IndexMap;
 use resource::PlanResource;
 use ros_plan_format::{eval::Value, parameter::ParamName};
-use std::{collections::HashMap, path::Path};
+use std::path::Path;
 
 pub fn parse_plan_file<P>(
     path: P,
-    args: Option<HashMap<ParamName, Value>>,
+    args: Option<IndexMap<ParamName, Value>>,
 ) -> Result<PlanResource, Error>
 where
     P: AsRef<Path>,
