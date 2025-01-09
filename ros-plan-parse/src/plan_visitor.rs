@@ -9,23 +9,23 @@ use crate::{
     },
     error::Error,
     resource::{
-        HerePlanResource, PlanFileResource, PlanFileResourceWithArgs, Resource, ResourceTreeRef,
-        PlanResource,
+        HerePlanResource, PlanFileResource, PlanFileResourceWithArgs, PlanResource, Resource,
+        ResourceTreeRef,
     },
     utils::{find_plan_file_from_pkg, read_toml_file},
 };
 use indexmap::IndexMap;
 use ros_plan_format::{
-    eval::{Value, ValueOrEval},
+    eval::ValueOrEval,
     key::{Key, KeyOwned},
     link::Link,
-    parameter::ParamName,
+    parameter::{ArgEntry, ArgSlot, ParamName},
     plan::Plan,
     socket::Socket,
     subplan::{HerePlan, Subplan, SubplanTable},
 };
 use std::{
-    collections::VecDeque,
+    collections::{HashSet, VecDeque},
     path::{Path, PathBuf},
 };
 
@@ -40,18 +40,8 @@ impl PlanVisitor {
         }
     }
 
-    pub fn traverse(
-        &mut self,
-        path: &Path,
-        args: Option<IndexMap<ParamName, Value>>,
-    ) -> Result<Resource, Error> {
+    pub fn traverse(&mut self, path: &Path) -> Result<Resource, Error> {
         let root = ResourceTreeRef::default();
-        let assign_args: IndexMap<ParamName, ValueOrEval> = args
-            .unwrap_or_default()
-            .into_iter()
-            .map(|(name, value)| (name, ValueOrEval::from(value)))
-            .collect();
-
         let mut context = Resource {
             root: root.clone(),
             // plan_map: HashMap::new(),
@@ -59,7 +49,7 @@ impl PlanVisitor {
             link_map: IndexMap::new(),
         };
 
-        self.insert_root_plan(&mut context, root.clone(), path, assign_args)?;
+        self.insert_root_plan(&mut context, root.clone(), path, IndexMap::new())?;
 
         while let Some(job) = self.queue.pop_front() {
             match job {
@@ -83,7 +73,10 @@ impl PlanVisitor {
         assign_args: IndexMap<ParamName, ValueOrEval>,
     ) -> Result<(), Error> {
         // Read plan file
-        let plan: Plan = read_toml_file(&plan_path)?;
+        let plan: Plan = read_toml_file(plan_path)?;
+
+        // Check arg assignment
+        check_arg_assignment(&plan.arg, &assign_args)?;
 
         // Create the context for the inserted plan
         let (plan_ctx, subplan_tab) = to_plan_context(plan_path.to_path_buf(), plan);
@@ -125,11 +118,7 @@ impl PlanVisitor {
         Ok(())
     }
 
-    fn insert_plan(
-        &mut self,
-        context: &mut Resource,
-        job: InsertPlanFileJob,
-    ) -> Result<(), Error> {
+    fn insert_plan(&mut self, context: &mut Resource, job: InsertPlanFileJob) -> Result<(), Error> {
         let InsertPlanFileJob {
             // plan_parent: _,
             current,
@@ -145,7 +134,9 @@ impl PlanVisitor {
 
         // Read plan file
         let plan: Plan = read_toml_file(&child_plan_path)?;
-        // eval_plan(&mut plan, assign_args)?;
+
+        // Check arg assignment
+        check_arg_assignment(&plan.arg, &assign_args)?;
 
         // Create the context for the inserted plan
         let (plan_ctx, subplan_tab) = to_plan_context(child_plan_path.clone(), plan);
@@ -447,4 +438,53 @@ fn to_link_context(link: Link) -> LinkContext {
         }
         .into(),
     }
+}
+
+fn check_arg_assignment(
+    spec: &IndexMap<ParamName, ArgEntry>,
+    assign: &IndexMap<ParamName, ValueOrEval>,
+) -> Result<(), Error> {
+    let spec_names: HashSet<_> = spec.keys().collect();
+    let assigned_names: HashSet<_> = assign.keys().collect();
+
+    // Check if there are unassigned required args
+    for name in &spec_names - &assigned_names {
+        if let ArgSlot::Required { .. } = &spec[name].slot {
+            return Err(Error::RequiredArgumentNotAssigned {
+                name: name.to_owned(),
+            });
+        }
+    }
+
+    // Check if there are assigned args not found in spec.
+    for name in &assigned_names - &spec_names {
+        return Err(Error::ArgumentNotFound { name: name.clone() });
+    }
+
+    // Check type compatibility for assigned args
+    for name in &spec_names & &assigned_names {
+        match &assign[name] {
+            ValueOrEval::Value(value) => {
+                let assigned_ty = value.ty();
+
+                let expect_ty = match spec[name].slot {
+                    ArgSlot::Required { ty } => ty,
+                    ArgSlot::Optional { ref default } => default.ty(),
+                };
+
+                if assigned_ty != expect_ty {
+                    return Err(Error::ArgumentTypeMismatch {
+                        name: name.clone(),
+                        expect: expect_ty,
+                        found: assigned_ty,
+                    });
+                }
+            }
+            ValueOrEval::Eval { .. } => {
+                // Cannot check without evaluation. Skip it.
+            }
+        }
+    }
+
+    Ok(())
 }

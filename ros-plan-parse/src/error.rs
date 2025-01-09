@@ -41,7 +41,7 @@ pub enum Error {
     KeyResolutionError { key: KeyOwned, reason: String },
 
     #[error("the argument `{name}` is required but is not assigned")]
-    ArgumentNotAssigned { name: ParamName },
+    RequiredArgumentNotAssigned { name: ParamName },
 
     #[error("expect `{expect}` type for argument `{name}`, but found `{found}` type")]
     ArgumentTypeMismatch {
@@ -49,6 +49,9 @@ pub enum Error {
         expect: ValueType,
         found: ValueType,
     },
+
+    #[error("argument `{name}` is assigned but is not found")]
+    ArgumentNotFound { name: ParamName },
 
     #[error("evaluation error: {error:?}")]
     EvaluationError { error: String },

@@ -6,7 +6,7 @@ use crate::{
         uri::NodeTopicUri,
     },
     error::Error,
-    resource::{Resource, ResourceTreeRef, PlanResource},
+    resource::{PlanResource, Resource, ResourceTreeRef},
 };
 use itertools::Itertools;
 use ros_plan_format::{

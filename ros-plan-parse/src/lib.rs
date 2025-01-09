@@ -8,17 +8,12 @@ mod socket_resolver;
 mod utils;
 
 use crate::link_resolver::LinkResolver;
+use crate::resource::Resource;
 use crate::socket_resolver::SocketResolver;
 use crate::{error::Error, plan_visitor::PlanVisitor};
-use indexmap::IndexMap;
-use resource::Resource;
-use ros_plan_format::{eval::Value, parameter::ParamName};
 use std::path::Path;
 
-pub fn parse_plan_file<P>(
-    path: P,
-    args: Option<IndexMap<ParamName, Value>>,
-) -> Result<Resource, Error>
+pub fn compile_plan_file<P>(path: P) -> Result<Resource, Error>
 where
     P: AsRef<Path>,
 {
@@ -27,7 +22,7 @@ where
     // Perform plan/hereplan expansion
     let mut resource = {
         let mut visitor = PlanVisitor::new();
-        visitor.traverse(path, args)?
+        visitor.traverse(path)?
     };
 
     // Perform plan socket resolution

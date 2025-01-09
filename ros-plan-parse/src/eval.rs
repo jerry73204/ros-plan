@@ -146,7 +146,7 @@ fn load_arg_table(
                 // Check if the value is assigned for the required
                 // argument.
                 let Some(assigned_value) = asigned_value else {
-                    return Err(Error::ArgumentNotAssigned { name: name.clone() });
+                    return Err(Error::RequiredArgumentNotAssigned { name: name.clone() });
                 };
 
                 // Check if the type is consistent.
