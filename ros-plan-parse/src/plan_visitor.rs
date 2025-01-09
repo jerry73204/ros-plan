@@ -1,5 +1,6 @@
 use crate::{
     context::{
+        arg::ArgContext,
         link::{LinkArc, LinkContext, PubSubLinkContext, ServiceLinkContext},
         node::{NodeArc, NodeContext, ProcessContext, RosNodeContext},
         socket::{
@@ -8,10 +9,7 @@ use crate::{
         },
     },
     error::Error,
-    resource::{
-        HerePlanResource, IncludeResource, PlanFileResource, PlanResource, Resource,
-        ResourceTreeRef,
-    },
+    resource::{GroupResource, PlanFileResource, PlanResource, Resource, ResourceTreeRef},
     utils::{find_plan_file_from_pkg, read_toml_file},
 };
 use indexmap::IndexMap;
@@ -77,7 +75,8 @@ impl PlanVisitor {
         check_arg_assignment(&plan.arg, &assign_args)?;
 
         // Create the context for the inserted plan
-        let (plan_ctx, subplan_tab) = to_plan_context(plan_path.to_path_buf(), plan);
+        let (plan_ctx, subplan_tab) =
+            to_plan_context(plan_path.to_path_buf(), plan, None, assign_args)?;
 
         // Insert node entries to the global context
         {
@@ -91,13 +90,13 @@ impl PlanVisitor {
 
         // Insert the plan context to the root node.
         let root = {
-            let res: PlanResource = IncludeResource {
-                context: plan_ctx,
-                args: assign_args,
-                when: None,
-            }
-            .into();
-            ResourceTreeRef::new(res)
+            // let res: PlanResource = PlanFileResource {
+            //     context: plan_ctx,
+            //     args: assign_args,
+            //     when: None,
+            // }
+            // .into();
+            ResourceTreeRef::new(plan_ctx.into())
         };
         context.root = Some(root.clone());
 
@@ -137,7 +136,8 @@ impl PlanVisitor {
         check_arg_assignment(&plan.arg, &assign_args)?;
 
         // Create the context for the inserted plan
-        let (plan_ctx, subplan_tab) = to_plan_context(child_plan_path.clone(), plan);
+        let (plan_ctx, subplan_tab) =
+            to_plan_context(child_plan_path.clone(), plan, when, assign_args)?;
 
         // Insert node entries to the global context
         {
@@ -150,15 +150,7 @@ impl PlanVisitor {
         }
 
         // Create the child node for the plan
-        let plan_child = current.insert(
-            child_suffix,
-            IncludeResource {
-                context: plan_ctx,
-                args: assign_args,
-                when,
-            }
-            .into(),
-        )?;
+        let plan_child = current.insert(child_suffix, plan_ctx.into())?;
 
         // Insert the plan to the global table
         // {
@@ -247,7 +239,7 @@ impl PlanVisitor {
                         let PlanResource::PlanFile(plan_ctx) = &guard.value else {
                             unreachable!("the plan context must be initialized");
                         };
-                        let Some(parent_dir) = plan_ctx.context.path.parent() else {
+                        let Some(parent_dir) = plan_ctx.path.parent() else {
                             unreachable!("the plan file must have a parent directory");
                         };
                         parent_dir.join(subplan_path)
@@ -338,8 +330,13 @@ pub struct InsertPlanFileJob {
     when: Option<ValueOrEval>,
 }
 
-fn to_plan_context(path: PathBuf, plan_cfg: Plan) -> (PlanFileResource, SubplanTable) {
-    let local_node_map: IndexMap<_, _> = plan_cfg
+fn to_plan_context(
+    path: PathBuf,
+    plan_cfg: Plan,
+    when: Option<ValueOrEval>,
+    assign_arg: IndexMap<ParamName, ValueOrEval>,
+) -> Result<(PlanFileResource, SubplanTable), Error> {
+    let node_map: IndexMap<_, _> = plan_cfg
         .node
         .0
         .into_iter()
@@ -349,7 +346,7 @@ fn to_plan_context(path: PathBuf, plan_cfg: Plan) -> (PlanFileResource, SubplanT
         })
         .collect();
 
-    let local_socket_map: IndexMap<_, _> = plan_cfg
+    let socket_map: IndexMap<_, _> = plan_cfg
         .socket
         .0
         .into_iter()
@@ -359,7 +356,7 @@ fn to_plan_context(path: PathBuf, plan_cfg: Plan) -> (PlanFileResource, SubplanT
         })
         .collect();
 
-    let local_link_map: IndexMap<_, _> = plan_cfg
+    let link_map: IndexMap<_, _> = plan_cfg
         .link
         .0
         .into_iter()
@@ -369,19 +366,40 @@ fn to_plan_context(path: PathBuf, plan_cfg: Plan) -> (PlanFileResource, SubplanT
         })
         .collect();
 
-    let plan_ctx = PlanFileResource {
-        path,
-        arg: plan_cfg.arg,
-        var: plan_cfg.var,
-        socket_map: local_socket_map,
-        node_map: local_node_map,
-        link_map: local_link_map,
+    let arg_map = {
+        let mut arg_map: IndexMap<_, _> = plan_cfg
+            .arg
+            .into_iter()
+            .map(|(arg_ident, arg_cfg)| {
+                let arg_ctx = to_arg_context(arg_cfg);
+                (arg_ident, arg_ctx)
+            })
+            .collect();
+
+        for (name, value) in assign_arg {
+            let Some(arg_ctx) = arg_map.get_mut(&name) else {
+                return Err(Error::ArgumentNotFound { name });
+            };
+            arg_ctx.assign = Some(value);
+        }
+
+        arg_map
     };
 
-    (plan_ctx, plan_cfg.subplan)
+    let plan_ctx = PlanFileResource {
+        path,
+        arg_map,
+        var_map: plan_cfg.var,
+        socket_map,
+        node_map,
+        link_map,
+        when,
+    };
+
+    Ok((plan_ctx, plan_cfg.subplan))
 }
 
-fn to_hereplan_context(hereplan: HerePlan) -> (HerePlanResource, SubplanTable) {
+fn to_hereplan_context(hereplan: HerePlan) -> (GroupResource, SubplanTable) {
     let local_node_map: IndexMap<_, _> = hereplan
         .node
         .0
@@ -401,7 +419,7 @@ fn to_hereplan_context(hereplan: HerePlan) -> (HerePlanResource, SubplanTable) {
         })
         .collect();
 
-    let ctx = HerePlanResource {
+    let ctx = GroupResource {
         node_map: local_node_map,
         link_map: local_link_map,
     };
@@ -499,5 +517,19 @@ fn to_node_context(node_cfg: Node) -> NodeContext {
         }
         .into(),
         Node::Proc(node_cfg) => ProcessContext { config: node_cfg }.into(),
+    }
+}
+
+fn to_arg_context(arg_cfg: ArgEntry) -> ArgContext {
+    let ArgEntry { slot, help } = arg_cfg;
+    let (ty, default) = match slot {
+        ArgSlot::Required { ty } => (ty, None),
+        ArgSlot::Optional { default } => (default.ty(), Some(default)),
+    };
+    ArgContext {
+        ty,
+        default,
+        help,
+        assign: None,
     }
 }

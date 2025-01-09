@@ -109,7 +109,7 @@ impl SocketResolver {
             let PlanResource::PlanFile(plan_ctx) = &mut guard.value else {
                 unreachable!("a plan context is expected");
             };
-            std::mem::take(&mut plan_ctx.context.socket_map)
+            std::mem::take(&mut plan_ctx.socket_map)
         };
 
         // Resolve URIs in the socket_map
@@ -126,7 +126,7 @@ impl SocketResolver {
             let PlanResource::PlanFile(plan_ctx) = &mut guard.value else {
                 unreachable!("a plan context is expected");
             };
-            plan_ctx.context.socket_map = socket_map;
+            plan_ctx.socket_map = socket_map;
         }
 
         Ok(())
@@ -330,7 +330,7 @@ fn resolve_node_key(root: ResourceTreeRef, key: &Key) -> Option<ResolveNode> {
             let guard = child.read();
             match &guard.value {
                 PlanResource::PlanFile(ctx) => {
-                    let socket_arc = ctx.context.socket_map.get(node_name)?;
+                    let socket_arc = ctx.socket_map.get(node_name)?;
                     socket_arc.clone().into()
                 }
                 PlanResource::HerePlan(ctx) => {
@@ -344,7 +344,7 @@ fn resolve_node_key(root: ResourceTreeRef, key: &Key) -> Option<ResolveNode> {
             let PlanResource::PlanFile(ctx) = &guard.value else {
                 unreachable!();
             };
-            let node_arc = ctx.context.node_map.get(node_name)?;
+            let node_arc = ctx.node_map.get(node_name)?;
             node_arc.clone().into()
         }
     };

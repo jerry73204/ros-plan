@@ -125,7 +125,7 @@ impl LinkResolver {
             let node_ctx = &mut guard.value;
 
             match node_ctx {
-                PlanResource::PlanFile(ctx) => mem::take(&mut ctx.context.link_map),
+                PlanResource::PlanFile(ctx) => mem::take(&mut ctx.link_map),
                 PlanResource::HerePlan(ctx) => mem::take(&mut ctx.link_map),
             }
         };
@@ -155,7 +155,7 @@ impl LinkResolver {
 
             match trie_ctx {
                 PlanResource::PlanFile(ctx) => {
-                    ctx.context.link_map = link_map;
+                    ctx.link_map = link_map;
                 }
                 PlanResource::HerePlan(ctx) => {
                     ctx.link_map = link_map;
@@ -344,7 +344,7 @@ fn resolve_node_key(
                 let guard = child.read();
                 match &guard.value {
                     PlanResource::PlanFile(ctx) => {
-                        let socket_arc = ctx.context.socket_map.get(node_name)?;
+                        let socket_arc = ctx.socket_map.get(node_name)?;
                         socket_arc.clone().into()
                     }
                     PlanResource::HerePlan(ctx) => {
@@ -357,7 +357,7 @@ fn resolve_node_key(
                 let guard = plan_or_hereplan_root.read();
                 let node_ctx = &guard.value;
                 let node_map = match node_ctx {
-                    PlanResource::PlanFile(ctx) => &ctx.context.node_map,
+                    PlanResource::PlanFile(ctx) => &ctx.node_map,
                     PlanResource::HerePlan(ctx) => &ctx.node_map,
                 };
                 let node_arc = node_map.get(node_name)?;

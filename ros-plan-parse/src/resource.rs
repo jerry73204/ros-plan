@@ -1,5 +1,6 @@
 use crate::{
     context::{
+        arg::ArgContext,
         link::{LinkArc, LinkWeak},
         node::{NodeArc, NodeWeak},
         socket::SocketArc,
@@ -8,11 +9,7 @@ use crate::{
 };
 use indexmap::IndexMap;
 use ros_plan_format::{
-    eval::ValueOrEval,
-    key::KeyOwned,
-    link::LinkIdent,
-    node::NodeIdent,
-    parameter::{ArgEntry, ParamName},
+    eval::ValueOrEval, key::KeyOwned, link::LinkIdent, node::NodeIdent, parameter::ParamName,
     socket::SocketIdent,
 };
 use serde::Serialize;
@@ -30,41 +27,35 @@ pub type ResourceTreeRef = TreeRef<PlanResource>;
 
 #[derive(Debug, Clone, Serialize)]
 pub enum PlanResource {
-    PlanFile(IncludeResource),
-    HerePlan(HerePlanResource),
+    PlanFile(PlanFileResource),
+    HerePlan(GroupResource),
 }
 
-impl From<IncludeResource> for PlanResource {
-    fn from(v: IncludeResource) -> Self {
+impl From<PlanFileResource> for PlanResource {
+    fn from(v: PlanFileResource) -> Self {
         Self::PlanFile(v)
     }
 }
 
-impl From<HerePlanResource> for PlanResource {
-    fn from(v: HerePlanResource) -> Self {
+impl From<GroupResource> for PlanResource {
+    fn from(v: GroupResource) -> Self {
         Self::HerePlan(v)
     }
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct IncludeResource {
-    pub context: PlanFileResource,
-    pub args: IndexMap<ParamName, ValueOrEval>,
-    pub when: Option<ValueOrEval>,
-}
-
-#[derive(Debug, Clone, Serialize)]
 pub struct PlanFileResource {
     pub path: PathBuf,
-    pub arg: IndexMap<ParamName, ArgEntry>,
-    pub var: IndexMap<ParamName, ValueOrEval>,
+    pub when: Option<ValueOrEval>,
+    pub arg_map: IndexMap<ParamName, ArgContext>,
+    pub var_map: IndexMap<ParamName, ValueOrEval>,
     pub socket_map: IndexMap<SocketIdent, SocketArc>,
     pub node_map: IndexMap<NodeIdent, NodeArc>,
     pub link_map: IndexMap<LinkIdent, LinkArc>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct HerePlanResource {
+pub struct GroupResource {
     pub node_map: IndexMap<NodeIdent, NodeArc>,
     pub link_map: IndexMap<LinkIdent, LinkArc>,
 }
