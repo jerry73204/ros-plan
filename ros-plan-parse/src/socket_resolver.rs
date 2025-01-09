@@ -40,7 +40,7 @@ impl SocketResolver {
     pub fn traverse(&mut self, context: &mut Resource) -> Result<(), Error> {
         self.queue.push_back(
             VisitNodeJob {
-                current: context.root.clone(),
+                current: context.root.clone().unwrap(),
                 current_prefix: KeyOwned::new_root().clone(),
             }
             .into(),
@@ -84,7 +84,7 @@ impl SocketResolver {
             }
         }
 
-        if let Some(PlanResource::PlanFile { .. }) = &guard.context {
+        if let PlanResource::PlanFile { .. } = &guard.value {
             self.queue.push_back(
                 ResolveSocketJob {
                     current: current.clone(),
@@ -106,7 +106,7 @@ impl SocketResolver {
         // Take out the socket_map from the plan context
         let mut socket_map = {
             let mut guard = current.write();
-            let Some(PlanResource::PlanFile(plan_ctx)) = &mut guard.context else {
+            let PlanResource::PlanFile(plan_ctx) = &mut guard.value else {
                 unreachable!("a plan context is expected");
             };
             std::mem::take(&mut plan_ctx.context.socket_map)
@@ -123,7 +123,7 @@ impl SocketResolver {
         // Update plan context
         {
             let mut guard = current.write();
-            let Some(PlanResource::PlanFile(plan_ctx)) = guard.context.as_mut() else {
+            let PlanResource::PlanFile(plan_ctx) = &mut guard.value else {
                 unreachable!("a plan context is expected");
             };
             plan_ctx.context.socket_map = socket_map;
@@ -315,7 +315,7 @@ fn resolve_qry_socket_topics(
 fn resolve_node_key(root: ResourceTreeRef, key: &Key) -> Option<ResolveNode> {
     {
         let guard = root.read();
-        if !matches!(guard.context, Some(PlanResource::PlanFile { .. })) {
+        if !matches!(guard.value, PlanResource::PlanFile { .. }) {
             panic!("the search must starts at a plan node");
         }
     }
@@ -328,7 +328,7 @@ fn resolve_node_key(root: ResourceTreeRef, key: &Key) -> Option<ResolveNode> {
         Some(prefix) => {
             let child = root.get_child(prefix)?;
             let guard = child.read();
-            match guard.context.as_ref()? {
+            match &guard.value {
                 PlanResource::PlanFile(ctx) => {
                     let socket_arc = ctx.context.socket_map.get(node_name)?;
                     socket_arc.clone().into()
@@ -341,7 +341,7 @@ fn resolve_node_key(root: ResourceTreeRef, key: &Key) -> Option<ResolveNode> {
         }
         None => {
             let guard = root.read();
-            let Some(PlanResource::PlanFile(ctx)) = &guard.context else {
+            let PlanResource::PlanFile(ctx) = &guard.value else {
                 unreachable!();
             };
             let node_arc = ctx.context.node_map.get(node_name)?;

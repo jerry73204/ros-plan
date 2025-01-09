@@ -5,6 +5,7 @@ mod link_resolver;
 mod plan_visitor;
 pub mod resource;
 mod socket_resolver;
+mod tree;
 mod utils;
 
 use crate::link_resolver::LinkResolver;

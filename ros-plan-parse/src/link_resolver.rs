@@ -39,7 +39,7 @@ impl LinkResolver {
         // Schedule the job to visit the root
         self.queue.push_back(
             VisitNodeJob {
-                current: context.root.clone(),
+                current: context.root.clone().unwrap(),
                 current_prefix: KeyOwned::new_root(),
             }
             .into(),
@@ -85,28 +85,26 @@ impl LinkResolver {
 
         // Schedule a job to resolve links if the node has a plan or a
         // hereplan context.
-        if let Some(ctx) = &guard.context {
-            match ctx {
-                PlanResource::PlanFile { .. } => {
-                    self.queue.push_back(
-                        ResolveLinkJob {
-                            current: current.clone(),
-                            current_prefix,
-                        }
-                        .into(),
-                    );
-                }
-                PlanResource::HerePlan(_) => {
-                    self.queue.push_back(
-                        ResolveLinkJob {
-                            current: current.clone(),
-                            current_prefix,
-                        }
-                        .into(),
-                    );
-                }
-            };
-        }
+        match guard.value {
+            PlanResource::PlanFile { .. } => {
+                self.queue.push_back(
+                    ResolveLinkJob {
+                        current: current.clone(),
+                        current_prefix,
+                    }
+                    .into(),
+                );
+            }
+            PlanResource::HerePlan(_) => {
+                self.queue.push_back(
+                    ResolveLinkJob {
+                        current: current.clone(),
+                        current_prefix,
+                    }
+                    .into(),
+                );
+            }
+        };
 
         Ok(())
     }
@@ -124,9 +122,7 @@ impl LinkResolver {
         // Take the link_map out of the node context.
         let mut link_map = {
             let mut guard = current.write();
-            let Some(node_ctx) = &mut guard.context else {
-                unreachable!();
-            };
+            let node_ctx = &mut guard.value;
 
             match node_ctx {
                 PlanResource::PlanFile(ctx) => mem::take(&mut ctx.context.link_map),
@@ -155,9 +151,7 @@ impl LinkResolver {
         // Push the resolved links back to the node context
         {
             let mut guard = current.write();
-            let Some(trie_ctx) = guard.context.as_mut() else {
-                unreachable!();
-            };
+            let trie_ctx = &mut guard.value;
 
             match trie_ctx {
                 PlanResource::PlanFile(ctx) => {
@@ -348,7 +342,7 @@ fn resolve_node_key(
             Some(prefix) => {
                 let child = plan_or_hereplan_root.get_child(prefix)?;
                 let guard = child.read();
-                match guard.context.as_ref()? {
+                match &guard.value {
                     PlanResource::PlanFile(ctx) => {
                         let socket_arc = ctx.context.socket_map.get(node_name)?;
                         socket_arc.clone().into()
@@ -361,9 +355,7 @@ fn resolve_node_key(
             }
             None => {
                 let guard = plan_or_hereplan_root.read();
-                let Some(node_ctx) = &guard.context else {
-                    unreachable!();
-                };
+                let node_ctx = &guard.value;
                 let node_map = match node_ctx {
                     PlanResource::PlanFile(ctx) => &ctx.context.node_map,
                     PlanResource::HerePlan(ctx) => &ctx.node_map,

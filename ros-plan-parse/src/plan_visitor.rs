@@ -19,6 +19,7 @@ use ros_plan_format::{
     eval::ValueOrEval,
     key::{Key, KeyOwned},
     link::Link,
+    node::Node,
     parameter::{ArgEntry, ArgSlot, ParamName},
     plan::Plan,
     socket::Socket,
@@ -41,15 +42,13 @@ impl PlanVisitor {
     }
 
     pub fn traverse(&mut self, path: &Path) -> Result<Resource, Error> {
-        let root = ResourceTreeRef::default();
         let mut context = Resource {
-            root: root.clone(),
-            // plan_map: HashMap::new(),
+            root: None,
             node_map: IndexMap::new(),
             link_map: IndexMap::new(),
         };
 
-        self.insert_root_plan(&mut context, root.clone(), path, IndexMap::new())?;
+        self.insert_root_plan(&mut context, path, IndexMap::new())?;
 
         while let Some(job) = self.queue.pop_front() {
             match job {
@@ -68,7 +67,6 @@ impl PlanVisitor {
     fn insert_root_plan(
         &mut self,
         context: &mut Resource,
-        root: ResourceTreeRef,
         plan_path: &Path,
         assign_args: IndexMap<ParamName, ValueOrEval>,
     ) -> Result<(), Error> {
@@ -92,18 +90,16 @@ impl PlanVisitor {
         }
 
         // Insert the plan context to the root node.
-        {
-            let mut guard = root.write();
-            assert!(guard.context.is_none());
-            guard.context = Some(
-                IncludeResource {
-                    context: plan_ctx,
-                    args: assign_args,
-                    when: None,
-                }
-                .into(),
-            );
-        }
+        let root = {
+            let res: PlanResource = IncludeResource {
+                context: plan_ctx,
+                args: assign_args,
+                when: None,
+            }
+            .into();
+            ResourceTreeRef::new(res)
+        };
+        context.root = Some(root.clone());
 
         // Schedule subplan insertion jobs
         for (subplan_suffix, subplan) in subplan_tab.0 {
@@ -155,7 +151,7 @@ impl PlanVisitor {
 
         // Create the child node for the plan
         let plan_child = current.insert(
-            &child_suffix,
+            child_suffix,
             IncludeResource {
                 context: plan_ctx,
                 args: assign_args,
@@ -216,7 +212,7 @@ impl PlanVisitor {
 
         // Schedule subplan insertion jobs
         {
-            let hereplan_child = current.insert(&child_suffix, hereplan_ctx.into())?;
+            let hereplan_child = current.insert(child_suffix, hereplan_ctx.into())?;
 
             for (subplan_suffix, subplan) in subplan_tab.0 {
                 self.schedule_subplan_insertion(
@@ -248,7 +244,7 @@ impl PlanVisitor {
                     let subplan_path = &subplan.path;
                     let subplan_path = if subplan_path.is_relative() {
                         let guard = plan_parent.read();
-                        let Some(PlanResource::PlanFile(plan_ctx)) = &guard.context else {
+                        let PlanResource::PlanFile(plan_ctx) = &guard.value else {
                             unreachable!("the plan context must be initialized");
                         };
                         let Some(parent_dir) = plan_ctx.context.path.parent() else {
