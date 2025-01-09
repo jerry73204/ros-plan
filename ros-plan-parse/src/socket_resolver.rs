@@ -41,7 +41,7 @@ impl SocketResolver {
         self.queue.push_back(
             VisitNodeJob {
                 current: context.root.clone(),
-                current_prefix: context.namespace.clone(),
+                current_prefix: KeyOwned::new_root().clone(),
             }
             .into(),
         );
@@ -70,7 +70,9 @@ impl SocketResolver {
         {
             // Visit children
             for (suffix, child) in &guard.children {
-                let child_prefix = &current_prefix / suffix;
+                let Ok(child_prefix) = &current_prefix / suffix else {
+                    unreachable!()
+                };
 
                 self.queue.push_back(
                     VisitNodeJob {
@@ -327,38 +329,16 @@ fn resolve_node_key(root: TrieRef, key: &Key) -> Option<ResolveNode> {
 
     let resolve: ResolveNode = match prefix {
         Some(prefix) => {
-            let mut comp_iter = prefix.components();
-            let mut curr = root;
-
-            // The first component can move away from a plan node.
-            if let Some(comp) = comp_iter.next() {
-                curr = curr.get_child(comp)?;
-            }
-
-            // Later components cannot move away from a plan node.
-            for comp in comp_iter {
-                let next = {
-                    let guard = curr.read();
-                    if matches!(guard.context, Some(TrieContext::Plan(_))) {
-                        return None;
-                    }
-                    let next = guard.children.get(comp)?;
-                    next.clone()
-                };
-                curr = next.clone();
-            }
-
-            {
-                let guard = curr.read();
-                match guard.context.as_ref()? {
-                    TrieContext::Plan(ctx) => {
-                        let socket_arc = ctx.socket_map.get(node_name)?;
-                        socket_arc.clone().into()
-                    }
-                    TrieContext::HerePlan(ctx) => {
-                        let node_arc = ctx.node_map.get(node_name)?;
-                        node_arc.clone().into()
-                    }
+            let child = root.get_child(prefix)?;
+            let guard = child.read();
+            match guard.context.as_ref()? {
+                TrieContext::Plan(ctx) => {
+                    let socket_arc = ctx.socket_map.get(node_name)?;
+                    socket_arc.clone().into()
+                }
+                TrieContext::HerePlan(ctx) => {
+                    let node_arc = ctx.node_map.get(node_name)?;
+                    node_arc.clone().into()
                 }
             }
         }

@@ -47,24 +47,13 @@ impl PlanVisitor {
         let assign_args = args.unwrap_or_default();
 
         let mut context = PlanResource {
-            namespace: KeyOwned::new_root(),
             root: root.clone(),
             // plan_map: HashMap::new(),
             node_map: IndexMap::new(),
             link_map: IndexMap::new(),
         };
 
-        self.insert_plan(
-            &mut context,
-            InsertPlanFileJob {
-                // plan_parent: root.clone(),
-                current: root.clone(),
-                current_prefix: KeyOwned::new_root(),
-                child_suffix: KeyOwned::new_empty(),
-                child_plan_path: path.to_owned(),
-                assign_args,
-            },
-        )?;
+        self.insert_root_plan(&mut context, root.clone(), path, assign_args)?;
 
         while let Some(job) = self.queue.pop_front() {
             match job {
@@ -78,6 +67,51 @@ impl PlanVisitor {
         }
 
         Ok(context)
+    }
+
+    fn insert_root_plan(
+        &mut self,
+        context: &mut PlanResource,
+        root: TrieRef,
+        plan_path: &Path,
+        assign_args: IndexMap<ParamName, Value>,
+    ) -> Result<(), Error> {
+        // Read plan file
+        let mut plan: Plan = read_toml_file(&plan_path)?;
+        eval_plan(&mut plan, assign_args)?;
+
+        // Create the context for the inserted plan
+        let (plan_ctx, subplan_tab) = to_plan_context(plan_path.to_path_buf(), plan);
+
+        // Insert node entries to the global context
+        {
+            let node_entries = plan_ctx.node_map.iter().map(|(node_ident, node_arc)| {
+                let node_weak = node_arc.downgrade();
+                let node_key = Key::root() / node_ident;
+                (node_key, node_weak)
+            });
+            context.node_map.extend(node_entries);
+        }
+
+        // Insert the plan context to the root node.
+        {
+            let mut guard = root.write();
+            assert!(guard.context.is_none());
+            guard.context = Some(plan_ctx.into());
+        }
+
+        // Schedule subplan insertion jobs
+        for (subplan_suffix, subplan) in subplan_tab.0 {
+            self.schedule_subplan_insertion(
+                root.clone(),
+                root.clone(),
+                Key::root(),
+                &subplan_suffix,
+                subplan,
+            )?;
+        }
+
+        Ok(())
     }
 
     fn insert_plan(
@@ -152,35 +186,11 @@ impl PlanVisitor {
         } = job;
 
         let Ok(child_prefix) = &current_prefix / &child_suffix else {
-            todo!();
+            unreachable!();
         };
 
         // Create the context
-        let hereplan_ctx = {
-            let local_node_map: IndexMap<_, _> = child_hereplan
-                .node
-                .0
-                .into_iter()
-                .map(|(node_ident, node_cfg)| {
-                    let node_arc: NodeArc = NodeContext { config: node_cfg }.into();
-                    (node_ident, node_arc)
-                })
-                .collect();
-            let local_link_map: IndexMap<_, _> = child_hereplan
-                .link
-                .0
-                .into_iter()
-                .map(|(link_ident, link_cfg)| {
-                    let link_arc: LinkArc = to_link_context(link_cfg).into();
-                    (link_ident, link_arc)
-                })
-                .collect();
-
-            HerePlanContext {
-                node_map: local_node_map,
-                link_map: local_link_map,
-            }
-        };
+        let (hereplan_ctx, subplan_tab) = to_hereplan_context(child_hereplan);
 
         // Insert node entries to the global context
         {
@@ -196,7 +206,7 @@ impl PlanVisitor {
         {
             let hereplan_child = current.insert(&child_suffix, hereplan_ctx.into())?;
 
-            for (subplan_suffix, subplan) in child_hereplan.subplan.0 {
+            for (subplan_suffix, subplan) in subplan_tab.0 {
                 self.schedule_subplan_insertion(
                     plan_parent.clone(),
                     hereplan_child.clone(),
@@ -375,6 +385,34 @@ fn to_plan_context(path: PathBuf, plan_cfg: Plan) -> (PlanContext, SubplanTable)
 
     (plan_ctx, plan_cfg.subplan)
 }
+
+fn to_hereplan_context(hereplan: HerePlan) -> (HerePlanContext, SubplanTable) {
+    let local_node_map: IndexMap<_, _> = hereplan
+        .node
+        .0
+        .into_iter()
+        .map(|(node_ident, node_cfg)| {
+            let node_arc: NodeArc = NodeContext { config: node_cfg }.into();
+            (node_ident, node_arc)
+        })
+        .collect();
+    let local_link_map: IndexMap<_, _> = hereplan
+        .link
+        .0
+        .into_iter()
+        .map(|(link_ident, link_cfg)| {
+            let link_arc: LinkArc = to_link_context(link_cfg).into();
+            (link_ident, link_arc)
+        })
+        .collect();
+
+    let ctx = HerePlanContext {
+        node_map: local_node_map,
+        link_map: local_link_map,
+    };
+    (ctx, hereplan.subplan)
+}
+
 fn to_socket_context(socket_ctx: Socket) -> SocketContext {
     match socket_ctx {
         Socket::Pub(config) => PubSocketContext { config, src: None }.into(),

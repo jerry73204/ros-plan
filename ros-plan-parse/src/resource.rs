@@ -8,10 +8,8 @@ use crate::{
     utils::ArcRwLock,
 };
 use indexmap::IndexMap;
-use itertools::Itertools;
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use ros_plan_format::{
-    ident::{Ident, IdentOwned},
     key::{Key, KeyOwned},
     link::LinkIdent,
     node::NodeIdent,
@@ -23,7 +21,6 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PlanResource {
-    pub namespace: KeyOwned,
     pub root: TrieRef,
     // pub plan_map: HashMap<PathBuf, TrieRef>,
     pub node_map: IndexMap<KeyOwned, NodeWeak>,
@@ -33,7 +30,7 @@ pub struct PlanResource {
 #[derive(Debug, Clone, Serialize)]
 pub struct Trie {
     pub context: Option<TrieContext>,
-    pub children: IndexMap<IdentOwned, TrieRef>,
+    pub children: IndexMap<KeyOwned, TrieRef>,
 }
 
 impl Default for Trie {
@@ -50,9 +47,9 @@ impl Default for Trie {
 pub struct TrieRef(ArcRwLock<Trie>);
 
 impl TrieRef {
-    pub fn get_child(&self, ident: &Ident) -> Option<TrieRef> {
+    pub fn get_child(&self, key: &Key) -> Option<TrieRef> {
         let guard = self.read();
-        let child = guard.children.get(ident)?;
+        let child = guard.children.get(key)?;
         Some(child.clone())
     }
 
@@ -61,37 +58,36 @@ impl TrieRef {
 
         // Reject absolute keys.
         if key.is_absolute() {
-            return Err(Error::AbsoluteKeyNotAllowed {
+            return Err(Error::InvalidSubplanName {
                 key: key.to_owned(),
+                reason: "absolute key is not allowed".to_string(),
             });
         }
 
-        let mut curr: TrieRef = self.clone();
-
-        // Insert subsequent components.
-        for (ith, ident) in key.components().enumerate() {
-            let mut guard = curr.0.write();
-
-            if ith != 0 && guard.context.is_some() {
-                let old_key = key.components().take(ith).join("/");
-                return Err(Error::ConflictingKeys {
-                    old: old_key.parse().unwrap(),
-                    new: key.to_owned(),
-                });
-            }
-
-            let next = match guard.children.entry(ident.to_owned()) {
-                E::Occupied(entry) => entry.get().clone(),
-                E::Vacant(entry) => entry.insert(TrieRef::default()).clone(),
-            };
-
-            drop(guard);
-            curr = next;
+        // Reject empty keys.
+        if key.is_empty() {
+            return Err(Error::InvalidSubplanName {
+                key: key.to_owned(),
+                reason: "empty key not allowed".to_string(),
+            });
         }
+
+        let child = {
+            let mut guard = self.write();
+            match guard.children.entry(key.to_owned()) {
+                E::Vacant(entry) => entry.insert(TrieRef::default()).clone(),
+                E::Occupied(_) => {
+                    return Err(Error::ConflictingKeys {
+                        old: key.to_owned(),
+                        new: key.to_owned(),
+                    })
+                }
+            }
+        };
 
         // Check if the destination node already has a context.
         {
-            let mut guard = curr.0.write();
+            let mut guard = child.write();
             if guard.context.is_some() || !guard.children.is_empty() {
                 return Err(Error::ConflictingKeys {
                     old: key.to_owned(),
@@ -100,7 +96,7 @@ impl TrieRef {
             }
             guard.context = Some(context);
         }
-        Ok(curr)
+        Ok(child)
     }
 
     pub(crate) fn read(&self) -> RwLockReadGuard<Trie> {
