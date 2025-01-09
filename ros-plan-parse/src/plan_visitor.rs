@@ -1,7 +1,7 @@
 use crate::{
     context::{
         link::{LinkArc, LinkContext, PubSubLinkContext, ServiceLinkContext},
-        node::{NodeArc, NodeContext},
+        node::{NodeArc, NodeContext, ProcessContext, RosNodeContext},
         socket::{
             PubSocketContext, QuerySocketContext, ServerSocketContext, SocketArc, SocketContext,
             SubSocketContext,
@@ -348,7 +348,7 @@ fn to_plan_context(path: PathBuf, plan_cfg: Plan) -> (PlanFileResource, SubplanT
         .0
         .into_iter()
         .map(|(node_ident, node_cfg)| {
-            let node_arc: NodeArc = NodeContext { config: node_cfg }.into();
+            let node_arc: NodeArc = to_node_context(node_cfg).into();
             (node_ident, node_arc)
         })
         .collect();
@@ -391,7 +391,7 @@ fn to_hereplan_context(hereplan: HerePlan) -> (HerePlanResource, SubplanTable) {
         .0
         .into_iter()
         .map(|(node_ident, node_cfg)| {
-            let node_arc: NodeArc = NodeContext { config: node_cfg }.into();
+            let node_arc: NodeArc = to_node_context(node_cfg).into();
             (node_ident, node_arc)
         })
         .collect();
@@ -493,4 +493,15 @@ fn check_arg_assignment(
     }
 
     Ok(())
+}
+
+fn to_node_context(node_cfg: Node) -> NodeContext {
+    match node_cfg {
+        Node::Ros(node_cfg) => RosNodeContext {
+            param: node_cfg.param.clone(),
+            config: node_cfg,
+        }
+        .into(),
+        Node::Proc(node_cfg) => ProcessContext { config: node_cfg }.into(),
+    }
 }
