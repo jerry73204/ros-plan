@@ -122,12 +122,12 @@ impl From<ResourceTree> for ResourceTreeRef {
 
 #[derive(Debug, Clone, Serialize)]
 pub enum PlanResource {
-    PlanFile(PlanFileResourceWithArgs),
+    PlanFile(IncludeResource),
     HerePlan(HerePlanResource),
 }
 
-impl From<PlanFileResourceWithArgs> for PlanResource {
-    fn from(v: PlanFileResourceWithArgs) -> Self {
+impl From<IncludeResource> for PlanResource {
+    fn from(v: IncludeResource) -> Self {
         Self::PlanFile(v)
     }
 }
@@ -139,9 +139,10 @@ impl From<HerePlanResource> for PlanResource {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct PlanFileResourceWithArgs {
+pub struct IncludeResource {
     pub context: PlanFileResource,
     pub args: IndexMap<ParamName, ValueOrEval>,
+    pub when: Option<ValueOrEval>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -149,7 +150,6 @@ pub struct PlanFileResource {
     pub path: PathBuf,
     pub arg: IndexMap<ParamName, ArgEntry>,
     pub var: IndexMap<ParamName, ValueOrEval>,
-    // pub assign_arg: IndexMap<ParamName, ValueOrEval>,
     pub socket_map: IndexMap<SocketIdent, SocketArc>,
     pub node_map: IndexMap<NodeIdent, NodeArc>,
     pub link_map: IndexMap<LinkIdent, LinkArc>,

@@ -9,7 +9,7 @@ use crate::{
     },
     error::Error,
     resource::{
-        HerePlanResource, PlanFileResource, PlanFileResourceWithArgs, PlanResource, Resource,
+        HerePlanResource, IncludeResource, PlanFileResource, PlanResource, Resource,
         ResourceTreeRef,
     },
     utils::{find_plan_file_from_pkg, read_toml_file},
@@ -96,9 +96,10 @@ impl PlanVisitor {
             let mut guard = root.write();
             assert!(guard.context.is_none());
             guard.context = Some(
-                PlanFileResourceWithArgs {
+                IncludeResource {
                     context: plan_ctx,
                     args: assign_args,
+                    when: None,
                 }
                 .into(),
             );
@@ -126,6 +127,7 @@ impl PlanVisitor {
             child_suffix,
             child_plan_path,
             assign_args,
+            when,
         } = job;
 
         let Ok(child_prefix) = &current_prefix / &child_suffix else {
@@ -154,9 +156,10 @@ impl PlanVisitor {
         // Create the child node for the plan
         let plan_child = current.insert(
             &child_suffix,
-            PlanFileResourceWithArgs {
+            IncludeResource {
                 context: plan_ctx,
                 args: assign_args,
+                when,
             }
             .into(),
         )?;
@@ -266,6 +269,7 @@ impl PlanVisitor {
                         current_prefix: current_prefix.to_owned(),
                         child_suffix: subplan_suffix,
                         assign_args: subplan.arg,
+                        when: subplan.when,
                     }
                     .into(),
                 );
@@ -281,6 +285,7 @@ impl PlanVisitor {
                         current_prefix: current_prefix.to_owned(),
                         child_suffix: subplan_suffix,
                         assign_args: subplan.arg,
+                        when: subplan.when,
                     }
                     .into(),
                 );
@@ -334,6 +339,7 @@ pub struct InsertPlanFileJob {
     child_suffix: KeyOwned,
     child_plan_path: PathBuf,
     assign_args: IndexMap<ParamName, ValueOrEval>,
+    when: Option<ValueOrEval>,
 }
 
 fn to_plan_context(path: PathBuf, plan_cfg: Plan) -> (PlanFileResource, SubplanTable) {
