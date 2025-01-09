@@ -3,6 +3,7 @@ use crate::{
     link::LinkTable, node::NodeTable, parameter::ParamName,
 };
 use indexmap::IndexMap;
+use itertools::{chain, Itertools};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -32,9 +33,7 @@ impl TryFrom<SerializedSubplanTable> for SubplanTable {
     fn try_from(table: SerializedSubplanTable) -> Result<Self, Self::Error> {
         macro_rules! bail {
             ($ident:expr) => {
-                return Err(InvalidSubplanDeclaration::RepeatedDefinition {
-                    key: $ident.to_string(),
-                });
+                return Err(InvalidSubplanDeclaration::RepeatedDefinition { key: $ident });
             };
         }
 
@@ -44,16 +43,33 @@ impl TryFrom<SerializedSubplanTable> for SubplanTable {
         } = table;
         let mut map: IndexMap<_, Subplan> = IndexMap::new();
 
+        // Check if one key is a prefix of another key.
+        {
+            let mut subplan_keys: Vec<_> = chain!(include.keys(), here.keys()).collect();
+            subplan_keys.sort_unstable();
+
+            for (prev, next) in subplan_keys.iter().tuple_windows() {
+                if let Some(suffix) = next.as_str().strip_prefix(prev.as_str()) {
+                    if suffix.starts_with('/') {
+                        return Err(InvalidSubplanDeclaration::NonDisjointKeysNotAllowed {
+                            short: prev.0.to_owned(),
+                            long: next.0.to_owned(),
+                        });
+                    }
+                }
+            }
+        }
+
         for (key, subplan) in include {
             let prev = map.insert(key.clone(), subplan.into());
             if prev.is_some() {
-                bail!(key);
+                bail!(key.0);
             }
         }
         for (key, subplan) in here {
             let prev = map.insert(key.clone(), subplan.into());
             if prev.is_some() {
-                bail!(key);
+                bail!(key.0);
             }
         }
 

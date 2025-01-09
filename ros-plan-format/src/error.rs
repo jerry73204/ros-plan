@@ -48,8 +48,14 @@ pub enum InvalidSocketDeclaration {
 
 #[derive(Debug, thiserror::Error)]
 pub enum InvalidSubplanDeclaration {
-    #[error("repeated node definition `{key}`")]
-    RepeatedDefinition { key: String },
+    #[error("repeated subplan definition `{key}`")]
+    RepeatedDefinition { key: KeyOwned },
+
+    #[error(
+        "Subplan keys must be disjoint, but the subplan key \
+         `{short}` is the prefix of another subplan key `{long}`"
+    )]
+    NonDisjointKeysNotAllowed { short: KeyOwned, long: KeyOwned },
 }
 
 #[derive(Debug, thiserror::Error)]

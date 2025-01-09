@@ -24,8 +24,8 @@ pub enum Error {
     #[error("unable to insert the key `{new}` because it conflicts with `{old}`")]
     ConflictingKeys { old: KeyOwned, new: KeyOwned },
 
-    #[error("unable to insert a key with absolute path `{key}`")]
-    AbsoluteKeyNotAllowed { key: KeyOwned },
+    #[error("invalid subplan name `{key}`: {reason}")]
+    InvalidSubplanName { key: KeyOwned, reason: String },
 
     #[error("unable to resolve directory for package `{pkg}`: {message}")]
     PackageResolutionError { pkg: String, message: String },
