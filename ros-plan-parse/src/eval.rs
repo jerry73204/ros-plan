@@ -13,7 +13,7 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 use mlua::prelude::*;
 use ros_plan_format::{
-    eval::{Eval, Value, ValueOrEval, ValueType},
+    expr::{Expr, Value, ValueOrExpr, ValueType},
     link::LinkIdent,
     node::NodeIdent,
     parameter::ParamName,
@@ -24,13 +24,13 @@ use std::{collections::VecDeque, sync::Arc};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct EvalSlot {
-    pub default: ValueOrEval,
+    pub default: ValueOrExpr,
     pub override_: Option<Value>,
     pub result: Option<Value>,
 }
 
 impl EvalSlot {
-    pub fn new(default: ValueOrEval) -> Self {
+    pub fn new(default: ValueOrExpr) -> Self {
         Self {
             default,
             override_: None,
@@ -362,15 +362,15 @@ fn override_arg_table(
     Ok(())
 }
 
-fn eval_value(lua: &Lua, code: &Eval) -> Result<Value, Error> {
+fn eval_value(lua: &Lua, code: &Expr) -> Result<Value, Error> {
     let ValueFromLua(value) = lua.load(code.as_str()).eval()?;
     Ok(value)
 }
 
-fn may_eval_value(lua: &Lua, field: &ValueOrEval) -> Result<Value, Error> {
+fn may_eval_value(lua: &Lua, field: &ValueOrExpr) -> Result<Value, Error> {
     let value = match field {
-        ValueOrEval::Value(value) => value.clone(),
-        ValueOrEval::Eval { eval } => eval_value(lua, eval)?,
+        ValueOrExpr::Value(value) => value.clone(),
+        ValueOrExpr::Expr { eval } => eval_value(lua, eval)?,
     };
     Ok(value)
 }

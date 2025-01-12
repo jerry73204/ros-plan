@@ -15,7 +15,7 @@ use crate::{
 };
 use indexmap::IndexMap;
 use ros_plan_format::{
-    eval::ValueOrEval,
+    expr::ValueOrExpr,
     key::{Key, KeyOwned},
     link::Link,
     node::Node,
@@ -67,7 +67,7 @@ impl PlanVisitor {
         &mut self,
         context: &mut Resource,
         plan_path: &Path,
-        assign_args: IndexMap<ParamName, ValueOrEval>,
+        assign_args: IndexMap<ParamName, ValueOrExpr>,
     ) -> Result<(), Error> {
         // Read plan file
         let plan: Plan = read_toml_file(plan_path)?;
@@ -323,15 +323,15 @@ pub struct InsertPlanFileJob {
     current_prefix: KeyOwned,
     child_suffix: KeyOwned,
     child_plan_path: PathBuf,
-    assign_args: IndexMap<ParamName, ValueOrEval>,
-    when: Option<ValueOrEval>,
+    assign_args: IndexMap<ParamName, ValueOrExpr>,
+    when: Option<ValueOrExpr>,
 }
 
 fn to_plan_context(
     path: PathBuf,
     plan_cfg: Plan,
-    when: Option<ValueOrEval>,
-    assign_arg: IndexMap<ParamName, ValueOrEval>,
+    when: Option<ValueOrExpr>,
+    assign_arg: IndexMap<ParamName, ValueOrExpr>,
 ) -> Result<(PlanFileScope, SubplanTable), Error> {
     // Check if there is an argument assignment that does not exist.
     for name in assign_arg.keys() {
@@ -463,7 +463,7 @@ fn to_link_context(link: Link) -> LinkContext {
 
 fn check_arg_assignment(
     spec: &IndexMap<ParamName, ArgEntry>,
-    assign: &IndexMap<ParamName, ValueOrEval>,
+    assign: &IndexMap<ParamName, ValueOrExpr>,
 ) -> Result<(), Error> {
     let spec_names: HashSet<_> = spec.keys().collect();
     let assigned_names: HashSet<_> = assign.keys().collect();
@@ -485,7 +485,7 @@ fn check_arg_assignment(
     // Check type compatibility for assigned args
     for name in &spec_names & &assigned_names {
         match &assign[name] {
-            ValueOrEval::Value(value) => {
+            ValueOrExpr::Value(value) => {
                 let assigned_ty = value.ty();
 
                 let expect_ty = match spec[name].slot {
@@ -500,7 +500,7 @@ fn check_arg_assignment(
                     });
                 }
             }
-            ValueOrEval::Eval { .. } => {
+            ValueOrExpr::Expr { .. } => {
                 // Cannot check without evaluation. Skip it.
             }
         }

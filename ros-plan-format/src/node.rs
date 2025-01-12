@@ -1,5 +1,5 @@
 use crate::{
-    error::InvalidNodeDeclaration, eval::ValueOrEval, ident::IdentOwned, parameter::ParamName,
+    error::InvalidNodeDeclaration, expr::ValueOrExpr, ident::IdentOwned, parameter::ParamName,
 };
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -105,7 +105,7 @@ pub struct RosNode {
     pub plugin: Option<String>,
 
     #[serde(default)]
-    pub param: IndexMap<ParamName, ValueOrEval>,
+    pub param: IndexMap<ParamName, ValueOrExpr>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

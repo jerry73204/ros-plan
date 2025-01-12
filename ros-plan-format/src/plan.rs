@@ -1,5 +1,5 @@
 use crate::{
-    eval::ValueOrEval,
+    expr::ValueOrExpr,
     link::LinkTable,
     node::NodeTable,
     parameter::{ArgEntry, ParamName},
@@ -16,7 +16,7 @@ pub struct Plan {
     pub arg: IndexMap<ParamName, ArgEntry>,
 
     #[serde(default)]
-    pub var: IndexMap<ParamName, ValueOrEval>,
+    pub var: IndexMap<ParamName, ValueOrExpr>,
 
     #[serde(default)]
     pub socket: SocketTable,

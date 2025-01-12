@@ -1,5 +1,5 @@
 use crate::{
-    error::InvalidLinkDeclaration, eval::ValueOrEval, ident::IdentOwned, key::NonEmptyKeyOwned,
+    error::InvalidLinkDeclaration, expr::ValueOrExpr, ident::IdentOwned, key::NonEmptyKeyOwned,
     qos::Qos, ros_type::RosTypeOwned,
 };
 use indexmap::IndexMap;
@@ -124,5 +124,5 @@ pub struct ServiceLink {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopicUri {
     pub node: NonEmptyKeyOwned,
-    pub topic: ValueOrEval,
+    pub topic: ValueOrExpr,
 }

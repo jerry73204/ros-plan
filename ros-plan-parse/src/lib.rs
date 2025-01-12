@@ -10,7 +10,7 @@ mod utils;
 
 use eval::Evaluator;
 use indexmap::IndexMap;
-use ros_plan_format::{eval::Value, parameter::ParamName};
+use ros_plan_format::{expr::Value, parameter::ParamName};
 
 use crate::{
     error::Error, link_resolver::LinkResolver, plan_visitor::PlanVisitor, resource::Resource,

@@ -5,30 +5,30 @@ use std::fmt::{self, Debug, Display};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum ValueOrEval {
+pub enum ValueOrExpr {
     Value(Value),
-    Eval { eval: Eval },
+    Expr { eval: Expr },
 }
 
-impl ValueOrEval {
+impl ValueOrExpr {
     pub fn into_value(self) -> Option<Value> {
         match self {
-            ValueOrEval::Value(value) => Some(value),
-            ValueOrEval::Eval { .. } => None,
+            ValueOrExpr::Value(value) => Some(value),
+            ValueOrExpr::Expr { .. } => None,
         }
     }
 
     pub fn as_value(&self) -> Option<&Value> {
         match self {
-            ValueOrEval::Value(value) => Some(value),
-            ValueOrEval::Eval { .. } => None,
+            ValueOrExpr::Value(value) => Some(value),
+            ValueOrExpr::Expr { .. } => None,
         }
     }
 
-    pub fn as_eval(&self) -> Option<&Eval> {
+    pub fn as_eval(&self) -> Option<&Expr> {
         match self {
-            ValueOrEval::Eval { eval } => Some(eval),
-            ValueOrEval::Value(_) => None,
+            ValueOrExpr::Expr { eval } => Some(eval),
+            ValueOrExpr::Value(_) => None,
         }
     }
 
@@ -69,43 +69,43 @@ impl ValueOrEval {
     }
 }
 
-impl From<Eval> for ValueOrEval {
-    fn from(eval: Eval) -> Self {
-        Self::Eval { eval }
+impl From<Expr> for ValueOrExpr {
+    fn from(eval: Expr) -> Self {
+        Self::Expr { eval }
     }
 }
 
-impl From<Value> for ValueOrEval {
+impl From<Value> for ValueOrExpr {
     fn from(v: Value) -> Self {
         Self::Value(v)
     }
 }
 
-impl Display for ValueOrEval {
+impl Display for ValueOrExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ValueOrEval::Value(value) => Display::fmt(value, f),
-            ValueOrEval::Eval { eval } => Display::fmt(eval, f),
+            ValueOrExpr::Value(value) => Display::fmt(value, f),
+            ValueOrExpr::Expr { eval } => Display::fmt(eval, f),
         }
     }
 }
 
 #[derive(Clone)]
-pub struct Eval(String);
+pub struct Expr(String);
 
-impl Eval {
+impl Expr {
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
-impl AsRef<str> for Eval {
+impl AsRef<str> for Expr {
     fn as_ref(&self) -> &str {
         &self.0
     }
 }
 
-impl Serialize for Eval {
+impl Serialize for Expr {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -115,7 +115,7 @@ impl Serialize for Eval {
     }
 }
 
-impl<'de> Deserialize<'de> for Eval {
+impl<'de> Deserialize<'de> for Expr {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -140,13 +140,13 @@ impl<'de> Deserialize<'de> for Eval {
     }
 }
 
-impl Debug for Eval {
+impl Debug for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Debug::fmt(&self.0, f)
     }
 }
 
-impl Display for Eval {
+impl Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(&self.0, f)
     }
@@ -397,38 +397,6 @@ impl Value {
     }
 }
 
-// impl From<Value> for toml::Value {
-//     fn from(input: Value) -> Self {
-//         match input {
-//             Value::Bool(value) => value.into(),
-//             Value::Integer(value) => value.into(),
-//             Value::Double(value) => value.into(),
-//             Value::String(value) => value.into(),
-//             Value::BoolArray(array) => array
-//                 .into_iter()
-//                 .map(toml::Value::Boolean)
-//                 .collect::<Vec<_>>()
-//                 .into(),
-//             Value::ByteArray { .. } => todo!(),
-//             Value::IntegerArray(array) => array
-//                 .into_iter()
-//                 .map(toml::Value::Integer)
-//                 .collect::<Vec<_>>()
-//                 .into(),
-//             Value::DoubleArray(array) => array
-//                 .into_iter()
-//                 .map(toml::Value::Float)
-//                 .collect::<Vec<_>>()
-//                 .into(),
-//             Value::StringArray(array) => array
-//                 .into_iter()
-//                 .map(toml::Value::String)
-//                 .collect::<Vec<_>>()
-//                 .into(),
-//         }
-//     }
-// }
-
 #[derive(
     Debug,
     Clone,
@@ -474,6 +442,3 @@ pub enum ValueType {
     #[strum(serialize = "string_array")]
     StringArray,
 }
-
-// #[derive(Debug, Clone)]
-// pub struct Subst(Vec<ValueOrEval>);

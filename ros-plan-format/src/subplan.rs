@@ -1,5 +1,5 @@
 use crate::{
-    error::InvalidSubplanDeclaration, eval::ValueOrEval, key::NonEmptyRelativeKeyOwned,
+    error::InvalidSubplanDeclaration, expr::ValueOrExpr, key::NonEmptyRelativeKeyOwned,
     link::LinkTable, node::NodeTable, parameter::ParamName,
 };
 use indexmap::IndexMap;
@@ -155,9 +155,9 @@ impl From<Group> for Subplan {
 #[serde(deny_unknown_fields)]
 pub struct IncludeFromFile {
     pub path: PathBuf,
-    pub when: Option<ValueOrEval>,
+    pub when: Option<ValueOrExpr>,
     #[serde(default)]
-    pub arg: IndexMap<ParamName, ValueOrEval>,
+    pub arg: IndexMap<ParamName, ValueOrExpr>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -165,9 +165,9 @@ pub struct IncludeFromFile {
 pub struct IncludeFromPkg {
     pub pkg: String,
     pub file: String,
-    pub when: Option<ValueOrEval>,
+    pub when: Option<ValueOrExpr>,
     #[serde(default)]
-    pub arg: IndexMap<ParamName, ValueOrEval>,
+    pub arg: IndexMap<ParamName, ValueOrExpr>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,5 +179,5 @@ pub struct Group {
     pub link: LinkTable,
     #[serde(default)]
     pub subplan: SubplanTable,
-    pub when: Option<ValueOrEval>,
+    pub when: Option<ValueOrExpr>,
 }
