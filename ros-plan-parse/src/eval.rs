@@ -20,7 +20,7 @@ use ros_plan_format::{
     socket::SocketIdent,
 };
 use serde::Serialize;
-use std::{collections::VecDeque, sync::Arc};
+use std::collections::VecDeque;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct EvalSlot {
@@ -111,7 +111,7 @@ impl Evaluator {
         while let Some(job) = self.queue.pop_front() {
             match job {
                 Job::PlanFile { current } => self.eval_plan_file(&current)?,
-                Job::Group { current, lua } => self.eval_group(lua, current)?,
+                Job::Group { current, lua } => self.eval_group(&lua, current)?,
             }
         }
 
@@ -119,7 +119,7 @@ impl Evaluator {
     }
 
     fn eval_plan_file(&mut self, current: &ResourceTreeRef) -> Result<(), Error> {
-        let lua = Arc::new(new_lua()?);
+        let lua = new_lua()?;
 
         {
             let Some(mut plan_res) = current.as_plan_file_mut() else {
@@ -204,11 +204,11 @@ impl Evaluator {
         Ok(())
     }
 
-    fn eval_group(&mut self, lua: Arc<Lua>, current: ResourceTreeRef) -> Result<(), Error> {
+    fn eval_group(&mut self, lua: &Lua, current: ResourceTreeRef) -> Result<(), Error> {
         {
             let mut group = current.as_group_mut().unwrap();
-            eval_node_map(&lua, &mut group.node_map)?;
-            eval_link_map(&lua, &mut group.link_map)?;
+            eval_node_map(lua, &mut group.node_map)?;
+            eval_link_map(lua, &mut group.link_map)?;
         }
 
         {
@@ -232,13 +232,8 @@ impl Evaluator {
 }
 
 enum Job {
-    PlanFile {
-        current: ResourceTreeRef,
-    },
-    Group {
-        current: ResourceTreeRef,
-        lua: Arc<Lua>,
-    },
+    PlanFile { current: ResourceTreeRef },
+    Group { current: ResourceTreeRef, lua: Lua },
 }
 
 fn eval_node_map(lua: &Lua, node_map: &mut IndexMap<NodeIdent, NodeArc>) -> Result<(), Error> {

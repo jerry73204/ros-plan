@@ -185,8 +185,6 @@ fn resolve_pubsub_link(
     current: ResourceTreeRef,
     link: &mut PubSubLinkContext,
 ) -> Result<(), Error> {
-    // let PubSubLink { ty, qos, src, dst } = link;
-
     let src: Vec<_> = link
         .config
         .src
@@ -196,7 +194,7 @@ fn resolve_pubsub_link(
                 node: node_key,
                 topic,
             } = uri;
-            let Some(resolve) = resolve_node_key(context, current.clone(), &node_key) else {
+            let Some(resolve) = resolve_node_key(context, current.clone(), node_key) else {
                 bail_resolve_key_error!(node_key, "unable to resolve key");
             };
 
@@ -228,7 +226,7 @@ fn resolve_pubsub_link(
                 node: node_key,
                 topic,
             } = uri;
-            let Some(resolve) = resolve_node_key(context, current.clone(), &node_key) else {
+            let Some(resolve) = resolve_node_key(context, current.clone(), node_key) else {
                 bail_resolve_key_error!(node_key, "unable to resolve key");
             };
 
@@ -267,7 +265,7 @@ fn resolve_service_link(
             node: node_key,
             topic,
         } = &link.config.listen;
-        let Some(resolve) = resolve_node_key(context, current.clone(), &node_key) else {
+        let Some(resolve) = resolve_node_key(context, current.clone(), node_key) else {
             bail_resolve_key_error!(node_key, "unable to resolve key");
         };
 
@@ -297,7 +295,7 @@ fn resolve_service_link(
                 node: node_key,
                 topic,
             } = uri;
-            let Some(resolve) = resolve_node_key(context, current.clone(), &node_key) else {
+            let Some(resolve) = resolve_node_key(context, current.clone(), node_key) else {
                 bail_resolve_key_error!(node_key, "unable to resolve key");
             };
 

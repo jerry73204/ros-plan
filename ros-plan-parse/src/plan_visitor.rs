@@ -393,7 +393,7 @@ fn to_plan_context(
         socket_map,
         node_map,
         link_map,
-        when: when.map(|when| EvalSlot::new(when)),
+        when: when.map(EvalSlot::new),
     };
 
     Ok((plan_ctx, plan_cfg.subplan))
@@ -420,7 +420,7 @@ fn to_group_scope(group: Group) -> (GroupScope, SubplanTable) {
         .collect();
 
     let ctx = GroupScope {
-        when: group.when.map(|when| EvalSlot::new(when)),
+        when: group.when.map(EvalSlot::new),
         node_map: local_node_map,
         link_map: local_link_map,
     };
@@ -478,7 +478,7 @@ fn check_arg_assignment(
     }
 
     // Check if there are assigned args not found in spec.
-    for name in &assigned_names - &spec_names {
+    if let Some(name) = (&assigned_names - &spec_names).into_iter().next() {
         return Err(Error::ArgumentNotFound { name: name.clone() });
     }
 

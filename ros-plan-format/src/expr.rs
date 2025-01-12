@@ -276,7 +276,7 @@ impl TryFrom<SerializedByteArrayData> for ByteArrayData {
                     });
                 };
 
-                let data = match prefix {
+                match prefix {
                     "hex" => hex::decode(suffix).map_err(|err| InvalidByteArrayData {
                         reason: format!("bad hex data: {err}"),
                     })?,
@@ -294,9 +294,7 @@ impl TryFrom<SerializedByteArrayData> for ByteArrayData {
                                 .to_string(),
                         })
                     }
-                };
-
-                data
+                }
             }
         };
         Ok(data.into())

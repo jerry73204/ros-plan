@@ -205,7 +205,7 @@ fn resolve_sub_socket_topics(
                 topic,
             } = uri;
 
-            let Some(resolve) = resolve_node_key(current.clone(), &node_key) else {
+            let Some(resolve) = resolve_node_key(current.clone(), node_key) else {
                 bail_resolve_key_error!(
                     node_key,
                     "the key does not resolve to a node or a plan socket"

@@ -57,8 +57,8 @@ impl ResourceTreeRef {
 
 #[derive(Debug, Clone, Serialize)]
 pub enum Scope {
-    PlanFile(PlanFileScope),
-    Group(GroupScope),
+    PlanFile(Box<PlanFileScope>),
+    Group(Box<GroupScope>),
 }
 
 impl Scope {
@@ -104,13 +104,13 @@ impl Scope {
 
 impl From<PlanFileScope> for Scope {
     fn from(v: PlanFileScope) -> Self {
-        Self::PlanFile(v)
+        Self::PlanFile(Box::new(v))
     }
 }
 
 impl From<GroupScope> for Scope {
     fn from(v: GroupScope) -> Self {
-        Self::Group(v)
+        Self::Group(Box::new(v))
     }
 }
 
