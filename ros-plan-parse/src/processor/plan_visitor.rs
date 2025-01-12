@@ -1,6 +1,7 @@
 use crate::{
     context::{
         arg::ArgContext,
+        expr::ExprContext,
         link::{LinkArc, LinkContext, PubSubLinkContext, ServiceLinkContext},
         node::{NodeArc, NodeContext, ProcessContext, RosNodeContext},
         socket::{
@@ -9,7 +10,6 @@ use crate::{
         },
     },
     error::Error,
-    eval::EvalSlot,
     resource::{GroupScope, PlanFileScope, Resource, ResourceTreeRef, Scope},
     utils::{find_plan_file_from_pkg, read_toml_file},
 };
@@ -30,17 +30,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[derive(Debug, Default)]
 pub struct PlanVisitor {
     queue: VecDeque<Job>,
 }
 
 impl PlanVisitor {
-    pub fn new() -> Self {
-        Self {
-            queue: VecDeque::new(),
-        }
-    }
-
     pub fn traverse(&mut self, path: &Path) -> Result<Resource, Error> {
         let mut context = Resource {
             root: None,
@@ -293,6 +288,7 @@ impl PlanVisitor {
     }
 }
 
+#[derive(Debug)]
 enum Job {
     InsertGroup(InsertGroupJob),
     InsertPlanFile(InsertPlanFileJob),
@@ -310,7 +306,8 @@ impl From<InsertGroupJob> for Job {
     }
 }
 
-pub struct InsertGroupJob {
+#[derive(Debug)]
+struct InsertGroupJob {
     plan_parent: ResourceTreeRef,
     current: ResourceTreeRef,
     current_prefix: KeyOwned,
@@ -318,7 +315,8 @@ pub struct InsertGroupJob {
     child_group: GroupCfg,
 }
 
-pub struct InsertPlanFileJob {
+#[derive(Debug)]
+struct InsertPlanFileJob {
     // plan_parent: TrieRef,
     current: ResourceTreeRef,
     current_prefix: KeyOwned,
@@ -384,7 +382,7 @@ fn to_plan_context(
     let var_map: IndexMap<_, _> = plan_cfg
         .var
         .into_iter()
-        .map(|(name, var_entry)| (name, EvalSlot::new(var_entry)))
+        .map(|(name, var_entry)| (name, ExprContext::new(var_entry)))
         .collect();
 
     let plan_ctx = PlanFileScope {
@@ -394,7 +392,7 @@ fn to_plan_context(
         socket_map,
         node_map,
         link_map,
-        when: when.map(EvalSlot::new),
+        when: when.map(ExprContext::new),
     };
 
     Ok((plan_ctx, plan_cfg.subplan))
@@ -421,7 +419,7 @@ fn to_group_scope(group: GroupCfg) -> (GroupScope, SubplanTable) {
         .collect();
 
     let ctx = GroupScope {
-        when: group.when.map(EvalSlot::new),
+        when: group.when.map(ExprContext::new),
         node_map: local_node_map,
         link_map: local_link_map,
     };
@@ -518,7 +516,7 @@ fn to_node_context(node_cfg: NodeCfg) -> NodeContext {
                     .param
                     .clone()
                     .into_iter()
-                    .map(|(name, eval)| (name, EvalSlot::new(eval)))
+                    .map(|(name, eval)| (name, ExprContext::new(eval)))
                     .collect()
             },
             config: node_cfg,

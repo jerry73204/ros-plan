@@ -1,11 +1,11 @@
 use crate::{
     context::{
         arg::ArgContext,
+        expr::ExprContext,
         link::{LinkArc, LinkWeak},
         node::{NodeArc, NodeWeak},
         socket::SocketArc,
     },
-    eval::EvalSlot,
     tree::{Tree, TreeRef},
 };
 use indexmap::IndexMap;
@@ -123,9 +123,9 @@ pub enum ScopeKind {
 #[derive(Debug, Clone, Serialize)]
 pub struct PlanFileScope {
     pub path: PathBuf,
-    pub when: Option<EvalSlot>,
+    pub when: Option<ExprContext>,
     pub arg_map: IndexMap<ParamName, ArgContext>,
-    pub var_map: IndexMap<ParamName, EvalSlot>,
+    pub var_map: IndexMap<ParamName, ExprContext>,
     pub socket_map: IndexMap<SocketIdent, SocketArc>,
     pub node_map: IndexMap<NodeIdent, NodeArc>,
     pub link_map: IndexMap<LinkIdent, LinkArc>,
@@ -133,7 +133,7 @@ pub struct PlanFileScope {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct GroupScope {
-    pub when: Option<EvalSlot>,
+    pub when: Option<ExprContext>,
     pub node_map: IndexMap<NodeIdent, NodeArc>,
     pub link_map: IndexMap<LinkIdent, LinkArc>,
 }

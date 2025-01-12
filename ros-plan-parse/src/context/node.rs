@@ -1,5 +1,5 @@
 use crate::{
-    eval::EvalSlot,
+    context::expr::ExprContext,
     utils::{ArcRwLock, WeakRwLock},
 };
 use indexmap::IndexMap;
@@ -33,7 +33,7 @@ impl From<RosNodeContext> for NodeContext {
 #[derive(Debug, Clone, Serialize)]
 pub struct RosNodeContext {
     pub config: RosNodeCfg,
-    pub param: IndexMap<ParamName, EvalSlot>,
+    pub param: IndexMap<ParamName, ExprContext>,
 }
 
 #[derive(Debug, Clone, Serialize)]

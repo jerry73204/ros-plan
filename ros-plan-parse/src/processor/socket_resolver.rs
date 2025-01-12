@@ -1,5 +1,6 @@
 use crate::{
     context::{
+        expr::ExprContext,
         node::NodeArc,
         socket::{
             PubSocketContext, QuerySocketContext, ServerSocketContext, SocketArc, SocketContext,
@@ -8,7 +9,6 @@ use crate::{
         uri::NodeTopicUri,
     },
     error::Error,
-    eval::EvalSlot,
     resource::{Resource, ResourceTreeRef, Scope},
 };
 use itertools::Itertools;
@@ -27,17 +27,12 @@ macro_rules! bail_resolve_key_error {
     };
 }
 
+#[derive(Debug, Default)]
 pub struct SocketResolver {
     queue: VecDeque<Job>,
 }
 
 impl SocketResolver {
-    pub fn new() -> Self {
-        Self {
-            queue: VecDeque::new(),
-        }
-    }
-
     pub fn traverse(&mut self, context: &mut Resource) -> Result<(), Error> {
         self.queue.push_back(
             VisitNodeJob {
@@ -171,7 +166,7 @@ fn resolve_pub_socket_topics(
             let topic_uris = match resolve {
                 ResolveNode::Node(child_node_arc) => vec![NodeTopicUri {
                     node: child_node_arc.downgrade(),
-                    topic: EvalSlot::new(topic.clone()),
+                    topic: ExprContext::new(topic.clone()),
                 }],
                 ResolveNode::Socket(child_socket_arc) => {
                     let guard = child_socket_arc.read();
@@ -215,7 +210,7 @@ fn resolve_sub_socket_topics(
             let topic_uris = match resolve {
                 ResolveNode::Node(child_node_arc) => vec![NodeTopicUri {
                     node: child_node_arc.downgrade(),
-                    topic: EvalSlot::new(topic.clone()),
+                    topic: ExprContext::new(topic.clone()),
                 }],
                 ResolveNode::Socket(child_socket_arc) => {
                     let guard = child_socket_arc.read();
@@ -254,7 +249,7 @@ fn resolve_srv_socket_topics(
     let listen = match resolve {
         ResolveNode::Node(child_node_arc) => NodeTopicUri {
             node: child_node_arc.downgrade(),
-            topic: EvalSlot::new(topic.clone()),
+            topic: ExprContext::new(topic.clone()),
         },
         ResolveNode::Socket(child_socket_arc) => {
             let guard = child_socket_arc.read();
@@ -293,7 +288,7 @@ fn resolve_qry_socket_topics(
             let topic_uris = match resolve {
                 ResolveNode::Node(child_node_arc) => vec![NodeTopicUri {
                     node: child_node_arc.downgrade(),
-                    topic: EvalSlot::new(topic.clone()),
+                    topic: ExprContext::new(topic.clone()),
                 }],
                 ResolveNode::Socket(child_socket_arc) => {
                     let guard = child_socket_arc.read();
@@ -353,6 +348,7 @@ fn resolve_node_key(root: ResourceTreeRef, key: &Key) -> Option<ResolveNode> {
     Some(resolve)
 }
 
+#[derive(Debug)]
 pub enum Job {
     VisitNode(VisitNodeJob),
     ResolveSocket(ResolveSocketJob),
@@ -370,17 +366,20 @@ impl From<ResolveSocketJob> for Job {
     }
 }
 
+#[derive(Debug)]
 pub struct VisitNodeJob {
     current: ResourceTreeRef,
     current_prefix: KeyOwned,
 }
 
+#[derive(Debug)]
 pub struct ResolveSocketJob {
     current: ResourceTreeRef,
     // current_prefix: KeyOwned,
 }
 
-pub enum ResolveNode {
+#[derive(Debug)]
+enum ResolveNode {
     Node(NodeArc),
     Socket(SocketArc),
 }

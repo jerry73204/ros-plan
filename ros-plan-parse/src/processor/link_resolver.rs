@@ -1,12 +1,12 @@
 use crate::{
     context::{
+        expr::ExprContext,
         link::{LinkContext, PubSubLinkContext, ServiceLinkContext},
         node::NodeArc,
         socket::{SocketArc, SocketContext},
         uri::NodeTopicUri,
     },
     error::Error,
-    eval::EvalSlot,
     resource::{Resource, ResourceTreeRef, Scope},
 };
 use itertools::Itertools;
@@ -25,17 +25,12 @@ macro_rules! bail_resolve_key_error {
     };
 }
 
+#[derive(Debug, Default)]
 pub struct LinkResolver {
     queue: VecDeque<Job>,
 }
 
 impl LinkResolver {
-    pub fn new() -> Self {
-        Self {
-            queue: VecDeque::new(),
-        }
-    }
-
     pub fn traverse(&mut self, context: &mut Resource) -> Result<(), Error> {
         // Schedule the job to visit the root
         self.queue.push_back(
@@ -61,7 +56,7 @@ impl LinkResolver {
         Ok(())
     }
 
-    pub fn visit_node(&mut self, job: VisitNodeJob) -> Result<(), Error> {
+    fn visit_node(&mut self, job: VisitNodeJob) -> Result<(), Error> {
         let VisitNodeJob {
             current,
             current_prefix,
@@ -110,11 +105,7 @@ impl LinkResolver {
         Ok(())
     }
 
-    pub fn resolve_link(
-        &mut self,
-        context: &mut Resource,
-        job: ResolveLinkJob,
-    ) -> Result<(), Error> {
+    fn resolve_link(&mut self, context: &mut Resource, job: ResolveLinkJob) -> Result<(), Error> {
         let ResolveLinkJob {
             current,
             current_prefix,
@@ -201,7 +192,7 @@ fn resolve_pubsub_link(
             let uris: Vec<_> = match resolve {
                 ResolveNode::Node(node_arc) => vec![NodeTopicUri {
                     node: node_arc.downgrade(),
-                    topic: EvalSlot::new(topic.clone()),
+                    topic: ExprContext::new(topic.clone()),
                 }],
                 ResolveNode::Socket(socket_arc) => {
                     let guard = socket_arc.read();
@@ -233,7 +224,7 @@ fn resolve_pubsub_link(
             let uris: Vec<_> = match resolve {
                 ResolveNode::Node(node_arc) => vec![NodeTopicUri {
                     node: node_arc.downgrade(),
-                    topic: EvalSlot::new(topic.clone()),
+                    topic: ExprContext::new(topic.clone()),
                 }],
                 ResolveNode::Socket(socket_arc) => {
                     let guard = socket_arc.read();
@@ -272,7 +263,7 @@ fn resolve_service_link(
         let uri = match resolve {
             ResolveNode::Node(node_arc) => NodeTopicUri {
                 node: node_arc.downgrade(),
-                topic: EvalSlot::new(topic.clone()),
+                topic: ExprContext::new(topic.clone()),
             },
             ResolveNode::Socket(socket_arc) => {
                 let guard = socket_arc.read();
@@ -302,7 +293,7 @@ fn resolve_service_link(
             let uris: Vec<_> = match resolve {
                 ResolveNode::Node(node_arc) => vec![NodeTopicUri {
                     node: node_arc.downgrade(),
-                    topic: EvalSlot::new(topic.clone()),
+                    topic: ExprContext::new(topic.clone()),
                 }],
                 ResolveNode::Socket(socket_arc) => {
                     let guard = socket_arc.read();
@@ -368,7 +359,8 @@ fn resolve_node_key(
     }
 }
 
-pub enum Job {
+#[derive(Debug)]
+enum Job {
     VisitNode(VisitNodeJob),
     ResolveLink(ResolveLinkJob),
 }
@@ -385,16 +377,20 @@ impl From<VisitNodeJob> for Job {
     }
 }
 
-pub struct VisitNodeJob {
+#[derive(Debug)]
+struct VisitNodeJob {
     current: ResourceTreeRef,
     current_prefix: KeyOwned,
 }
 
-pub struct ResolveLinkJob {
+#[derive(Debug)]
+struct ResolveLinkJob {
     current: ResourceTreeRef,
     current_prefix: KeyOwned,
 }
-pub enum ResolveNode {
+
+#[derive(Debug)]
+enum ResolveNode {
     Node(NodeArc),
     Socket(SocketArc),
 }

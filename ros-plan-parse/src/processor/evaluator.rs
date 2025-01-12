@@ -1,3 +1,5 @@
+mod utils;
+
 use crate::{
     context::{
         arg::ArgContext,
@@ -7,82 +9,25 @@ use crate::{
     },
     error::Error,
     resource::{Resource, ResourceTreeRef, Scope, ScopeKind},
-    utils::find_pkg_dir,
 };
 use indexmap::IndexMap;
-use itertools::Itertools;
 use mlua::prelude::*;
 use ros_plan_format::{
-    expr::{Expr, Value, ValueOrExpr, ValueType},
+    expr::{Expr, Value, ValueOrExpr},
     link::LinkIdent,
     node::NodeIdent,
     parameter::ParamName,
     socket::SocketIdent,
 };
-use serde::Serialize;
 use std::collections::VecDeque;
+use utils::{new_lua, ValueFromLua, ValueToLua};
 
-#[derive(Debug, Clone, Serialize)]
-pub struct EvalSlot {
-    pub default: ValueOrExpr,
-    pub override_: Option<Value>,
-    pub result: Option<Value>,
-}
-
-impl EvalSlot {
-    pub fn new(default: ValueOrExpr) -> Self {
-        Self {
-            default,
-            override_: None,
-            result: None,
-        }
-    }
-
-    pub fn eval(&mut self, lua: &Lua) -> Result<(), Error> {
-        let Self {
-            ref default,
-            ref override_,
-            result,
-        } = self;
-
-        let value = if let Some(override_) = override_ {
-            override_.clone()
-        } else {
-            may_eval_value(lua, default)?
-        };
-        *result = Some(value);
-        Ok(())
-    }
-
-    pub fn eval_bool(&mut self, lua: &Lua) -> Result<(), Error> {
-        self.eval(lua)?;
-
-        let ty = self.result.as_ref().unwrap().ty();
-        if ty != ValueType::Bool {
-            return Err(Error::EvaluationError {
-                error: format!("`{}` does not evaluate to a boolean value", self.default),
-            });
-        }
-
-        Ok(())
-    }
-
-    pub fn ty(&self) -> Option<ValueType> {
-        Some(self.result.as_ref()?.ty())
-    }
-}
-
+#[derive(Debug, Default)]
 pub struct Evaluator {
     queue: VecDeque<Job>,
 }
 
 impl Evaluator {
-    pub fn new() -> Self {
-        Self {
-            queue: VecDeque::new(),
-        }
-    }
-
     pub fn eval_resource(
         &mut self,
         resource: &mut Resource,
@@ -231,9 +176,19 @@ impl Evaluator {
     }
 }
 
+#[derive(Debug)]
 enum Job {
     PlanFile { current: ResourceTreeRef },
     Group { current: ResourceTreeRef, lua: Lua },
+}
+
+fn load_arg_table(lua: &Lua, arg_table: &IndexMap<ParamName, ArgContext>) -> Result<(), Error> {
+    for (name, arg) in arg_table {
+        lua.globals()
+            .set(name.as_ref(), ValueToLua(arg.result.as_ref().unwrap()))?;
+    }
+
+    Ok(())
 }
 
 fn eval_node_map(lua: &Lua, node_map: &mut IndexMap<NodeIdent, NodeArc>) -> Result<(), Error> {
@@ -329,17 +284,8 @@ fn eval_root_arg_table(arg_table: &mut IndexMap<ParamName, ArgContext>) -> Resul
 
 fn eval_arg_table(lua: &Lua, arg_table: &mut IndexMap<ParamName, ArgContext>) -> Result<(), Error> {
     for (name, arg) in arg_table {
-        eval_arg(lua, name, arg)?;
+        eval_arg_context(lua, name, arg)?;
     }
-    Ok(())
-}
-
-fn load_arg_table(lua: &Lua, arg_table: &IndexMap<ParamName, ArgContext>) -> Result<(), Error> {
-    for (name, arg) in arg_table {
-        lua.globals()
-            .set(name.as_ref(), ValueToLua(arg.result.as_ref().unwrap()))?;
-    }
-
     Ok(())
 }
 
@@ -361,56 +307,20 @@ fn override_arg_table(
     Ok(())
 }
 
-fn eval_value(lua: &Lua, code: &Expr) -> Result<Value, Error> {
-    let ValueFromLua(value) = lua.load(code.as_str()).eval()?;
+fn eval_expr(lua: &Lua, code: &Expr) -> Result<Value, Error> {
+    let ValueFromLua(value): ValueFromLua = lua.load(code.as_str()).eval()?;
     Ok(value)
 }
 
-fn may_eval_value(lua: &Lua, field: &ValueOrExpr) -> Result<Value, Error> {
+pub fn eval_value_or_expr(lua: &Lua, field: &ValueOrExpr) -> Result<Value, Error> {
     let value = match field {
         ValueOrExpr::Value(value) => value.clone(),
-        ValueOrExpr::Expr { eval } => eval_value(lua, eval)?,
+        ValueOrExpr::Expr { eval } => eval_expr(lua, eval)?,
     };
     Ok(value)
 }
 
-const TYPE_KEY: &str = "type";
-
-struct ValueToLua<'a>(&'a Value);
-
-impl IntoLua for ValueToLua<'_> {
-    fn into_lua(self, lua: &Lua) -> LuaResult<LuaValue> {
-        fn convert_array<T: IntoLua + Clone>(
-            lua: &Lua,
-            vec: &[T],
-            ty: ValueType,
-        ) -> LuaResult<LuaValue> {
-            let table = lua.create_sequence_from(vec.iter().cloned())?;
-            if table.is_empty() {
-                table.set(TYPE_KEY, ty.to_string())?;
-            }
-            lua.convert(table)
-        }
-
-        match self.0 {
-            Value::Bool(val) => val.into_lua(lua),
-            Value::Integer(val) => val.into_lua(lua),
-            Value::Double(val) => val.into_lua(lua),
-            Value::String(val) => val.as_str().into_lua(lua),
-            Value::ByteArray { bytes } => {
-                let buffer = lua.create_buffer(bytes.as_slice())?;
-                lua.convert(buffer)
-            }
-            // Arrays are converted to Lua tables with an optional "_type" field.
-            Value::BoolArray(vec) => convert_array(lua, vec, ValueType::Bool),
-            Value::IntegerArray(vec) => convert_array(lua, vec, ValueType::Integer),
-            Value::DoubleArray(vec) => convert_array(lua, vec, ValueType::Double),
-            Value::StringArray(vec) => convert_array(lua, vec, ValueType::String),
-        }
-    }
-}
-
-pub fn eval_arg(lua: &Lua, name: &ParamName, arg: &mut ArgContext) -> Result<(), Error> {
+pub fn eval_arg_context(lua: &Lua, name: &ParamName, arg: &mut ArgContext) -> Result<(), Error> {
     let ArgContext {
         ty,
         default,
@@ -421,9 +331,9 @@ pub fn eval_arg(lua: &Lua, name: &ParamName, arg: &mut ArgContext) -> Result<(),
     } = arg;
 
     let value = if let Some(override_) = override_ {
-        may_eval_value(lua, override_)?
+        eval_value_or_expr(lua, override_)?
     } else if let Some(assign) = assign {
-        may_eval_value(lua, assign)?
+        eval_value_or_expr(lua, assign)?
     } else if let Some(default) = default {
         default.clone()
     } else {
@@ -439,113 +349,4 @@ pub fn eval_arg(lua: &Lua, name: &ParamName, arg: &mut ArgContext) -> Result<(),
 
     *result = Some(value);
     Ok(())
-}
-
-struct ValueFromLua(Value);
-
-impl FromLua for ValueFromLua {
-    fn from_lua(value: LuaValue, _lua: &Lua) -> LuaResult<Self> {
-        let param = match value {
-            LuaValue::Boolean(val) => val.into(),
-            LuaValue::Integer(val) => (val as i64).into(),
-            LuaValue::Number(val) => val.into(),
-            LuaValue::String(string) => string.to_str()?.to_string().into(),
-            LuaValue::Buffer(buffer) => buffer.to_vec().into(),
-            LuaValue::Table(table) => {
-                // Guess the element type from the `_type` key in the
-                // table. If it does not exist, guess from the first element.
-                let ty = if table.contains_key(TYPE_KEY)? {
-                    let ty_name: String = table.get(TYPE_KEY)?;
-                    let ty: ValueType = ty_name
-                        .parse()
-                        .map_err(|_| LuaError::external(format!("unknown type `{ty_name}`")))?;
-                    ty
-                } else {
-                    let first: LuaValue = table.get(1)?;
-                    match first {
-                        LuaValue::Boolean(_) => ValueType::Bool,
-                        LuaValue::Integer(_) => ValueType::Integer,
-                        LuaValue::Number(_) => ValueType::Double,
-                        LuaValue::String(_) => ValueType::String,
-                        LuaNil => {
-                            return Err(LuaError::external(format!(
-                                "unable to guess element type of \
-                                 an empty array without `{TYPE_KEY}` key"
-                            )));
-                        }
-                        _ => {
-                            return Err(LuaError::external(format!(
-                                "array element with type {} is not supported",
-                                first.type_name()
-                            )));
-                        }
-                    }
-                };
-                let len = table.len()? as usize;
-
-                macro_rules! convert {
-                    ($variant:ident) => {{
-                        let array: Vec<_> = (1..=len)
-                            .map(|ix| {
-                                if !table.contains_key(ix)? {
-                                    return Err(LuaError::external(format!(
-                                        "the element at index {ix} is missing"
-                                    )));
-                                }
-                                let ValueFromLua(val) = table.get(ix)?;
-                                let Value::$variant(val) = val else {
-                                    return Err(LuaError::external(
-                                        "inconsistent array element type",
-                                    ));
-                                };
-                                Ok(val)
-                            })
-                            .try_collect()?;
-                        let array: Value = array.into();
-                        array
-                    }};
-                }
-
-                let array: Value = match ty {
-                    ValueType::Bool => convert!(Bool),
-                    ValueType::Integer => convert!(Integer),
-                    ValueType::Double => convert!(Double),
-                    ValueType::String => convert!(String),
-                    _ => return Err(LuaError::external(format!("unknown type `{ty}`"))),
-                };
-                array
-            }
-            _ => {
-                return Err(LuaError::external(format!(
-                    "evaluation to `{}` type is not supported",
-                    value.type_name()
-                )));
-            }
-        };
-        Ok(Self(param))
-    }
-}
-
-fn add_function<A, R, F>(lua: &Lua, fn_name: &str, f: F) -> LuaResult<()>
-where
-    A: FromLuaMulti,
-    R: IntoLuaMulti,
-    F: Fn(&Lua, A) -> LuaResult<R> + mlua::MaybeSend + 'static,
-{
-    let func = lua.create_function(f)?;
-    lua.globals().set(fn_name, func)?;
-    Ok(())
-}
-
-fn new_lua() -> Result<Lua, Error> {
-    // Create a Lua interpreter
-    let lua = Lua::new();
-    lua.sandbox(true)?;
-
-    // Add global functions
-    add_function(&lua, "pkg_dir", |_, pkg: String| {
-        find_pkg_dir(&pkg).map_err(|err| LuaError::external(format!("{err}")))
-    })?;
-
-    Ok(lua)
 }

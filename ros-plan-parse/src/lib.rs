@@ -1,17 +1,17 @@
 pub mod context;
 pub mod error;
-mod eval;
-mod link_resolver;
-mod plan_visitor;
+pub mod processor;
 pub mod resource;
-mod socket_resolver;
-mod tree;
-pub mod uri;
-mod utils;
+pub mod tree;
+pub mod utils;
 
 use crate::{
-    error::Error, eval::Evaluator, link_resolver::LinkResolver, plan_visitor::PlanVisitor,
-    resource::Resource, socket_resolver::SocketResolver,
+    error::Error,
+    processor::{
+        evaluator::Evaluator, link_resolver::LinkResolver, plan_visitor::PlanVisitor,
+        socket_resolver::SocketResolver,
+    },
+    resource::Resource,
 };
 use indexmap::IndexMap;
 use ros_plan_format::{expr::Value, parameter::ParamName};
@@ -25,19 +25,19 @@ where
 
     // Perform plan/hereplan expansion
     let mut resource = {
-        let mut visitor = PlanVisitor::new();
+        let mut visitor = PlanVisitor::default();
         visitor.traverse(path)?
     };
 
     // Perform plan socket resolution
     {
-        let mut resolver = SocketResolver::new();
+        let mut resolver = SocketResolver::default();
         resolver.traverse(&mut resource)?;
     }
 
     // Perform plan socket resolution
     {
-        let mut resolver = LinkResolver::new();
+        let mut resolver = LinkResolver::default();
         resolver.traverse(&mut resource)?;
     }
 
@@ -48,7 +48,7 @@ pub fn eval_resource(
     resource: &mut Resource,
     args: IndexMap<ParamName, Value>,
 ) -> Result<(), Error> {
-    let mut evaluator = Evaluator::new();
+    let mut evaluator = Evaluator::default();
     evaluator.eval_resource(resource, args)?;
     Ok(())
 }
