@@ -1,13 +1,8 @@
-use crate::utils::{ArcRwLock, WeakRwLock};
+use super::uri::NodeTopicUri;
 use ros_plan_format::link::{PubSubLinkCfg, ServiceLinkCfg};
 use serde::Serialize;
 
-use super::uri::NodeTopicUri;
-
-pub type LinkArc = ArcRwLock<LinkContext>;
-pub type LinkWeak = WeakRwLock<LinkContext>;
-
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Serialize)]
 pub enum LinkContext {
     Pubsub(PubSubLinkContext),
     Service(ServiceLinkContext),
@@ -25,14 +20,14 @@ impl From<PubSubLinkContext> for LinkContext {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct PubSubLinkContext {
     pub config: PubSubLinkCfg,
     pub src: Option<Vec<NodeTopicUri>>,
     pub dst: Option<Vec<NodeTopicUri>>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct ServiceLinkContext {
     pub config: ServiceLinkCfg,
     pub listen: Option<NodeTopicUri>,

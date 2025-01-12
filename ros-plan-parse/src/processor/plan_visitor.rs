@@ -2,16 +2,16 @@ use crate::{
     context::{
         arg::ArgContext,
         expr::ExprContext,
-        link::{LinkArc, LinkContext, PubSubLinkContext, ServiceLinkContext},
-        node::{NodeArc, NodeContext, ProcessContext, RosNodeContext},
+        link::{LinkContext, PubSubLinkContext, ServiceLinkContext},
+        node::{NodeContext, ProcessContext, RosNodeContext},
         socket::{
-            PubSocketContext, QuerySocketContext, ServerSocketContext, SocketArc, SocketContext,
+            PubSocketContext, QuerySocketContext, ServerSocketContext, SocketContext,
             SubSocketContext,
         },
     },
     error::Error,
-    resource::{GroupScope, PlanFileScope, Resource, Scope, ScopeTreeRef},
-    utils::{find_plan_file_from_pkg, read_toml_file},
+    resource::{GroupScope, PlanFileScope, Resource, Scope, ScopeTree, ScopeTreeRef},
+    utils::{find_plan_file_from_pkg, read_toml_file, SharedTable},
 };
 use indexmap::IndexMap;
 use ros_plan_format::{
@@ -39,8 +39,9 @@ impl PlanVisitor {
     pub fn traverse(&mut self, path: &Path) -> Result<Resource, Error> {
         let mut context = Resource {
             root: None,
-            node_map: IndexMap::new(),
-            link_map: IndexMap::new(),
+            node_tab: SharedTable::default(),
+            link_tab: SharedTable::default(),
+            socket_tab: SharedTable::default(),
         };
 
         self.insert_root_plan(&mut context, path, IndexMap::new())?;
@@ -73,28 +74,10 @@ impl PlanVisitor {
 
         // Create the context for the inserted plan
         let (plan_ctx, subplan_tab) =
-            to_plan_context(plan_path.to_path_buf(), plan, None, assign_args)?;
-
-        // Insert node entries to the global context
-        {
-            let node_entries = plan_ctx.node_map.iter().map(|(node_ident, node_arc)| {
-                let node_weak = node_arc.downgrade();
-                let node_key = Key::root() / node_ident;
-                (node_key, node_weak)
-            });
-            context.node_map.extend(node_entries);
-        }
+            to_plan_context(context, plan_path.to_path_buf(), plan, None, assign_args)?;
 
         // Insert the plan context to the root node.
-        let root = {
-            // let res: PlanResource = PlanFileResource {
-            //     context: plan_ctx,
-            //     args: assign_args,
-            //     when: None,
-            // }
-            // .into();
-            ScopeTreeRef::new(plan_ctx.into())
-        };
+        let root = ScopeTreeRef::new(ScopeTree::new(plan_ctx.into()));
         context.root = Some(root.clone());
 
         // Schedule subplan insertion jobs
@@ -134,17 +117,7 @@ impl PlanVisitor {
 
         // Create the context for the inserted plan
         let (plan_ctx, subplan_tab) =
-            to_plan_context(child_plan_path.clone(), plan, when, assign_args)?;
-
-        // Insert node entries to the global context
-        {
-            let node_entries = plan_ctx.node_map.iter().map(|(node_ident, node_arc)| {
-                let node_weak = node_arc.downgrade();
-                let node_key = &child_prefix / node_ident;
-                (node_key, node_weak)
-            });
-            context.node_map.extend(node_entries);
-        }
+            to_plan_context(context, child_plan_path.clone(), plan, when, assign_args)?;
 
         // Create the child node for the plan
         let plan_child = current.insert(child_suffix, plan_ctx.into())?;
@@ -183,17 +156,7 @@ impl PlanVisitor {
         };
 
         // Create the context
-        let (group_scope, subplan_tab) = to_group_scope(child_group);
-
-        // Insert node entries to the global context
-        {
-            let node_entries = group_scope.node_map.iter().map(|(node_ident, node_arc)| {
-                let node_weak = node_arc.downgrade();
-                let node_key = &child_prefix / node_ident;
-                (node_key, node_weak)
-            });
-            context.node_map.extend(node_entries);
-        }
+        let (group_scope, subplan_tab) = to_group_scope(context, child_group);
 
         // Schedule subplan insertion jobs
         {
@@ -327,6 +290,7 @@ struct InsertPlanFileJob {
 }
 
 fn to_plan_context(
+    resource: &mut Resource,
     path: PathBuf,
     plan_cfg: Plan,
     when: Option<ValueOrExpr>,
@@ -343,9 +307,10 @@ fn to_plan_context(
         .node
         .0
         .into_iter()
-        .map(|(node_ident, node_cfg)| {
-            let node_arc: NodeArc = to_node_context(node_cfg).into();
-            (node_ident, node_arc)
+        .map(|(ident, cfg)| {
+            let ctx = to_node_context(cfg);
+            let shared = resource.node_tab.insert(ctx);
+            (ident, shared)
         })
         .collect();
 
@@ -353,9 +318,10 @@ fn to_plan_context(
         .socket
         .0
         .into_iter()
-        .map(|(socket_ident, socket_cfg)| {
-            let socket_arc: SocketArc = to_socket_context(socket_cfg).into();
-            (socket_ident, socket_arc)
+        .map(|(ident, cfg)| {
+            let ctx = to_socket_context(cfg);
+            let shared = resource.socket_tab.insert(ctx);
+            (ident, shared)
         })
         .collect();
 
@@ -363,9 +329,10 @@ fn to_plan_context(
         .link
         .0
         .into_iter()
-        .map(|(link_ident, link_cfg)| {
-            let link_arc: LinkArc = to_link_context(link_cfg).into();
-            (link_ident, link_arc)
+        .map(|(ident, cfg)| {
+            let ctx = to_link_context(cfg);
+            let shared = resource.link_tab.insert(ctx);
+            (ident, shared)
         })
         .collect();
 
@@ -398,23 +365,25 @@ fn to_plan_context(
     Ok((plan_ctx, plan_cfg.subplan))
 }
 
-fn to_group_scope(group: GroupCfg) -> (GroupScope, SubplanTable) {
+fn to_group_scope(resource: &mut Resource, group: GroupCfg) -> (GroupScope, SubplanTable) {
     let local_node_map: IndexMap<_, _> = group
         .node
         .0
         .into_iter()
-        .map(|(node_ident, node_cfg)| {
-            let node_arc: NodeArc = to_node_context(node_cfg).into();
-            (node_ident, node_arc)
+        .map(|(ident, cfg)| {
+            let ctx = to_node_context(cfg).into();
+            let shared = resource.node_tab.insert(ctx);
+            (ident, shared)
         })
         .collect();
     let local_link_map: IndexMap<_, _> = group
         .link
         .0
         .into_iter()
-        .map(|(link_ident, link_cfg)| {
-            let link_arc: LinkArc = to_link_context(link_cfg).into();
-            (link_ident, link_arc)
+        .map(|(ident, cfg)| {
+            let ctx = to_link_context(cfg);
+            let shared = resource.link_tab.insert(ctx);
+            (ident, shared)
         })
         .collect();
 

@@ -11,5 +11,6 @@ mlua = { version = "0.10.2", features = ["luau"] }
 parking_lot = "0.12.3"
 ros-plan-format = { version = "0.1.0", path = "../ros-plan-format" }
 serde.workspace = true
+stable-vec = "0.4.1"
 thiserror.workspace = true
 toml = { version = "0.8.19", features = ["indexmap"] }

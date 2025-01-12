@@ -1,16 +1,10 @@
-use crate::{
-    context::expr::ExprContext,
-    utils::{ArcRwLock, WeakRwLock},
-};
+use crate::context::expr::ExprContext;
 use indexmap::IndexMap;
 use ros_plan_format::{
     node::{ProcessNodeCfg, RosNodeCfg},
     parameter::ParamName,
 };
 use serde::Serialize;
-
-pub type NodeArc = ArcRwLock<NodeContext>;
-pub type NodeWeak = WeakRwLock<NodeContext>;
 
 #[derive(Debug, Clone, Serialize)]
 pub enum NodeContext {

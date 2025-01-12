@@ -1,32 +1,37 @@
 use crate::{
     context::{
-        arg::ArgContext,
-        expr::ExprContext,
-        link::{LinkArc, LinkWeak},
-        node::{NodeArc, NodeWeak},
-        socket::SocketArc,
+        arg::ArgContext, expr::ExprContext, link::LinkContext, node::NodeContext,
+        socket::SocketContext,
     },
     tree::{Tree, TreeRef},
+    utils::{Owned, Shared, SharedTable},
 };
 use indexmap::IndexMap;
 use parking_lot::{
     MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLockReadGuard, RwLockWriteGuard,
 };
 use ros_plan_format::{
-    key::KeyOwned, link::LinkIdent, node::NodeIdent, parameter::ParamName, socket::SocketIdent,
+    link::LinkIdent, node::NodeIdent, parameter::ParamName, socket::SocketIdent,
 };
 use serde::Serialize;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Serialize)]
-pub struct Resource {
-    pub(crate) root: Option<ScopeTreeRef>,
-    pub(crate) node_map: IndexMap<KeyOwned, NodeWeak>,
-    pub(crate) link_map: IndexMap<KeyOwned, LinkWeak>,
-}
-
 pub type ScopeTree = Tree<Scope>;
 pub type ScopeTreeRef = TreeRef<Scope>;
+pub type NodeOwned = Owned<NodeContext>;
+pub type NodeShared = Shared<NodeContext>;
+pub type LinkOwned = Owned<LinkContext>;
+pub type LinkShared = Shared<LinkContext>;
+pub type SocketOwned = Owned<SocketContext>;
+pub type SocketShared = Shared<SocketContext>;
+
+#[derive(Debug, Serialize)]
+pub struct Resource {
+    pub(crate) root: Option<ScopeTreeRef>,
+    pub(crate) node_tab: SharedTable<NodeContext>,
+    pub(crate) link_tab: SharedTable<LinkContext>,
+    pub(crate) socket_tab: SharedTable<SocketContext>,
+}
 
 impl ScopeTreeRef {
     pub fn kind(&self) -> ScopeKind {
@@ -55,7 +60,7 @@ impl ScopeTreeRef {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Serialize)]
 pub enum Scope {
     PlanFile(Box<PlanFileScope>),
     Group(Box<GroupScope>),
@@ -120,20 +125,20 @@ pub enum ScopeKind {
     Group,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct PlanFileScope {
     pub path: PathBuf,
     pub when: Option<ExprContext>,
     pub arg_map: IndexMap<ParamName, ArgContext>,
     pub var_map: IndexMap<ParamName, ExprContext>,
-    pub socket_map: IndexMap<SocketIdent, SocketArc>,
-    pub node_map: IndexMap<NodeIdent, NodeArc>,
-    pub link_map: IndexMap<LinkIdent, LinkArc>,
+    pub socket_map: IndexMap<SocketIdent, SocketShared>,
+    pub node_map: IndexMap<NodeIdent, NodeShared>,
+    pub link_map: IndexMap<LinkIdent, LinkShared>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct GroupScope {
     pub when: Option<ExprContext>,
-    pub node_map: IndexMap<NodeIdent, NodeArc>,
-    pub link_map: IndexMap<LinkIdent, LinkArc>,
+    pub node_map: IndexMap<NodeIdent, NodeShared>,
+    pub link_map: IndexMap<LinkIdent, LinkShared>,
 }

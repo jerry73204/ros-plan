@@ -21,10 +21,6 @@ impl<T> Tree<T> {
 }
 
 impl<T> TreeRef<T> {
-    pub fn new(value: T) -> Self {
-        Tree::new(value).into()
-    }
-
     pub fn get_child(&self, key: &Key) -> Option<Self> {
         let guard = self.read();
         let child = guard.children.get(key)?;

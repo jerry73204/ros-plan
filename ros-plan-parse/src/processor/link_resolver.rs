@@ -2,12 +2,11 @@ use crate::{
     context::{
         expr::ExprContext,
         link::{LinkContext, PubSubLinkContext, ServiceLinkContext},
-        node::NodeArc,
-        socket::{SocketArc, SocketContext},
+        socket::SocketContext,
         uri::NodeTopicUri,
     },
     error::Error,
-    resource::{Resource, Scope, ScopeTreeRef},
+    resource::{NodeOwned, Resource, Scope, ScopeTreeRef, SocketOwned},
 };
 use itertools::Itertools;
 use ros_plan_format::{
@@ -108,7 +107,7 @@ impl LinkResolver {
     fn resolve_link(&mut self, context: &mut Resource, job: ResolveLinkJob) -> Result<(), Error> {
         let ResolveLinkJob {
             current,
-            current_prefix,
+            current_prefix: _,
         } = job;
 
         // Take the link_map out of the node context.
@@ -123,20 +122,11 @@ impl LinkResolver {
         // Resolve links
         link_map
             .values_mut()
-            .try_for_each(|link_ctx| -> Result<_, Error> {
-                let mut guard = link_ctx.write();
+            .try_for_each(|shared| -> Result<_, Error> {
+                let owned = shared.upgrade().unwrap();
+                let mut guard = owned.write();
                 resolve_link(context, current.clone(), &mut guard)
             })?;
-
-        // Insert links to the global table
-        {
-            let link_entries = link_map.iter().map(|(link_ident, link_arc)| {
-                let link_key = &current_prefix / link_ident;
-                let link_weak = link_arc.downgrade();
-                (link_key, link_weak)
-            });
-            context.link_map.extend(link_entries);
-        }
 
         // Push the resolved links back to the node context
         {
@@ -313,11 +303,12 @@ fn resolve_service_link(
     Ok(())
 }
 
-fn resolve_node_key(context: &Resource, current: ScopeTreeRef, key: &Key) -> Option<ResolveNode> {
+fn resolve_node_key(_context: &Resource, current: ScopeTreeRef, key: &Key) -> Option<ResolveNode> {
     if key.is_absolute() {
-        let node_weak = context.node_map.get(key)?;
-        let node_arc = node_weak.upgrade().unwrap();
-        Some(node_arc.into())
+        // let node_weak = context.node_key_map.get(key)?;
+        // let node_arc = node_weak.upgrade().unwrap();
+        // Some(node_arc.into())
+        todo!()
     } else {
         let (prefix, node_name) = key.split_parent();
         let node_name = node_name.expect("the key should not be empty");
@@ -328,12 +319,12 @@ fn resolve_node_key(context: &Resource, current: ScopeTreeRef, key: &Key) -> Opt
                 let guard = child.read();
                 match &guard.value {
                     Scope::PlanFile(ctx) => {
-                        let socket_arc = ctx.socket_map.get(node_name)?;
-                        socket_arc.clone().into()
+                        let shared = ctx.socket_map.get(node_name)?;
+                        shared.upgrade().unwrap().into()
                     }
                     Scope::Group(ctx) => {
                         let node_arc = ctx.node_map.get(node_name)?;
-                        node_arc.clone().into()
+                        node_arc.upgrade().unwrap().into()
                     }
                 }
             }
@@ -345,7 +336,7 @@ fn resolve_node_key(context: &Resource, current: ScopeTreeRef, key: &Key) -> Opt
                     Scope::Group(ctx) => &ctx.node_map,
                 };
                 let node_arc = node_map.get(node_name)?;
-                node_arc.clone().into()
+                node_arc.upgrade().unwrap().into()
             }
         };
 
@@ -385,18 +376,18 @@ struct ResolveLinkJob {
 
 #[derive(Debug)]
 enum ResolveNode {
-    Node(NodeArc),
-    Socket(SocketArc),
+    Node(NodeOwned),
+    Socket(SocketOwned),
 }
 
-impl From<SocketArc> for ResolveNode {
-    fn from(v: SocketArc) -> Self {
+impl From<SocketOwned> for ResolveNode {
+    fn from(v: SocketOwned) -> Self {
         Self::Socket(v)
     }
 }
 
-impl From<NodeArc> for ResolveNode {
-    fn from(v: NodeArc) -> Self {
+impl From<NodeOwned> for ResolveNode {
+    fn from(v: NodeOwned) -> Self {
         Self::Node(v)
     }
 }

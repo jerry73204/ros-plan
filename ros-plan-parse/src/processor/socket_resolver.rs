@@ -1,15 +1,14 @@
 use crate::{
     context::{
         expr::ExprContext,
-        node::NodeArc,
         socket::{
-            PubSocketContext, QuerySocketContext, ServerSocketContext, SocketArc, SocketContext,
+            PubSocketContext, QuerySocketContext, ServerSocketContext, SocketContext,
             SubSocketContext,
         },
         uri::NodeTopicUri,
     },
     error::Error,
-    resource::{Resource, Scope, ScopeTreeRef},
+    resource::{NodeOwned, Resource, Scope, ScopeTreeRef, SocketOwned},
 };
 use itertools::Itertools;
 use ros_plan_format::{
@@ -111,8 +110,9 @@ impl SocketResolver {
         // Resolve URIs in the socket_map
         socket_map
             .values_mut()
-            .try_for_each(|socket_ctx| -> Result<_, Error> {
-                let mut guard = socket_ctx.write();
+            .try_for_each(|shared| -> Result<_, Error> {
+                let owned = shared.upgrade().unwrap();
+                let mut guard = owned.write();
                 resolve_socket_topics(current.clone(), &mut guard)
             })?;
 
@@ -326,12 +326,12 @@ fn resolve_node_key(root: ScopeTreeRef, key: &Key) -> Option<ResolveNode> {
             let guard = child.read();
             match &guard.value {
                 Scope::PlanFile(ctx) => {
-                    let socket_arc = ctx.socket_map.get(node_name)?;
-                    socket_arc.clone().into()
+                    let shared = ctx.socket_map.get(node_name)?;
+                    shared.upgrade().unwrap().into()
                 }
                 Scope::Group(ctx) => {
-                    let node_arc = ctx.node_map.get(node_name)?;
-                    node_arc.clone().into()
+                    let shared = ctx.node_map.get(node_name)?;
+                    shared.upgrade().unwrap().into()
                 }
             }
         }
@@ -340,8 +340,8 @@ fn resolve_node_key(root: ScopeTreeRef, key: &Key) -> Option<ResolveNode> {
             let Scope::PlanFile(ctx) = &guard.value else {
                 unreachable!();
             };
-            let node_arc = ctx.node_map.get(node_name)?;
-            node_arc.clone().into()
+            let shared = ctx.node_map.get(node_name)?;
+            shared.upgrade().unwrap().into()
         }
     };
 
@@ -380,18 +380,18 @@ pub struct ResolveSocketJob {
 
 #[derive(Debug)]
 enum ResolveNode {
-    Node(NodeArc),
-    Socket(SocketArc),
+    Node(NodeOwned),
+    Socket(SocketOwned),
 }
 
-impl From<SocketArc> for ResolveNode {
-    fn from(v: SocketArc) -> Self {
+impl From<SocketOwned> for ResolveNode {
+    fn from(v: SocketOwned) -> Self {
         Self::Socket(v)
     }
 }
 
-impl From<NodeArc> for ResolveNode {
-    fn from(v: NodeArc) -> Self {
+impl From<NodeOwned> for ResolveNode {
+    fn from(v: NodeOwned) -> Self {
         Self::Node(v)
     }
 }

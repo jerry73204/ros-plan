@@ -1,10 +1,6 @@
 use super::uri::NodeTopicUri;
-use crate::utils::{ArcRwLock, WeakRwLock};
 use ros_plan_format::socket::{PubSocketCfg, QuerySocketCfg, ServerSocketCfg, SubSocketCfg};
 use serde::Serialize;
-
-pub type SocketArc = ArcRwLock<SocketContext>;
-pub type SocketWeak = WeakRwLock<SocketContext>;
 
 #[derive(Debug, Clone, Serialize)]
 pub enum SocketContext {

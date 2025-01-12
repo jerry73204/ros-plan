@@ -1,14 +1,11 @@
 use super::eval::Eval;
 use crate::{
     context::{
-        arg::ArgContext,
-        expr::ExprContext,
-        link::{LinkArc, LinkContext},
-        node::{NodeArc, NodeContext},
-        socket::{SocketArc, SocketContext},
+        arg::ArgContext, expr::ExprContext, link::LinkContext, node::NodeContext,
+        socket::SocketContext,
     },
     error::Error,
-    resource::{Scope, ScopeTreeRef},
+    resource::{LinkShared, NodeShared, Scope, ScopeTreeRef, SocketShared},
 };
 use indexmap::IndexMap;
 use mlua::prelude::*;
@@ -106,10 +103,11 @@ impl StoreEval for NodeContext {
 
 pub fn store_eval_node_map(
     lua: &Lua,
-    node_map: &mut IndexMap<NodeIdent, NodeArc>,
+    node_map: &mut IndexMap<NodeIdent, NodeShared>,
 ) -> Result<(), Error> {
-    for (_key, node_arc) in node_map {
-        let mut guard = node_arc.write();
+    for (_key, shared) in node_map {
+        let owned = shared.upgrade().unwrap();
+        let mut guard = owned.write();
         guard.store_eval(lua)?;
     }
 
@@ -118,10 +116,11 @@ pub fn store_eval_node_map(
 
 pub fn store_eval_link_map(
     lua: &Lua,
-    link_map: &mut IndexMap<LinkIdent, LinkArc>,
+    link_map: &mut IndexMap<LinkIdent, LinkShared>,
 ) -> Result<(), Error> {
-    for (_key, link) in link_map {
-        let mut guard = link.write();
+    for (_key, shared) in link_map {
+        let owned = shared.upgrade().unwrap();
+        let mut guard = owned.write();
         guard.store_eval(lua)?;
     }
 
@@ -130,10 +129,11 @@ pub fn store_eval_link_map(
 
 pub fn store_eval_socket_map(
     lua: &Lua,
-    socket_map: &mut IndexMap<SocketIdent, SocketArc>,
+    socket_map: &mut IndexMap<SocketIdent, SocketShared>,
 ) -> Result<(), Error> {
-    for (_key, socket) in socket_map {
-        let mut guard = socket.write();
+    for (_key, shared) in socket_map {
+        let owned = shared.upgrade().unwrap();
+        let mut guard = owned.write();
         guard.store_eval(lua)?;
     }
 
