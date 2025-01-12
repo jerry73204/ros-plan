@@ -14,6 +14,12 @@ pub static RE_PARAM_NAME: LazyLock<Regex> = LazyLock::new(|| {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ParamName(String);
 
+impl ParamName {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 impl FromStr for ParamName {
     type Err = ParseParamDefError;
 

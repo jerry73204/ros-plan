@@ -393,6 +393,78 @@ impl Value {
             None
         }
     }
+
+    /// Returns `true` if the value is [`Bool`].
+    ///
+    /// [`Bool`]: Value::Bool
+    #[must_use]
+    pub fn is_bool(&self) -> bool {
+        matches!(self, Self::Bool(..))
+    }
+
+    /// Returns `true` if the value is [`Integer`].
+    ///
+    /// [`Integer`]: Value::Integer
+    #[must_use]
+    pub fn is_integer(&self) -> bool {
+        matches!(self, Self::Integer(..))
+    }
+
+    /// Returns `true` if the value is [`Double`].
+    ///
+    /// [`Double`]: Value::Double
+    #[must_use]
+    pub fn is_double(&self) -> bool {
+        matches!(self, Self::Double(..))
+    }
+
+    /// Returns `true` if the value is [`String`].
+    ///
+    /// [`String`]: Value::String
+    #[must_use]
+    pub fn is_string(&self) -> bool {
+        matches!(self, Self::String(..))
+    }
+
+    /// Returns `true` if the value is [`BoolArray`].
+    ///
+    /// [`BoolArray`]: Value::BoolArray
+    #[must_use]
+    pub fn is_bool_array(&self) -> bool {
+        matches!(self, Self::BoolArray(..))
+    }
+
+    /// Returns `true` if the value is [`IntegerArray`].
+    ///
+    /// [`IntegerArray`]: Value::IntegerArray
+    #[must_use]
+    pub fn is_integer_array(&self) -> bool {
+        matches!(self, Self::IntegerArray(..))
+    }
+
+    /// Returns `true` if the value is [`DoubleArray`].
+    ///
+    /// [`DoubleArray`]: Value::DoubleArray
+    #[must_use]
+    pub fn is_double_array(&self) -> bool {
+        matches!(self, Self::DoubleArray(..))
+    }
+
+    /// Returns `true` if the value is [`StringArray`].
+    ///
+    /// [`StringArray`]: Value::StringArray
+    #[must_use]
+    pub fn is_string_array(&self) -> bool {
+        matches!(self, Self::StringArray(..))
+    }
+
+    /// Returns `true` if the value is [`ByteArray`].
+    ///
+    /// [`ByteArray`]: Value::ByteArray
+    #[must_use]
+    pub fn is_byte_array(&self) -> bool {
+        matches!(self, Self::ByteArray { .. })
+    }
 }
 
 #[derive(
