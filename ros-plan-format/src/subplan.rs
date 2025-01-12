@@ -24,7 +24,7 @@ pub struct SerializedSubplanTable {
     pub include: IndexMap<NonEmptyRelativeKeyOwned, SerializedIncludeEntry>,
 
     #[serde(default)]
-    pub group: IndexMap<NonEmptyRelativeKeyOwned, HerePlan>,
+    pub group: IndexMap<NonEmptyRelativeKeyOwned, Group>,
 }
 
 impl TryFrom<SerializedSubplanTable> for SubplanTable {
@@ -37,15 +37,12 @@ impl TryFrom<SerializedSubplanTable> for SubplanTable {
             };
         }
 
-        let SerializedSubplanTable {
-            include,
-            group: here,
-        } = table;
+        let SerializedSubplanTable { include, group } = table;
         let mut map: IndexMap<_, Subplan> = IndexMap::new();
 
         // Check if one key is a prefix of another key.
         {
-            let mut subplan_keys: Vec<_> = chain!(include.keys(), here.keys()).collect();
+            let mut subplan_keys: Vec<_> = chain!(include.keys(), group.keys()).collect();
             subplan_keys.sort_unstable();
 
             for (prev, next) in subplan_keys.iter().tuple_windows() {
@@ -66,7 +63,7 @@ impl TryFrom<SerializedSubplanTable> for SubplanTable {
                 bail!(key.0);
             }
         }
-        for (key, subplan) in here {
+        for (key, subplan) in group {
             let prev = map.insert(key.clone(), subplan.into());
             if prev.is_some() {
                 bail!(key.0);
@@ -80,7 +77,7 @@ impl TryFrom<SerializedSubplanTable> for SubplanTable {
 impl From<SubplanTable> for SerializedSubplanTable {
     fn from(table: SubplanTable) -> Self {
         let mut include = IndexMap::new();
-        let mut here = IndexMap::new();
+        let mut group = IndexMap::new();
 
         for (ident, subplan) in table.0 {
             match subplan {
@@ -90,16 +87,13 @@ impl From<SubplanTable> for SerializedSubplanTable {
                 Subplan::Pkg(subplan) => {
                     include.insert(ident, subplan.into());
                 }
-                Subplan::Here(subplan) => {
-                    here.insert(ident, subplan);
+                Subplan::Group(subplan) => {
+                    group.insert(ident, subplan);
                 }
             }
         }
 
-        Self {
-            include,
-            group: here,
-        }
+        Self { include, group }
     }
 }
 
@@ -136,7 +130,7 @@ impl From<IncludeFromFile> for SerializedIncludeEntry {
 pub enum Subplan {
     File(IncludeFromFile),
     Pkg(IncludeFromPkg),
-    Here(HerePlan),
+    Group(Group),
 }
 
 impl From<IncludeFromFile> for Subplan {
@@ -151,9 +145,9 @@ impl From<IncludeFromPkg> for Subplan {
     }
 }
 
-impl From<HerePlan> for Subplan {
-    fn from(v: HerePlan) -> Self {
-        Self::Here(v)
+impl From<Group> for Subplan {
+    fn from(v: Group) -> Self {
+        Self::Group(v)
     }
 }
 
@@ -178,7 +172,7 @@ pub struct IncludeFromPkg {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct HerePlan {
+pub struct Group {
     #[serde(default)]
     pub node: NodeTable,
     #[serde(default)]

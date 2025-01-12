@@ -1,7 +1,9 @@
-use crate::utils::{ArcRwLock, WeakRwLock};
+use crate::{
+    eval::EvalSlot,
+    utils::{ArcRwLock, WeakRwLock},
+};
 use indexmap::IndexMap;
 use ros_plan_format::{
-    eval::ValueOrEval,
     node::{ProcessNode, RosNode},
     parameter::ParamName,
 };
@@ -31,7 +33,7 @@ impl From<RosNodeContext> for NodeContext {
 #[derive(Debug, Clone, Serialize)]
 pub struct RosNodeContext {
     pub config: RosNode,
-    pub param: IndexMap<ParamName, ValueOrEval>,
+    pub param: IndexMap<ParamName, EvalSlot>,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -81,6 +81,15 @@ impl From<Value> for ValueOrEval {
     }
 }
 
+impl Display for ValueOrEval {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ValueOrEval::Value(value) => Display::fmt(value, f),
+            ValueOrEval::Eval { eval } => Display::fmt(eval, f),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Eval(String);
 
@@ -155,6 +164,22 @@ pub enum Value {
     DoubleArray(Vec<f64>),
     StringArray(Vec<String>),
     ByteArray { bytes: ByteArrayData },
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Bool(val) => Debug::fmt(val, f),
+            Value::Integer(val) => Debug::fmt(val, f),
+            Value::Double(val) => Debug::fmt(val, f),
+            Value::String(val) => Debug::fmt(val, f),
+            Value::BoolArray(vec) => Debug::fmt(vec, f),
+            Value::IntegerArray(vec) => Debug::fmt(vec, f),
+            Value::DoubleArray(vec) => Debug::fmt(vec, f),
+            Value::StringArray(vec) => Debug::fmt(vec, f),
+            Value::ByteArray { bytes } => Debug::fmt(bytes, f),
+        }
+    }
 }
 
 impl From<Vec<String>> for Value {

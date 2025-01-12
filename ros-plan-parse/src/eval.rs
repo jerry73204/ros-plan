@@ -1,128 +1,280 @@
-use crate::{error::Error, utils::find_pkg_dir};
+use crate::{
+    context::{
+        arg::ArgContext,
+        link::{LinkArc, LinkContext},
+        node::{NodeArc, NodeContext},
+        socket::{SocketArc, SocketContext},
+    },
+    error::Error,
+    resource::{Resource, ResourceTreeRef, Scope, ScopeKind},
+    utils::find_pkg_dir,
+};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use mlua::prelude::*;
 use ros_plan_format::{
     eval::{Eval, Value, ValueOrEval, ValueType},
-    link::Link,
-    node::Node,
-    parameter::{ArgEntry, ArgSlot, ParamName},
-    socket::Socket,
-    subplan::Subplan,
-    Plan,
+    link::LinkIdent,
+    node::NodeIdent,
+    parameter::ParamName,
+    socket::SocketIdent,
 };
+use serde::Serialize;
+use std::{collections::VecDeque, sync::Arc};
 
-pub fn eval_plan(plan: &mut Plan, args: IndexMap<ParamName, Value>) -> Result<(), Error> {
-    // Create a Lua interpreter
-    let lua = Lua::new();
-    lua.sandbox(true)?;
+#[derive(Debug, Clone, Serialize)]
+pub struct EvalSlot {
+    pub default: ValueOrEval,
+    pub override_: Option<Value>,
+    pub result: Option<Value>,
+}
 
-    // Add global functions
-    add_function(&lua, "pkg_dir", |_, pkg: String| {
-        find_pkg_dir(&pkg).map_err(|err| LuaError::external(format!("{err}")))
-    })?;
-
-    // Check multiple definition of arguments and variables.
-    for name in plan.var.keys() {
-        if plan.arg.contains_key(name) {
-            return Err(Error::MultipleDefinitionOfVariable(name.clone()));
+impl EvalSlot {
+    pub fn new(default: ValueOrEval) -> Self {
+        Self {
+            default,
+            override_: None,
+            result: None,
         }
     }
 
-    // Populate argument into global scope
-    load_arg_table(&lua, &plan.arg, &args)?;
+    pub fn eval(&mut self, lua: &Lua) -> Result<(), Error> {
+        let Self {
+            ref default,
+            ref override_,
+            result,
+        } = self;
 
-    // Evaluate local variables and populate them to the global scope
-    for (name, entry) in &mut plan.var {
-        // Lock the global variables during evaluation
-        lua.globals().set_readonly(true);
-        may_eval_value(&lua, entry)?;
-        lua.globals().set_readonly(false);
-        lua.globals()
-            .set(name.as_ref(), ValueToLua(entry.as_value().unwrap()))?;
+        let value = if let Some(override_) = override_ {
+            override_.clone()
+        } else {
+            may_eval_value(lua, default)?
+        };
+        *result = Some(value);
+        Ok(())
     }
 
-    // Lock the global variables.
-    lua.globals().set_readonly(true);
+    pub fn eval_bool(&mut self, lua: &Lua) -> Result<(), Error> {
+        self.eval(lua)?;
 
-    // Evaluate the node table
-    for (_key, node) in &mut plan.node.0 {
-        match node {
-            Node::Ros(node) => {
+        let ty = self.result.as_ref().unwrap().ty();
+        if ty != ValueType::Bool {
+            return Err(Error::EvaluationError {
+                error: format!("`{}` does not evaluate to a boolean value", self.default),
+            });
+        }
+
+        Ok(())
+    }
+
+    pub fn ty(&self) -> Option<ValueType> {
+        Some(self.result.as_ref()?.ty())
+    }
+}
+
+pub struct Evaluator {
+    queue: VecDeque<Job>,
+}
+
+impl Evaluator {
+    pub fn new() -> Self {
+        Self {
+            queue: VecDeque::new(),
+        }
+    }
+
+    pub fn eval_resource(
+        &mut self,
+        resource: &mut Resource,
+        args: IndexMap<ParamName, Value>,
+    ) -> Result<(), Error> {
+        let root = resource
+            .root
+            .as_ref()
+            .expect("the resource tree must be constructed before evaluation");
+
+        // Assign arguments provided from caller
+        {
+            let mut root_scope = root
+                .as_plan_file_mut()
+                .expect("the root scope must be a plan file variant");
+            let arg_map = &mut root_scope.arg_map;
+            override_arg_table(arg_map, args)?;
+            eval_root_arg_table(arg_map)?;
+        }
+
+        // Traverse all nodes in the tree
+        self.queue.push_back(Job::PlanFile {
+            current: root.clone(),
+        });
+
+        while let Some(job) = self.queue.pop_front() {
+            match job {
+                Job::PlanFile { current } => self.eval_plan_file(&current)?,
+                Job::Group { current, lua } => self.eval_group(lua, current)?,
+            }
+        }
+
+        Ok(())
+    }
+
+    fn eval_plan_file(&mut self, current: &ResourceTreeRef) -> Result<(), Error> {
+        let lua = Arc::new(new_lua()?);
+
+        {
+            let Some(mut plan_res) = current.as_plan_file_mut() else {
+                unreachable!()
+            };
+
+            // Check multiple definition of arguments and variables.
+            for name in plan_res.var_map.keys() {
+                if plan_res.arg_map.contains_key(name) {
+                    return Err(Error::MultipleDefinitionOfVariable(name.clone()));
+                }
+            }
+
+            // Populate argument into global scope
+            load_arg_table(&lua, &plan_res.arg_map)?;
+
+            // Evaluate local variables and populate them to the global scope
+            for (name, entry) in &mut plan_res.var_map {
+                // Lock the global variables during evaluation
+                lua.globals().set_readonly(true);
+                // may_eval_value(&lua, entry)?;
+                entry.eval(&lua)?;
+                lua.globals().set_readonly(false);
+                lua.globals()
+                    .set(name.as_ref(), ValueToLua(entry.result.as_ref().unwrap()))?;
+            }
+
+            // Lock global variables.
+            lua.globals().set_readonly(true);
+
+            // Evaluate the node table
+            eval_node_map(&lua, &mut plan_res.node_map)?;
+
+            // Evaluate the link table
+            eval_link_map(&lua, &mut plan_res.link_map)?;
+
+            // Evaluate the socket table
+            eval_socket_map(&lua, &mut plan_res.socket_map)?;
+        }
+
+        // Evaluate assigned arguments and `when` condition on
+        // subscopes
+        {
+            let current = current.read();
+
+            for (_name, child) in &current.children {
+                let mut child = child.write();
+                match &mut child.value {
+                    Scope::PlanFile(scope) => {
+                        if let Some(when) = &mut scope.when {
+                            when.eval_bool(&lua)?;
+                        };
+                        eval_arg_table(&lua, &mut scope.arg_map)?;
+                    }
+                    Scope::Group(scope) => {
+                        if let Some(when) = &mut scope.when {
+                            when.eval_bool(&lua)?;
+                        };
+                    }
+                }
+            }
+        }
+
+        // Schedule jobs to visit child scopes
+        {
+            let guard = current.read();
+
+            for (_name, child) in &guard.children {
+                let job = match child.kind() {
+                    ScopeKind::PlanFile => Job::PlanFile {
+                        current: child.clone(),
+                    },
+                    ScopeKind::Group => Job::Group {
+                        current: child.clone(),
+                        lua: lua.clone(),
+                    },
+                };
+                self.queue.push_back(job);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn eval_group(&mut self, lua: Arc<Lua>, current: ResourceTreeRef) -> Result<(), Error> {
+        {
+            let mut group = current.as_group_mut().unwrap();
+            eval_node_map(&lua, &mut group.node_map)?;
+            eval_link_map(&lua, &mut group.link_map)?;
+        }
+
+        {
+            let guard = current.read();
+            for (_key, child) in &guard.children {
+                let job = match child.kind() {
+                    ScopeKind::PlanFile => Job::PlanFile {
+                        current: child.clone(),
+                    },
+                    ScopeKind::Group => Job::Group {
+                        current: child.clone(),
+                        lua: lua.clone(),
+                    },
+                };
+                self.queue.push_back(job);
+            }
+        }
+
+        Ok(())
+    }
+}
+
+enum Job {
+    PlanFile {
+        current: ResourceTreeRef,
+    },
+    Group {
+        current: ResourceTreeRef,
+        lua: Arc<Lua>,
+    },
+}
+
+fn eval_node_map(lua: &Lua, node_map: &mut IndexMap<NodeIdent, NodeArc>) -> Result<(), Error> {
+    for (_key, node_arc) in node_map {
+        let mut node = node_arc.write();
+
+        match &mut *node {
+            NodeContext::Ros(node) => {
                 for param in node.param.values_mut() {
-                    may_eval_value(&lua, param)?;
+                    param.eval(lua)?;
                 }
             }
-            Node::Proc(_node) => {}
+            NodeContext::Proc(_node) => {}
         }
     }
 
-    // Evaluate the link table
-    for (_key, link) in &mut plan.link.0 {
-        match link {
-            Link::Pubsub(link) => {
-                for uri in &mut link.src {
-                    may_eval_value(&lua, &mut uri.topic)?;
-                }
-                for uri in &mut link.dst {
-                    may_eval_value(&lua, &mut uri.topic)?;
-                }
-            }
-            Link::Service(link) => {
-                may_eval_value(&lua, &mut link.listen.topic)?;
-                for uri in &mut link.connect {
-                    may_eval_value(&lua, &mut uri.topic)?;
-                }
-            }
-        }
-    }
+    Ok(())
+}
 
-    // Evaluate the socket table
-    for (_key, socket) in &mut plan.socket.0 {
-        match socket {
-            Socket::Pub(socket) => {
-                for uri in &mut socket.src {
-                    may_eval_value(&lua, &mut uri.topic)?;
-                }
-            }
-            Socket::Sub(socket) => {
-                for uri in &mut socket.dst {
-                    may_eval_value(&lua, &mut uri.topic)?;
-                }
-            }
-            Socket::Srv(socket) => {
-                may_eval_value(&lua, &mut socket.listen.topic)?;
-            }
-            Socket::Qry(socket) => {
-                for uri in &mut socket.connect {
-                    may_eval_value(&lua, &mut uri.topic)?;
-                }
-            }
-        }
-    }
+fn eval_link_map(lua: &Lua, link_map: &mut IndexMap<LinkIdent, LinkArc>) -> Result<(), Error> {
+    for (_key, link) in link_map {
+        let mut link = link.write();
 
-    // Evaluate the subplan table
-    for (_key, subplan) in &mut plan.subplan.0 {
-        match subplan {
-            Subplan::File(subplan) => {
-                if let Some(when) = &mut subplan.when {
-                    may_eval_bool(&lua, when)?;
+        match &mut *link {
+            LinkContext::Pubsub(link) => {
+                for uri in link.src.as_mut().unwrap() {
+                    uri.topic.eval(lua)?;
                 }
-                for entry in subplan.arg.values_mut() {
-                    may_eval_value(&lua, entry)?;
+                for uri in link.dst.as_mut().unwrap() {
+                    uri.topic.eval(lua)?;
                 }
             }
-            Subplan::Pkg(subplan) => {
-                if let Some(when) = &mut subplan.when {
-                    may_eval_bool(&lua, when)?;
-                }
-                for entry in subplan.arg.values_mut() {
-                    may_eval_value(&lua, entry)?;
-                }
-            }
-            Subplan::Here(subplan) => {
-                if let Some(when) = &mut subplan.when {
-                    may_eval_bool(&lua, when)?;
+            LinkContext::Service(link) => {
+                link.listen.as_mut().unwrap().topic.eval(lua)?;
+                for uri in link.connect.as_mut().unwrap() {
+                    uri.topic.eval(lua)?;
                 }
             }
         }
@@ -131,55 +283,80 @@ pub fn eval_plan(plan: &mut Plan, args: IndexMap<ParamName, Value>) -> Result<()
     Ok(())
 }
 
-fn load_arg_table(
+fn eval_socket_map(
     lua: &Lua,
-    arg_table: &IndexMap<ParamName, ArgEntry>,
-    assigned: &IndexMap<ParamName, Value>,
+    socket_map: &mut IndexMap<SocketIdent, SocketArc>,
 ) -> Result<(), Error> {
-    for (name, entry) in arg_table {
-        // Get the assigned value if any
-        let asigned_value = assigned.get(name);
-
-        // Use the assigned or default value if provided
-        let value = match entry.slot {
-            ArgSlot::Required { ty } => {
-                // Check if the value is assigned for the required
-                // argument.
-                let Some(assigned_value) = asigned_value else {
-                    return Err(Error::RequiredArgumentNotAssigned { name: name.clone() });
-                };
-
-                // Check if the type is consistent.
-                if assigned_value.ty() != ty {
-                    return Err(Error::ArgumentTypeMismatch {
-                        name: name.clone(),
-                        expect: ty,
-                        found: assigned_value.ty(),
-                    });
+    for (_key, socket) in socket_map {
+        let mut socket = socket.write();
+        match &mut *socket {
+            SocketContext::Pub(socket) => {
+                for uri in socket.src.as_mut().unwrap() {
+                    uri.topic.eval(lua)?;
                 }
-
-                assigned_value
             }
-            ArgSlot::Optional { ref default } => match asigned_value {
-                Some(assigned_value) => {
-                    // If the value is assigned, check whether the
-                    // type is consistent with the default value.
-                    if assigned_value.ty() != default.ty() {
-                        return Err(Error::ArgumentTypeMismatch {
-                            name: name.clone(),
-                            expect: default.ty(),
-                            found: assigned_value.ty(),
-                        });
-                    }
-
-                    assigned_value
+            SocketContext::Sub(socket) => {
+                for uri in socket.dst.as_mut().unwrap() {
+                    uri.topic.eval(lua)?;
                 }
-                None => default,
-            },
-        };
+            }
+            SocketContext::Srv(socket) => {
+                socket.listen.as_mut().unwrap().topic.eval(lua)?;
+            }
+            SocketContext::Qry(socket) => {
+                for uri in socket.connect.as_mut().unwrap() {
+                    uri.topic.eval(lua)?;
+                }
+            }
+        }
+    }
 
-        // Insert to the global variable table.
-        lua.globals().set(name.as_ref(), ValueToLua(&value))?;
+    Ok(())
+}
+
+fn eval_root_arg_table(arg_table: &mut IndexMap<ParamName, ArgContext>) -> Result<(), Error> {
+    for (name, arg) in arg_table {
+        assert!(
+            arg.assign.is_none(),
+            "arguments in the root scope must not be assigned"
+        );
+        let value = match (&arg.override_, &arg.default) {
+            (Some(override_), _) => override_
+                .as_value()
+                .expect("the argument in the root scope must be assigned with constant values"),
+            (None, Some(default)) => default,
+            (None, None) => return Err(Error::RequiredArgumentNotAssigned { name: name.clone() }),
+        };
+        arg.result = Some(value.clone());
+    }
+    Ok(())
+}
+
+fn eval_arg_table(lua: &Lua, arg_table: &mut IndexMap<ParamName, ArgContext>) -> Result<(), Error> {
+    for (name, arg) in arg_table {
+        eval_arg(lua, name, arg)?;
+    }
+    Ok(())
+}
+
+fn load_arg_table(lua: &Lua, arg_table: &IndexMap<ParamName, ArgContext>) -> Result<(), Error> {
+    for (name, arg) in arg_table {
+        lua.globals()
+            .set(name.as_ref(), ValueToLua(arg.result.as_ref().unwrap()))?;
+    }
+
+    Ok(())
+}
+
+fn override_arg_table(
+    arg_table: &mut IndexMap<ParamName, ArgContext>,
+    override_arg: IndexMap<ParamName, Value>,
+) -> Result<(), Error> {
+    for (name, override_) in override_arg {
+        let Some(arg_ctx) = arg_table.get_mut(&name) else {
+            return Err(Error::ArgumentNotFound { name });
+        };
+        arg_ctx.override_ = Some(override_.into());
     }
 
     Ok(())
@@ -190,39 +367,12 @@ fn eval_value(lua: &Lua, code: &Eval) -> Result<Value, Error> {
     Ok(value)
 }
 
-fn may_eval_value(lua: &Lua, field: &mut ValueOrEval) -> Result<(), Error> {
-    if let ValueOrEval::Eval { eval } = field {
-        *field = eval_value(lua, eval)?.into();
-    }
-    Ok(())
-}
-
-fn may_eval_bool(lua: &Lua, field: &mut ValueOrEval) -> Result<bool, Error> {
-    let yes = match field {
-        ValueOrEval::Eval { eval } => {
-            let value = eval_value(lua, eval)?;
-            let Some(yes) = value.to_bool() else {
-                return Err(Error::EvaluationError {
-                    error: format!("`{eval}` field does not evaluate to a boolean value"),
-                });
-            };
-            *field = value.into();
-            yes
-        }
-        ValueOrEval::Value(value) => {
-            let Some(yes) = value.to_bool() else {
-                return Err(Error::EvaluationError {
-                    error: format!(
-                        "expect a boolean value, but a {} value is provided",
-                        value.ty()
-                    ),
-                });
-            };
-            yes
-        }
+fn may_eval_value(lua: &Lua, field: &ValueOrEval) -> Result<Value, Error> {
+    let value = match field {
+        ValueOrEval::Value(value) => value.clone(),
+        ValueOrEval::Eval { eval } => eval_value(lua, eval)?,
     };
-
-    Ok(yes)
+    Ok(value)
 }
 
 const TYPE_KEY: &str = "type";
@@ -259,6 +409,37 @@ impl IntoLua for ValueToLua<'_> {
             Value::StringArray(vec) => convert_array(lua, vec, ValueType::String),
         }
     }
+}
+
+pub fn eval_arg(lua: &Lua, name: &ParamName, arg: &mut ArgContext) -> Result<(), Error> {
+    let ArgContext {
+        ty,
+        default,
+        assign,
+        override_,
+        result,
+        ..
+    } = arg;
+
+    let value = if let Some(override_) = override_ {
+        may_eval_value(lua, override_)?
+    } else if let Some(assign) = assign {
+        may_eval_value(lua, assign)?
+    } else if let Some(default) = default {
+        default.clone()
+    } else {
+        return Err(Error::RequiredArgumentNotAssigned { name: name.clone() });
+    };
+
+    if value.ty() != *ty {
+        return Err(Error::TypeMismatch {
+            expect: *ty,
+            found: value.ty(),
+        });
+    }
+
+    *result = Some(value);
+    Ok(())
 }
 
 struct ValueFromLua(Value);
@@ -355,4 +536,17 @@ where
     let func = lua.create_function(f)?;
     lua.globals().set(fn_name, func)?;
     Ok(())
+}
+
+fn new_lua() -> Result<Lua, Error> {
+    // Create a Lua interpreter
+    let lua = Lua::new();
+    lua.sandbox(true)?;
+
+    // Add global functions
+    add_function(&lua, "pkg_dir", |_, pkg: String| {
+        find_pkg_dir(&pkg).map_err(|err| LuaError::external(format!("{err}")))
+    })?;
+
+    Ok(lua)
 }

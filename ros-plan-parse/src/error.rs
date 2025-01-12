@@ -43,12 +43,8 @@ pub enum Error {
     #[error("the argument `{name}` is required but is not assigned")]
     RequiredArgumentNotAssigned { name: ParamName },
 
-    #[error("expect `{expect}` type for argument `{name}`, but found `{found}` type")]
-    ArgumentTypeMismatch {
-        name: ParamName,
-        expect: ValueType,
-        found: ValueType,
-    },
+    #[error("expect `{expect}` type, but found `{found}` type")]
+    TypeMismatch { expect: ValueType, found: ValueType },
 
     #[error("argument `{name}` is assigned but is not found")]
     ArgumentNotFound { name: ParamName },

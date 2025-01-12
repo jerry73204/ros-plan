@@ -8,7 +8,8 @@ use crate::{
         uri::NodeTopicUri,
     },
     error::Error,
-    resource::{PlanResource, Resource, ResourceTreeRef},
+    eval::EvalSlot,
+    resource::{Resource, ResourceTreeRef, Scope},
 };
 use itertools::Itertools;
 use ros_plan_format::{
@@ -84,7 +85,7 @@ impl SocketResolver {
             }
         }
 
-        if let PlanResource::PlanFile { .. } = &guard.value {
+        if let Scope::PlanFile { .. } = &guard.value {
             self.queue.push_back(
                 ResolveSocketJob {
                     current: current.clone(),
@@ -106,7 +107,7 @@ impl SocketResolver {
         // Take out the socket_map from the plan context
         let mut socket_map = {
             let mut guard = current.write();
-            let PlanResource::PlanFile(plan_ctx) = &mut guard.value else {
+            let Scope::PlanFile(plan_ctx) = &mut guard.value else {
                 unreachable!("a plan context is expected");
             };
             std::mem::take(&mut plan_ctx.socket_map)
@@ -123,7 +124,7 @@ impl SocketResolver {
         // Update plan context
         {
             let mut guard = current.write();
-            let PlanResource::PlanFile(plan_ctx) = &mut guard.value else {
+            let Scope::PlanFile(plan_ctx) = &mut guard.value else {
                 unreachable!("a plan context is expected");
             };
             plan_ctx.socket_map = socket_map;
@@ -170,7 +171,7 @@ fn resolve_pub_socket_topics(
             let topic_uris = match resolve {
                 ResolveNode::Node(child_node_arc) => vec![NodeTopicUri {
                     node: child_node_arc.downgrade(),
-                    topic: topic.clone(),
+                    topic: EvalSlot::new(topic.clone()),
                 }],
                 ResolveNode::Socket(child_socket_arc) => {
                     let guard = child_socket_arc.read();
@@ -214,7 +215,7 @@ fn resolve_sub_socket_topics(
             let topic_uris = match resolve {
                 ResolveNode::Node(child_node_arc) => vec![NodeTopicUri {
                     node: child_node_arc.downgrade(),
-                    topic: topic.clone(),
+                    topic: EvalSlot::new(topic.clone()),
                 }],
                 ResolveNode::Socket(child_socket_arc) => {
                     let guard = child_socket_arc.read();
@@ -253,7 +254,7 @@ fn resolve_srv_socket_topics(
     let listen = match resolve {
         ResolveNode::Node(child_node_arc) => NodeTopicUri {
             node: child_node_arc.downgrade(),
-            topic: topic.clone(),
+            topic: EvalSlot::new(topic.clone()),
         },
         ResolveNode::Socket(child_socket_arc) => {
             let guard = child_socket_arc.read();
@@ -292,7 +293,7 @@ fn resolve_qry_socket_topics(
             let topic_uris = match resolve {
                 ResolveNode::Node(child_node_arc) => vec![NodeTopicUri {
                     node: child_node_arc.downgrade(),
-                    topic: topic.clone(),
+                    topic: EvalSlot::new(topic.clone()),
                 }],
                 ResolveNode::Socket(child_socket_arc) => {
                     let guard = child_socket_arc.read();
@@ -315,7 +316,7 @@ fn resolve_qry_socket_topics(
 fn resolve_node_key(root: ResourceTreeRef, key: &Key) -> Option<ResolveNode> {
     {
         let guard = root.read();
-        if !matches!(guard.value, PlanResource::PlanFile { .. }) {
+        if !matches!(guard.value, Scope::PlanFile { .. }) {
             panic!("the search must starts at a plan node");
         }
     }
@@ -329,11 +330,11 @@ fn resolve_node_key(root: ResourceTreeRef, key: &Key) -> Option<ResolveNode> {
             let child = root.get_child(prefix)?;
             let guard = child.read();
             match &guard.value {
-                PlanResource::PlanFile(ctx) => {
+                Scope::PlanFile(ctx) => {
                     let socket_arc = ctx.socket_map.get(node_name)?;
                     socket_arc.clone().into()
                 }
-                PlanResource::HerePlan(ctx) => {
+                Scope::Group(ctx) => {
                     let node_arc = ctx.node_map.get(node_name)?;
                     node_arc.clone().into()
                 }
@@ -341,7 +342,7 @@ fn resolve_node_key(root: ResourceTreeRef, key: &Key) -> Option<ResolveNode> {
         }
         None => {
             let guard = root.read();
-            let PlanResource::PlanFile(ctx) = &guard.value else {
+            let Scope::PlanFile(ctx) = &guard.value else {
                 unreachable!();
             };
             let node_arc = ctx.node_map.get(node_name)?;

@@ -1,8 +1,8 @@
 pub mod config;
 
-use std::path::PathBuf;
-
 use clap::Parser;
+use indexmap::IndexMap;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Parser)]
 struct Args {
@@ -16,7 +16,8 @@ struct Args {
 
 fn main() -> eyre::Result<()> {
     let args = Args::parse();
-    let resource = ros_plan_parse::parse_plan_file(&args.plan_file, None)?;
+    let mut resource = ros_plan_parse::compile_plan_file(&args.plan_file)?;
+    ros_plan_parse::eval_resource(&mut resource, IndexMap::new())?;
 
     let json_text = serde_json::to_string_pretty(&resource)?;
     println!("{json_text}");

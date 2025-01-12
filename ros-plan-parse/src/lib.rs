@@ -8,10 +8,14 @@ mod socket_resolver;
 mod tree;
 mod utils;
 
-use crate::link_resolver::LinkResolver;
-use crate::resource::Resource;
-use crate::socket_resolver::SocketResolver;
-use crate::{error::Error, plan_visitor::PlanVisitor};
+use eval::Evaluator;
+use indexmap::IndexMap;
+use ros_plan_format::{eval::Value, parameter::ParamName};
+
+use crate::{
+    error::Error, link_resolver::LinkResolver, plan_visitor::PlanVisitor, resource::Resource,
+    socket_resolver::SocketResolver,
+};
 use std::path::Path;
 
 pub fn compile_plan_file<P>(path: P) -> Result<Resource, Error>
@@ -38,5 +42,16 @@ where
         resolver.traverse(&mut resource)?;
     }
 
+    // eval::eval_resource(&mut resource, IndexMap::new())?;
+
     Ok(resource)
+}
+
+pub fn eval_resource(
+    resource: &mut Resource,
+    args: IndexMap<ParamName, Value>,
+) -> Result<(), Error> {
+    let mut evaluator = Evaluator::new();
+    evaluator.eval_resource(resource, args)?;
+    Ok(())
 }

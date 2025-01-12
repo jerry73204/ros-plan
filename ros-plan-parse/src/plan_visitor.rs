@@ -9,7 +9,8 @@ use crate::{
         },
     },
     error::Error,
-    resource::{GroupResource, PlanFileResource, PlanResource, Resource, ResourceTreeRef},
+    eval::EvalSlot,
+    resource::{GroupScope, PlanFileScope, Resource, ResourceTreeRef, Scope},
     utils::{find_plan_file_from_pkg, read_toml_file},
 };
 use indexmap::IndexMap;
@@ -21,7 +22,7 @@ use ros_plan_format::{
     parameter::{ArgEntry, ArgSlot, ParamName},
     plan::Plan,
     socket::Socket,
-    subplan::{HerePlan, Subplan, SubplanTable},
+    subplan::{Group, Subplan, SubplanTable},
 };
 use std::{
     collections::{HashSet, VecDeque},
@@ -50,8 +51,8 @@ impl PlanVisitor {
 
         while let Some(job) = self.queue.pop_front() {
             match job {
-                Job::InsertHerePlan(job) => {
-                    self.insert_hereplan(&mut context, job)?;
+                Job::InsertGroup(job) => {
+                    self.insert_group(&mut context, job)?;
                 }
                 Job::InsertPlanFile(job) => {
                     self.insert_plan(&mut context, job)?;
@@ -172,17 +173,13 @@ impl PlanVisitor {
         Ok(())
     }
 
-    fn insert_hereplan(
-        &mut self,
-        context: &mut Resource,
-        job: InsertHerePlanJob,
-    ) -> Result<(), Error> {
-        let InsertHerePlanJob {
+    fn insert_group(&mut self, context: &mut Resource, job: InsertGroupJob) -> Result<(), Error> {
+        let InsertGroupJob {
             plan_parent,
             current,
             current_prefix,
             child_suffix,
-            child_hereplan,
+            child_group,
         } = job;
 
         let Ok(child_prefix) = &current_prefix / &child_suffix else {
@@ -190,11 +187,11 @@ impl PlanVisitor {
         };
 
         // Create the context
-        let (hereplan_ctx, subplan_tab) = to_hereplan_context(child_hereplan);
+        let (group_scope, subplan_tab) = to_group_scope(child_group);
 
         // Insert node entries to the global context
         {
-            let node_entries = hereplan_ctx.node_map.iter().map(|(node_ident, node_arc)| {
+            let node_entries = group_scope.node_map.iter().map(|(node_ident, node_arc)| {
                 let node_weak = node_arc.downgrade();
                 let node_key = &child_prefix / node_ident;
                 (node_key, node_weak)
@@ -204,12 +201,12 @@ impl PlanVisitor {
 
         // Schedule subplan insertion jobs
         {
-            let hereplan_child = current.insert(child_suffix, hereplan_ctx.into())?;
+            let group_child = current.insert(child_suffix, group_scope.into())?;
 
             for (subplan_suffix, subplan) in subplan_tab.0 {
                 self.schedule_subplan_insertion(
                     plan_parent.clone(),
-                    hereplan_child.clone(),
+                    group_child.clone(),
                     &child_prefix,
                     &subplan_suffix,
                     subplan,
@@ -236,7 +233,7 @@ impl PlanVisitor {
                     let subplan_path = &subplan.path;
                     let subplan_path = if subplan_path.is_relative() {
                         let guard = plan_parent.read();
-                        let PlanResource::PlanFile(plan_ctx) = &guard.value else {
+                        let Scope::PlanFile(plan_ctx) = &guard.value else {
                             unreachable!("the plan context must be initialized");
                         };
                         let Some(parent_dir) = plan_ctx.path.parent() else {
@@ -278,12 +275,12 @@ impl PlanVisitor {
                     .into(),
                 );
             }
-            Subplan::Here(here_plan) => {
+            Subplan::Group(group) => {
                 self.queue.push_back(
-                    InsertHerePlanJob {
+                    InsertGroupJob {
                         plan_parent,
                         current,
-                        child_hereplan: here_plan,
+                        child_group: group,
                         current_prefix: current_prefix.to_owned(),
                         child_suffix: subplan_suffix,
                     }
@@ -296,7 +293,7 @@ impl PlanVisitor {
 }
 
 enum Job {
-    InsertHerePlan(InsertHerePlanJob),
+    InsertGroup(InsertGroupJob),
     InsertPlanFile(InsertPlanFileJob),
 }
 
@@ -306,18 +303,18 @@ impl From<InsertPlanFileJob> for Job {
     }
 }
 
-impl From<InsertHerePlanJob> for Job {
-    fn from(v: InsertHerePlanJob) -> Self {
-        Self::InsertHerePlan(v)
+impl From<InsertGroupJob> for Job {
+    fn from(v: InsertGroupJob) -> Self {
+        Self::InsertGroup(v)
     }
 }
 
-pub struct InsertHerePlanJob {
+pub struct InsertGroupJob {
     plan_parent: ResourceTreeRef,
     current: ResourceTreeRef,
     current_prefix: KeyOwned,
     child_suffix: KeyOwned,
-    child_hereplan: HerePlan,
+    child_group: Group,
 }
 
 pub struct InsertPlanFileJob {
@@ -335,7 +332,14 @@ fn to_plan_context(
     plan_cfg: Plan,
     when: Option<ValueOrEval>,
     assign_arg: IndexMap<ParamName, ValueOrEval>,
-) -> Result<(PlanFileResource, SubplanTable), Error> {
+) -> Result<(PlanFileScope, SubplanTable), Error> {
+    // Check if there is an argument assignment that does not exist.
+    for name in assign_arg.keys() {
+        if !plan_cfg.arg.contains_key(name) {
+            return Err(Error::ArgumentNotFound { name: name.clone() });
+        }
+    }
+
     let node_map: IndexMap<_, _> = plan_cfg
         .node
         .0
@@ -366,41 +370,37 @@ fn to_plan_context(
         })
         .collect();
 
-    let arg_map = {
-        let mut arg_map: IndexMap<_, _> = plan_cfg
-            .arg
-            .into_iter()
-            .map(|(arg_ident, arg_cfg)| {
-                let arg_ctx = to_arg_context(arg_cfg);
-                (arg_ident, arg_ctx)
-            })
-            .collect();
+    let arg_map: IndexMap<_, _> = plan_cfg
+        .arg
+        .into_iter()
+        .map(|(name, arg_cfg)| {
+            let assign = assign_arg.get(&name).cloned();
+            let arg_ctx = ArgContext::new(arg_cfg, assign);
+            (name, arg_ctx)
+        })
+        .collect();
 
-        for (name, value) in assign_arg {
-            let Some(arg_ctx) = arg_map.get_mut(&name) else {
-                return Err(Error::ArgumentNotFound { name });
-            };
-            arg_ctx.assign = Some(value);
-        }
+    let var_map: IndexMap<_, _> = plan_cfg
+        .var
+        .into_iter()
+        .map(|(name, var_entry)| (name, EvalSlot::new(var_entry)))
+        .collect();
 
-        arg_map
-    };
-
-    let plan_ctx = PlanFileResource {
+    let plan_ctx = PlanFileScope {
         path,
         arg_map,
-        var_map: plan_cfg.var,
+        var_map,
         socket_map,
         node_map,
         link_map,
-        when,
+        when: when.map(|when| EvalSlot::new(when)),
     };
 
     Ok((plan_ctx, plan_cfg.subplan))
 }
 
-fn to_hereplan_context(hereplan: HerePlan) -> (GroupResource, SubplanTable) {
-    let local_node_map: IndexMap<_, _> = hereplan
+fn to_group_scope(group: Group) -> (GroupScope, SubplanTable) {
+    let local_node_map: IndexMap<_, _> = group
         .node
         .0
         .into_iter()
@@ -409,7 +409,7 @@ fn to_hereplan_context(hereplan: HerePlan) -> (GroupResource, SubplanTable) {
             (node_ident, node_arc)
         })
         .collect();
-    let local_link_map: IndexMap<_, _> = hereplan
+    let local_link_map: IndexMap<_, _> = group
         .link
         .0
         .into_iter()
@@ -419,11 +419,12 @@ fn to_hereplan_context(hereplan: HerePlan) -> (GroupResource, SubplanTable) {
         })
         .collect();
 
-    let ctx = GroupResource {
+    let ctx = GroupScope {
+        when: group.when.map(|when| EvalSlot::new(when)),
         node_map: local_node_map,
         link_map: local_link_map,
     };
-    (ctx, hereplan.subplan)
+    (ctx, group.subplan)
 }
 
 fn to_socket_context(socket_ctx: Socket) -> SocketContext {
@@ -493,8 +494,7 @@ fn check_arg_assignment(
                 };
 
                 if assigned_ty != expect_ty {
-                    return Err(Error::ArgumentTypeMismatch {
-                        name: name.clone(),
+                    return Err(Error::TypeMismatch {
                         expect: expect_ty,
                         found: assigned_ty,
                     });
@@ -512,24 +512,17 @@ fn check_arg_assignment(
 fn to_node_context(node_cfg: Node) -> NodeContext {
     match node_cfg {
         Node::Ros(node_cfg) => RosNodeContext {
-            param: node_cfg.param.clone(),
+            param: {
+                node_cfg
+                    .param
+                    .clone()
+                    .into_iter()
+                    .map(|(name, eval)| (name, EvalSlot::new(eval)))
+                    .collect()
+            },
             config: node_cfg,
         }
         .into(),
         Node::Proc(node_cfg) => ProcessContext { config: node_cfg }.into(),
-    }
-}
-
-fn to_arg_context(arg_cfg: ArgEntry) -> ArgContext {
-    let ArgEntry { slot, help } = arg_cfg;
-    let (ty, default) = match slot {
-        ArgSlot::Required { ty } => (ty, None),
-        ArgSlot::Optional { default } => (default.ty(), Some(default)),
-    };
-    ArgContext {
-        ty,
-        default,
-        help,
-        assign: None,
     }
 }

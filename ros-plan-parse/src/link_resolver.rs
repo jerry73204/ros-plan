@@ -6,7 +6,8 @@ use crate::{
         uri::NodeTopicUri,
     },
     error::Error,
-    resource::{PlanResource, Resource, ResourceTreeRef},
+    eval::EvalSlot,
+    resource::{Resource, ResourceTreeRef, Scope},
 };
 use itertools::Itertools;
 use ros_plan_format::{
@@ -86,7 +87,7 @@ impl LinkResolver {
         // Schedule a job to resolve links if the node has a plan or a
         // hereplan context.
         match guard.value {
-            PlanResource::PlanFile { .. } => {
+            Scope::PlanFile { .. } => {
                 self.queue.push_back(
                     ResolveLinkJob {
                         current: current.clone(),
@@ -95,7 +96,7 @@ impl LinkResolver {
                     .into(),
                 );
             }
-            PlanResource::HerePlan(_) => {
+            Scope::Group(_) => {
                 self.queue.push_back(
                     ResolveLinkJob {
                         current: current.clone(),
@@ -125,8 +126,8 @@ impl LinkResolver {
             let node_ctx = &mut guard.value;
 
             match node_ctx {
-                PlanResource::PlanFile(ctx) => mem::take(&mut ctx.link_map),
-                PlanResource::HerePlan(ctx) => mem::take(&mut ctx.link_map),
+                Scope::PlanFile(ctx) => mem::take(&mut ctx.link_map),
+                Scope::Group(ctx) => mem::take(&mut ctx.link_map),
             }
         };
 
@@ -154,10 +155,10 @@ impl LinkResolver {
             let trie_ctx = &mut guard.value;
 
             match trie_ctx {
-                PlanResource::PlanFile(ctx) => {
+                Scope::PlanFile(ctx) => {
                     ctx.link_map = link_map;
                 }
-                PlanResource::HerePlan(ctx) => {
+                Scope::Group(ctx) => {
                     ctx.link_map = link_map;
                 }
             }
@@ -202,7 +203,7 @@ fn resolve_pubsub_link(
             let uris: Vec<_> = match resolve {
                 ResolveNode::Node(node_arc) => vec![NodeTopicUri {
                     node: node_arc.downgrade(),
-                    topic: topic.clone(),
+                    topic: EvalSlot::new(topic.clone()),
                 }],
                 ResolveNode::Socket(socket_arc) => {
                     let guard = socket_arc.read();
@@ -234,7 +235,7 @@ fn resolve_pubsub_link(
             let uris: Vec<_> = match resolve {
                 ResolveNode::Node(node_arc) => vec![NodeTopicUri {
                     node: node_arc.downgrade(),
-                    topic: topic.clone(),
+                    topic: EvalSlot::new(topic.clone()),
                 }],
                 ResolveNode::Socket(socket_arc) => {
                     let guard = socket_arc.read();
@@ -273,7 +274,7 @@ fn resolve_service_link(
         let uri = match resolve {
             ResolveNode::Node(node_arc) => NodeTopicUri {
                 node: node_arc.downgrade(),
-                topic: topic.clone(),
+                topic: EvalSlot::new(topic.clone()),
             },
             ResolveNode::Socket(socket_arc) => {
                 let guard = socket_arc.read();
@@ -303,7 +304,7 @@ fn resolve_service_link(
             let uris: Vec<_> = match resolve {
                 ResolveNode::Node(node_arc) => vec![NodeTopicUri {
                     node: node_arc.downgrade(),
-                    topic: topic.clone(),
+                    topic: EvalSlot::new(topic.clone()),
                 }],
                 ResolveNode::Socket(socket_arc) => {
                     let guard = socket_arc.read();
@@ -327,7 +328,7 @@ fn resolve_service_link(
 
 fn resolve_node_key(
     context: &Resource,
-    plan_or_hereplan_root: ResourceTreeRef,
+    current: ResourceTreeRef,
     key: &Key,
 ) -> Option<ResolveNode> {
     if key.is_absolute() {
@@ -340,25 +341,25 @@ fn resolve_node_key(
 
         let resolve: ResolveNode = match prefix {
             Some(prefix) => {
-                let child = plan_or_hereplan_root.get_child(prefix)?;
+                let child = current.get_child(prefix)?;
                 let guard = child.read();
                 match &guard.value {
-                    PlanResource::PlanFile(ctx) => {
+                    Scope::PlanFile(ctx) => {
                         let socket_arc = ctx.socket_map.get(node_name)?;
                         socket_arc.clone().into()
                     }
-                    PlanResource::HerePlan(ctx) => {
+                    Scope::Group(ctx) => {
                         let node_arc = ctx.node_map.get(node_name)?;
                         node_arc.clone().into()
                     }
                 }
             }
             None => {
-                let guard = plan_or_hereplan_root.read();
+                let guard = current.read();
                 let node_ctx = &guard.value;
                 let node_map = match node_ctx {
-                    PlanResource::PlanFile(ctx) => &ctx.node_map,
-                    PlanResource::HerePlan(ctx) => &ctx.node_map,
+                    Scope::PlanFile(ctx) => &ctx.node_map,
+                    Scope::Group(ctx) => &ctx.node_map,
                 };
                 let node_arc = node_map.get(node_name)?;
                 node_arc.clone().into()
