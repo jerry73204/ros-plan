@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "SerializedSubplanTable", into = "SerializedSubplanTable")]
-pub struct SubplanTable(pub IndexMap<NonEmptyRelativeKeyOwned, Subplan>);
+pub struct SubplanTable(pub IndexMap<NonEmptyRelativeKeyOwned, SubplanCfg>);
 
 impl Default for SubplanTable {
     fn default() -> Self {
@@ -24,7 +24,7 @@ pub struct SerializedSubplanTable {
     pub include: IndexMap<NonEmptyRelativeKeyOwned, SerializedIncludeEntry>,
 
     #[serde(default)]
-    pub group: IndexMap<NonEmptyRelativeKeyOwned, Group>,
+    pub group: IndexMap<NonEmptyRelativeKeyOwned, GroupCfg>,
 }
 
 impl TryFrom<SerializedSubplanTable> for SubplanTable {
@@ -38,7 +38,7 @@ impl TryFrom<SerializedSubplanTable> for SubplanTable {
         }
 
         let SerializedSubplanTable { include, group } = table;
-        let mut map: IndexMap<_, Subplan> = IndexMap::new();
+        let mut map: IndexMap<_, SubplanCfg> = IndexMap::new();
 
         // Check if one key is a prefix of another key.
         {
@@ -81,13 +81,13 @@ impl From<SubplanTable> for SerializedSubplanTable {
 
         for (ident, subplan) in table.0 {
             match subplan {
-                Subplan::File(subplan) => {
+                SubplanCfg::File(subplan) => {
                     include.insert(ident, subplan.into());
                 }
-                Subplan::Pkg(subplan) => {
+                SubplanCfg::Pkg(subplan) => {
                     include.insert(ident, subplan.into());
                 }
-                Subplan::Group(subplan) => {
+                SubplanCfg::Group(subplan) => {
                     group.insert(ident, subplan);
                 }
             }
@@ -100,11 +100,11 @@ impl From<SubplanTable> for SerializedSubplanTable {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SerializedIncludeEntry {
-    File(IncludeFromFile),
-    Pkg(IncludeFromPkg),
+    File(IncludeFileCfg),
+    Pkg(IncludePkgCfg),
 }
 
-impl From<SerializedIncludeEntry> for Subplan {
+impl From<SerializedIncludeEntry> for SubplanCfg {
     fn from(entry: SerializedIncludeEntry) -> Self {
         match entry {
             SerializedIncludeEntry::File(entry) => entry.into(),
@@ -113,47 +113,47 @@ impl From<SerializedIncludeEntry> for Subplan {
     }
 }
 
-impl From<IncludeFromPkg> for SerializedIncludeEntry {
-    fn from(v: IncludeFromPkg) -> Self {
+impl From<IncludePkgCfg> for SerializedIncludeEntry {
+    fn from(v: IncludePkgCfg) -> Self {
         Self::Pkg(v)
     }
 }
 
-impl From<IncludeFromFile> for SerializedIncludeEntry {
-    fn from(v: IncludeFromFile) -> Self {
+impl From<IncludeFileCfg> for SerializedIncludeEntry {
+    fn from(v: IncludeFileCfg) -> Self {
         Self::File(v)
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Subplan {
-    File(IncludeFromFile),
-    Pkg(IncludeFromPkg),
-    Group(Group),
+pub enum SubplanCfg {
+    File(IncludeFileCfg),
+    Pkg(IncludePkgCfg),
+    Group(GroupCfg),
 }
 
-impl From<IncludeFromFile> for Subplan {
-    fn from(v: IncludeFromFile) -> Self {
+impl From<IncludeFileCfg> for SubplanCfg {
+    fn from(v: IncludeFileCfg) -> Self {
         Self::File(v)
     }
 }
 
-impl From<IncludeFromPkg> for Subplan {
-    fn from(v: IncludeFromPkg) -> Self {
+impl From<IncludePkgCfg> for SubplanCfg {
+    fn from(v: IncludePkgCfg) -> Self {
         Self::Pkg(v)
     }
 }
 
-impl From<Group> for Subplan {
-    fn from(v: Group) -> Self {
+impl From<GroupCfg> for SubplanCfg {
+    fn from(v: GroupCfg) -> Self {
         Self::Group(v)
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct IncludeFromFile {
+pub struct IncludeFileCfg {
     pub path: PathBuf,
     pub when: Option<ValueOrExpr>,
     #[serde(default)]
@@ -162,7 +162,7 @@ pub struct IncludeFromFile {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct IncludeFromPkg {
+pub struct IncludePkgCfg {
     pub pkg: String,
     pub file: String,
     pub when: Option<ValueOrExpr>,
@@ -172,7 +172,7 @@ pub struct IncludeFromPkg {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Group {
+pub struct GroupCfg {
     #[serde(default)]
     pub node: NodeTable,
     #[serde(default)]

@@ -4,7 +4,7 @@ use crate::{
 };
 use indexmap::IndexMap;
 use ros_plan_format::{
-    node::{ProcessNode, RosNode},
+    node::{ProcessNodeCfg, RosNodeCfg},
     parameter::ParamName,
 };
 use serde::Serialize;
@@ -32,11 +32,11 @@ impl From<RosNodeContext> for NodeContext {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct RosNodeContext {
-    pub config: RosNode,
+    pub config: RosNodeCfg,
     pub param: IndexMap<ParamName, EvalSlot>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ProcessContext {
-    pub config: ProcessNode,
+    pub config: ProcessNodeCfg,
 }

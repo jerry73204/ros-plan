@@ -6,6 +6,7 @@ mod plan_visitor;
 pub mod resource;
 mod socket_resolver;
 mod tree;
+pub mod uri;
 mod utils;
 
 use crate::{

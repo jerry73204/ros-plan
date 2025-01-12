@@ -6,7 +6,7 @@ pub type SocketIdent = IdentOwned;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "SerializedSocketTable", into = "SerializedSocketTable")]
-pub struct SocketTable(pub IndexMap<SocketIdent, Socket>);
+pub struct SocketTable(pub IndexMap<SocketIdent, SocketCfg>);
 
 impl Default for SocketTable {
     fn default() -> Self {
@@ -32,7 +32,7 @@ impl TryFrom<SerializedSocketTable> for SocketTable {
             srv,
             qry,
         } = table;
-        let mut map: IndexMap<IdentOwned, Socket> = IndexMap::new();
+        let mut map: IndexMap<IdentOwned, SocketCfg> = IndexMap::new();
 
         for (ident, socket) in pub_ {
             let prev = map.insert(ident.clone(), socket.into());
@@ -72,16 +72,16 @@ impl From<SocketTable> for SerializedSocketTable {
 
         for (ident, socket) in table.0 {
             match socket {
-                Socket::Pub(socket) => {
+                SocketCfg::Pub(socket) => {
                     pub_.insert(ident, socket);
                 }
-                Socket::Sub(socket) => {
+                SocketCfg::Sub(socket) => {
                     sub.insert(ident, socket);
                 }
-                Socket::Srv(socket) => {
+                SocketCfg::Srv(socket) => {
                     srv.insert(ident, socket);
                 }
-                Socket::Qry(socket) => {
+                SocketCfg::Qry(socket) => {
                     qry.insert(ident, socket);
                 }
             }
@@ -100,54 +100,54 @@ impl From<SocketTable> for SerializedSocketTable {
 #[serde(deny_unknown_fields)]
 pub struct SerializedSocketTable {
     #[serde(default, rename = "pub")]
-    pub pub_: IndexMap<SocketIdent, PubSocket>,
+    pub pub_: IndexMap<SocketIdent, PubSocketCfg>,
 
     #[serde(default)]
-    pub sub: IndexMap<SocketIdent, SubSocket>,
+    pub sub: IndexMap<SocketIdent, SubSocketCfg>,
 
     #[serde(default)]
-    pub srv: IndexMap<SocketIdent, ServerSocket>,
+    pub srv: IndexMap<SocketIdent, ServerSocketCfg>,
 
     #[serde(default)]
-    pub qry: IndexMap<SocketIdent, QuerySocket>,
+    pub qry: IndexMap<SocketIdent, QuerySocketCfg>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Socket {
-    Pub(PubSocket),
-    Sub(SubSocket),
-    Srv(ServerSocket),
-    Qry(QuerySocket),
+pub enum SocketCfg {
+    Pub(PubSocketCfg),
+    Sub(SubSocketCfg),
+    Srv(ServerSocketCfg),
+    Qry(QuerySocketCfg),
 }
 
-impl From<QuerySocket> for Socket {
-    fn from(v: QuerySocket) -> Self {
+impl From<QuerySocketCfg> for SocketCfg {
+    fn from(v: QuerySocketCfg) -> Self {
         Self::Qry(v)
     }
 }
 
-impl From<ServerSocket> for Socket {
-    fn from(v: ServerSocket) -> Self {
+impl From<ServerSocketCfg> for SocketCfg {
+    fn from(v: ServerSocketCfg) -> Self {
         Self::Srv(v)
     }
 }
 
-impl From<SubSocket> for Socket {
-    fn from(v: SubSocket) -> Self {
+impl From<SubSocketCfg> for SocketCfg {
+    fn from(v: SubSocketCfg) -> Self {
         Self::Sub(v)
     }
 }
 
-impl From<PubSocket> for Socket {
-    fn from(v: PubSocket) -> Self {
+impl From<PubSocketCfg> for SocketCfg {
+    fn from(v: PubSocketCfg) -> Self {
         Self::Pub(v)
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct PubSocket {
+pub struct PubSocketCfg {
     // #[serde(rename = "type")]
     // pub ty: RosTypeOwned,
     // pub qos: Option<QosRequirement>,
@@ -156,7 +156,7 @@ pub struct PubSocket {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct SubSocket {
+pub struct SubSocketCfg {
     // #[serde(rename = "type")]
     // pub ty: RosTypeOwned,
     // pub qos: Option<QosRequirement>,
@@ -165,7 +165,7 @@ pub struct SubSocket {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ServerSocket {
+pub struct ServerSocketCfg {
     // #[serde(rename = "type")]
     // pub ty: RosTypeOwned,
     pub listen: TopicUri,
@@ -173,7 +173,7 @@ pub struct ServerSocket {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct QuerySocket {
+pub struct QuerySocketCfg {
     // #[serde(rename = "type")]
     // pub ty: RosTypeOwned,
     pub connect: Vec<TopicUri>,

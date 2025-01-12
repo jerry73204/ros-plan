@@ -1,6 +1,6 @@
 use super::uri::NodeTopicUri;
 use crate::utils::{ArcRwLock, WeakRwLock};
-use ros_plan_format::socket::{PubSocket, QuerySocket, ServerSocket, SubSocket};
+use ros_plan_format::socket::{PubSocketCfg, QuerySocketCfg, ServerSocketCfg, SubSocketCfg};
 use serde::Serialize;
 
 pub type SocketArc = ArcRwLock<SocketContext>;
@@ -40,24 +40,24 @@ impl From<PubSocketContext> for SocketContext {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PubSocketContext {
-    pub config: PubSocket,
+    pub config: PubSocketCfg,
     pub src: Option<Vec<NodeTopicUri>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SubSocketContext {
-    pub config: SubSocket,
+    pub config: SubSocketCfg,
     pub dst: Option<Vec<NodeTopicUri>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ServerSocketContext {
-    pub config: ServerSocket,
+    pub config: ServerSocketCfg,
     pub listen: Option<NodeTopicUri>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct QuerySocketContext {
-    pub config: QuerySocket,
+    pub config: QuerySocketCfg,
     pub connect: Option<Vec<NodeTopicUri>>,
 }

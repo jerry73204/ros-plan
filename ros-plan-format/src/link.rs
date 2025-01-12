@@ -9,7 +9,7 @@ pub type LinkIdent = IdentOwned;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "SerializedLinkTable", into = "SerializedLinkTable")]
-pub struct LinkTable(pub IndexMap<LinkIdent, Link>);
+pub struct LinkTable(pub IndexMap<LinkIdent, LinkCfg>);
 
 impl Default for LinkTable {
     fn default() -> Self {
@@ -30,7 +30,7 @@ impl TryFrom<SerializedLinkTable> for LinkTable {
         }
 
         let SerializedLinkTable { pubsub, service } = table;
-        let mut map: IndexMap<IdentOwned, Link> = IndexMap::new();
+        let mut map: IndexMap<IdentOwned, LinkCfg> = IndexMap::new();
 
         for (ident, link) in pubsub {
             let prev = map.insert(ident.clone(), link.into());
@@ -56,10 +56,10 @@ impl From<LinkTable> for SerializedLinkTable {
 
         for (ident, link) in table.0 {
             match link {
-                Link::Pubsub(link) => {
+                LinkCfg::Pubsub(link) => {
                     pubsub.insert(ident, link);
                 }
-                Link::Service(link) => {
+                LinkCfg::Service(link) => {
                     service.insert(ident, link);
                 }
             }
@@ -73,35 +73,35 @@ impl From<LinkTable> for SerializedLinkTable {
 #[serde(deny_unknown_fields)]
 pub struct SerializedLinkTable {
     #[serde(default)]
-    pub pubsub: IndexMap<LinkIdent, PubSubLink>,
+    pub pubsub: IndexMap<LinkIdent, PubSubLinkCfg>,
 
     #[serde(default)]
-    pub service: IndexMap<LinkIdent, ServiceLink>,
+    pub service: IndexMap<LinkIdent, ServiceLinkCfg>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Link {
+pub enum LinkCfg {
     #[serde(rename = "pubsub")]
-    Pubsub(PubSubLink),
+    Pubsub(PubSubLinkCfg),
     #[serde(rename = "service")]
-    Service(ServiceLink),
+    Service(ServiceLinkCfg),
 }
 
-impl From<PubSubLink> for Link {
-    fn from(v: PubSubLink) -> Self {
+impl From<PubSubLinkCfg> for LinkCfg {
+    fn from(v: PubSubLinkCfg) -> Self {
         Self::Pubsub(v)
     }
 }
 
-impl From<ServiceLink> for Link {
-    fn from(v: ServiceLink) -> Self {
+impl From<ServiceLinkCfg> for LinkCfg {
+    fn from(v: ServiceLinkCfg) -> Self {
         Self::Service(v)
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct PubSubLink {
+pub struct PubSubLinkCfg {
     #[serde(rename = "type")]
     pub ty: RosTypeOwned,
 
@@ -114,7 +114,7 @@ pub struct PubSubLink {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ServiceLink {
+pub struct ServiceLinkCfg {
     #[serde(rename = "type")]
     pub ty: RosTypeOwned,
     pub listen: TopicUri,

@@ -1,10 +1,6 @@
 use crate::{
-    expr::ValueOrExpr,
-    link::LinkTable,
-    node::NodeTable,
-    parameter::{ArgEntry, ParamName},
-    socket::SocketTable,
-    subplan::SubplanTable,
+    argument::ArgEntry, expr::ValueOrExpr, link::LinkTable, node::NodeTable, parameter::ParamName,
+    socket::SocketTable, subplan::SubplanTable,
 };
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};

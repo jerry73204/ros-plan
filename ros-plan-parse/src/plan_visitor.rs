@@ -15,14 +15,15 @@ use crate::{
 };
 use indexmap::IndexMap;
 use ros_plan_format::{
+    argument::{ArgCfg, ArgEntry},
     expr::ValueOrExpr,
     key::{Key, KeyOwned},
-    link::Link,
-    node::Node,
-    parameter::{ArgEntry, ArgSlot, ParamName},
+    link::LinkCfg,
+    node::NodeCfg,
+    parameter::ParamName,
     plan::Plan,
-    socket::Socket,
-    subplan::{Group, Subplan, SubplanTable},
+    socket::SocketCfg,
+    subplan::{GroupCfg, SubplanCfg, SubplanTable},
 };
 use std::{
     collections::{HashSet, VecDeque},
@@ -222,12 +223,12 @@ impl PlanVisitor {
         current: ResourceTreeRef,
         current_prefix: &Key,
         child_suffix: &Key,
-        child_subplan: Subplan,
+        child_subplan: SubplanCfg,
     ) -> Result<(), Error> {
         let subplan_suffix = child_suffix.to_owned();
 
         match child_subplan {
-            Subplan::File(subplan) => {
+            SubplanCfg::File(subplan) => {
                 // Resolve the path of the plan file
                 let subplan_path = {
                     let subplan_path = &subplan.path;
@@ -259,7 +260,7 @@ impl PlanVisitor {
                     .into(),
                 );
             }
-            Subplan::Pkg(subplan) => {
+            SubplanCfg::Pkg(subplan) => {
                 let path = find_plan_file_from_pkg(&subplan.pkg, &subplan.file)?;
 
                 self.queue.push_back(
@@ -275,7 +276,7 @@ impl PlanVisitor {
                     .into(),
                 );
             }
-            Subplan::Group(group) => {
+            SubplanCfg::Group(group) => {
                 self.queue.push_back(
                     InsertGroupJob {
                         plan_parent,
@@ -314,7 +315,7 @@ pub struct InsertGroupJob {
     current: ResourceTreeRef,
     current_prefix: KeyOwned,
     child_suffix: KeyOwned,
-    child_group: Group,
+    child_group: GroupCfg,
 }
 
 pub struct InsertPlanFileJob {
@@ -399,7 +400,7 @@ fn to_plan_context(
     Ok((plan_ctx, plan_cfg.subplan))
 }
 
-fn to_group_scope(group: Group) -> (GroupScope, SubplanTable) {
+fn to_group_scope(group: GroupCfg) -> (GroupScope, SubplanTable) {
     let local_node_map: IndexMap<_, _> = group
         .node
         .0
@@ -427,16 +428,16 @@ fn to_group_scope(group: Group) -> (GroupScope, SubplanTable) {
     (ctx, group.subplan)
 }
 
-fn to_socket_context(socket_ctx: Socket) -> SocketContext {
+fn to_socket_context(socket_ctx: SocketCfg) -> SocketContext {
     match socket_ctx {
-        Socket::Pub(config) => PubSocketContext { config, src: None }.into(),
-        Socket::Sub(config) => SubSocketContext { config, dst: None }.into(),
-        Socket::Srv(config) => ServerSocketContext {
+        SocketCfg::Pub(config) => PubSocketContext { config, src: None }.into(),
+        SocketCfg::Sub(config) => SubSocketContext { config, dst: None }.into(),
+        SocketCfg::Srv(config) => ServerSocketContext {
             config,
             listen: None,
         }
         .into(),
-        Socket::Qry(config) => QuerySocketContext {
+        SocketCfg::Qry(config) => QuerySocketContext {
             config,
             connect: None,
         }
@@ -444,15 +445,15 @@ fn to_socket_context(socket_ctx: Socket) -> SocketContext {
     }
 }
 
-fn to_link_context(link: Link) -> LinkContext {
+fn to_link_context(link: LinkCfg) -> LinkContext {
     match link {
-        Link::Pubsub(link) => PubSubLinkContext {
+        LinkCfg::Pubsub(link) => PubSubLinkContext {
             config: link,
             src: None,
             dst: None,
         }
         .into(),
-        Link::Service(link) => ServiceLinkContext {
+        LinkCfg::Service(link) => ServiceLinkContext {
             config: link,
             listen: None,
             connect: None,
@@ -470,7 +471,7 @@ fn check_arg_assignment(
 
     // Check if there are unassigned required args
     for name in &spec_names - &assigned_names {
-        if let ArgSlot::Required { .. } = &spec[name].slot {
+        if let ArgCfg::Required { .. } = &spec[name].slot {
             return Err(Error::RequiredArgumentNotAssigned {
                 name: name.to_owned(),
             });
@@ -489,8 +490,8 @@ fn check_arg_assignment(
                 let assigned_ty = value.ty();
 
                 let expect_ty = match spec[name].slot {
-                    ArgSlot::Required { ty } => ty,
-                    ArgSlot::Optional { ref default } => default.ty(),
+                    ArgCfg::Required { ty } => ty,
+                    ArgCfg::Optional { ref default } => default.ty(),
                 };
 
                 if assigned_ty != expect_ty {
@@ -509,9 +510,9 @@ fn check_arg_assignment(
     Ok(())
 }
 
-fn to_node_context(node_cfg: Node) -> NodeContext {
+fn to_node_context(node_cfg: NodeCfg) -> NodeContext {
     match node_cfg {
-        Node::Ros(node_cfg) => RosNodeContext {
+        NodeCfg::Ros(node_cfg) => RosNodeContext {
             param: {
                 node_cfg
                     .param
@@ -523,6 +524,6 @@ fn to_node_context(node_cfg: Node) -> NodeContext {
             config: node_cfg,
         }
         .into(),
-        Node::Proc(node_cfg) => ProcessContext { config: node_cfg }.into(),
+        NodeCfg::Proc(node_cfg) => ProcessContext { config: node_cfg }.into(),
     }
 }

@@ -1,3 +1,4 @@
+pub mod argument;
 pub mod error;
 pub mod expr;
 pub mod ident;

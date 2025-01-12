@@ -1,6 +1,6 @@
 use ros_plan_format::{
+    argument::{ArgCfg, ArgEntry},
     expr::{Value, ValueOrExpr, ValueType},
-    parameter::{ArgEntry, ArgSlot},
 };
 use serde::Serialize;
 
@@ -18,8 +18,8 @@ impl ArgContext {
     pub fn new(spec: ArgEntry, assign: Option<ValueOrExpr>) -> Self {
         let ArgEntry { slot, help } = spec;
         let (ty, default_in_spec) = match slot {
-            ArgSlot::Required { ty } => (ty, None),
-            ArgSlot::Optional { default } => (default.ty(), Some(default)),
+            ArgCfg::Required { ty } => (ty, None),
+            ArgCfg::Optional { default } => (default.ty(), Some(default)),
         };
 
         Self {

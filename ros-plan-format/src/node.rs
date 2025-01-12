@@ -8,7 +8,7 @@ pub type NodeIdent = IdentOwned;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "SerializedNodeTable", into = "SerializedNodeTable")]
-pub struct NodeTable(pub IndexMap<NodeIdent, Node>);
+pub struct NodeTable(pub IndexMap<NodeIdent, NodeCfg>);
 
 impl Default for NodeTable {
     fn default() -> Self {
@@ -29,7 +29,7 @@ impl TryFrom<SerializedNodeTable> for NodeTable {
         }
 
         let SerializedNodeTable { ros, proc } = table;
-        let mut map: IndexMap<IdentOwned, Node> = IndexMap::new();
+        let mut map: IndexMap<IdentOwned, NodeCfg> = IndexMap::new();
 
         for (ident, node) in ros {
             let prev = map.insert(ident.clone(), node.into());
@@ -55,10 +55,10 @@ impl From<NodeTable> for SerializedNodeTable {
 
         for (ident, node) in table.0 {
             match node {
-                Node::Ros(node) => {
+                NodeCfg::Ros(node) => {
                     ros.insert(ident, node);
                 }
-                Node::Proc(node) => {
+                NodeCfg::Proc(node) => {
                     proc.insert(ident, node);
                 }
             }
@@ -72,34 +72,34 @@ impl From<NodeTable> for SerializedNodeTable {
 #[serde(deny_unknown_fields)]
 pub struct SerializedNodeTable {
     #[serde(default)]
-    pub ros: IndexMap<NodeIdent, RosNode>,
+    pub ros: IndexMap<NodeIdent, RosNodeCfg>,
 
     #[serde(default)]
-    pub proc: IndexMap<NodeIdent, ProcessNode>,
+    pub proc: IndexMap<NodeIdent, ProcessNodeCfg>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Node {
-    Ros(RosNode),
-    Proc(ProcessNode),
+pub enum NodeCfg {
+    Ros(RosNodeCfg),
+    Proc(ProcessNodeCfg),
 }
 
-impl From<ProcessNode> for Node {
-    fn from(v: ProcessNode) -> Self {
+impl From<ProcessNodeCfg> for NodeCfg {
+    fn from(v: ProcessNodeCfg) -> Self {
         Self::Proc(v)
     }
 }
 
-impl From<RosNode> for Node {
-    fn from(v: RosNode) -> Self {
+impl From<RosNodeCfg> for NodeCfg {
+    fn from(v: RosNodeCfg) -> Self {
         Self::Ros(v)
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct RosNode {
+pub struct RosNodeCfg {
     pub pkg: String,
     pub exec: Option<String>,
     pub plugin: Option<String>,
@@ -110,6 +110,6 @@ pub struct RosNode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ProcessNode {
+pub struct ProcessNodeCfg {
     pub command: Vec<String>,
 }
