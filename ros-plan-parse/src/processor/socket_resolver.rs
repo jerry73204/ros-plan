@@ -9,7 +9,7 @@ use crate::{
         uri::NodeTopicUri,
     },
     error::Error,
-    resource::{Resource, ResourceTreeRef, Scope},
+    resource::{Resource, Scope, ScopeTreeRef},
 };
 use itertools::Itertools;
 use ros_plan_format::{
@@ -130,7 +130,7 @@ impl SocketResolver {
 }
 
 fn resolve_socket_topics(
-    current: ResourceTreeRef,
+    current: ScopeTreeRef,
     socket_ctx: &mut SocketContext,
 ) -> Result<(), Error> {
     match socket_ctx {
@@ -143,7 +143,7 @@ fn resolve_socket_topics(
 }
 
 fn resolve_pub_socket_topics(
-    current: ResourceTreeRef,
+    current: ScopeTreeRef,
     pub_: &mut PubSocketContext,
 ) -> Result<(), Error> {
     let src: Vec<_> = pub_
@@ -187,7 +187,7 @@ fn resolve_pub_socket_topics(
 }
 
 fn resolve_sub_socket_topics(
-    current: ResourceTreeRef,
+    current: ScopeTreeRef,
     sub: &mut SubSocketContext,
 ) -> Result<(), Error> {
     let dst: Vec<_> = sub
@@ -231,7 +231,7 @@ fn resolve_sub_socket_topics(
 }
 
 fn resolve_srv_socket_topics(
-    current: ResourceTreeRef,
+    current: ScopeTreeRef,
     srv: &mut ServerSocketContext,
 ) -> Result<(), Error> {
     let TopicUri {
@@ -265,7 +265,7 @@ fn resolve_srv_socket_topics(
 }
 
 fn resolve_qry_socket_topics(
-    current: ResourceTreeRef,
+    current: ScopeTreeRef,
     qry: &mut QuerySocketContext,
 ) -> Result<(), Error> {
     let connect: Vec<_> = qry
@@ -308,7 +308,7 @@ fn resolve_qry_socket_topics(
     Ok(())
 }
 
-fn resolve_node_key(root: ResourceTreeRef, key: &Key) -> Option<ResolveNode> {
+fn resolve_node_key(root: ScopeTreeRef, key: &Key) -> Option<ResolveNode> {
     {
         let guard = root.read();
         if !matches!(guard.value, Scope::PlanFile { .. }) {
@@ -368,13 +368,13 @@ impl From<ResolveSocketJob> for Job {
 
 #[derive(Debug)]
 pub struct VisitNodeJob {
-    current: ResourceTreeRef,
+    current: ScopeTreeRef,
     current_prefix: KeyOwned,
 }
 
 #[derive(Debug)]
 pub struct ResolveSocketJob {
-    current: ResourceTreeRef,
+    current: ScopeTreeRef,
     // current_prefix: KeyOwned,
 }
 

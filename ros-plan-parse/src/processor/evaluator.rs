@@ -5,7 +5,7 @@ mod store_eval;
 use crate::{
     context::{arg::ArgContext, expr::ExprContext},
     error::Error,
-    resource::{Resource, ResourceTreeRef, ScopeKind},
+    resource::{Resource, ScopeKind, ScopeTreeRef},
 };
 use indexmap::IndexMap;
 use lua::{new_lua, ValueToLua};
@@ -58,7 +58,7 @@ impl Evaluator {
         Ok(())
     }
 
-    fn eval_plan_file(&mut self, current: &ResourceTreeRef) -> Result<(), Error> {
+    fn eval_plan_file(&mut self, current: &ScopeTreeRef) -> Result<(), Error> {
         // Create a new Lua context
         let lua = new_lua()?;
 
@@ -98,7 +98,7 @@ impl Evaluator {
         Ok(())
     }
 
-    fn eval_group(&mut self, lua: &Lua, current: ResourceTreeRef) -> Result<(), Error> {
+    fn eval_group(&mut self, lua: &Lua, current: ScopeTreeRef) -> Result<(), Error> {
         {
             let mut current_guard = current.write();
             let scope_guard = current_guard
@@ -122,7 +122,7 @@ impl Evaluator {
         Ok(())
     }
 
-    fn schedule_subplan_jobs(&mut self, lua: &Lua, current: &ResourceTreeRef) -> Result<(), Error> {
+    fn schedule_subplan_jobs(&mut self, lua: &Lua, current: &ScopeTreeRef) -> Result<(), Error> {
         let guard = current.read();
         for (_key, child) in &guard.children {
             let job = match child.kind() {
@@ -142,8 +142,8 @@ impl Evaluator {
 
 #[derive(Debug)]
 enum Job {
-    PlanFile { current: ResourceTreeRef },
-    Group { current: ResourceTreeRef, lua: Lua },
+    PlanFile { current: ScopeTreeRef },
+    Group { current: ScopeTreeRef, lua: Lua },
 }
 
 fn load_arg_table(lua: &Lua, arg_table: &IndexMap<ParamName, ArgContext>) -> Result<(), Error> {

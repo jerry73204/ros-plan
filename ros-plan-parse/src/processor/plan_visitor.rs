@@ -10,7 +10,7 @@ use crate::{
         },
     },
     error::Error,
-    resource::{GroupScope, PlanFileScope, Resource, ResourceTreeRef, Scope},
+    resource::{GroupScope, PlanFileScope, Resource, Scope, ScopeTreeRef},
     utils::{find_plan_file_from_pkg, read_toml_file},
 };
 use indexmap::IndexMap;
@@ -93,7 +93,7 @@ impl PlanVisitor {
             //     when: None,
             // }
             // .into();
-            ResourceTreeRef::new(plan_ctx.into())
+            ScopeTreeRef::new(plan_ctx.into())
         };
         context.root = Some(root.clone());
 
@@ -214,8 +214,8 @@ impl PlanVisitor {
 
     fn schedule_subplan_insertion(
         &mut self,
-        plan_parent: ResourceTreeRef,
-        current: ResourceTreeRef,
+        plan_parent: ScopeTreeRef,
+        current: ScopeTreeRef,
         current_prefix: &Key,
         child_suffix: &Key,
         child_subplan: SubplanCfg,
@@ -308,8 +308,8 @@ impl From<InsertGroupJob> for Job {
 
 #[derive(Debug)]
 struct InsertGroupJob {
-    plan_parent: ResourceTreeRef,
-    current: ResourceTreeRef,
+    plan_parent: ScopeTreeRef,
+    current: ScopeTreeRef,
     current_prefix: KeyOwned,
     child_suffix: KeyOwned,
     child_group: GroupCfg,
@@ -318,7 +318,7 @@ struct InsertGroupJob {
 #[derive(Debug)]
 struct InsertPlanFileJob {
     // plan_parent: TrieRef,
-    current: ResourceTreeRef,
+    current: ScopeTreeRef,
     current_prefix: KeyOwned,
     child_suffix: KeyOwned,
     child_plan_path: PathBuf,

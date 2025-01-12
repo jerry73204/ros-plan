@@ -8,7 +8,7 @@ use crate::{
         socket::{SocketArc, SocketContext},
     },
     error::Error,
-    resource::{ResourceTreeRef, Scope},
+    resource::{Scope, ScopeTreeRef},
 };
 use indexmap::IndexMap;
 use mlua::prelude::*;
@@ -172,7 +172,7 @@ pub fn store_eval_arg_table(
 
 pub fn store_eval_subplan_table(
     lua: &Lua,
-    children: &IndexMap<KeyOwned, ResourceTreeRef>,
+    children: &IndexMap<KeyOwned, ScopeTreeRef>,
 ) -> Result<(), Error> {
     for (_name, child) in children {
         let mut child = child.write();

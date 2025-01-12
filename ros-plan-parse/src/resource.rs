@@ -20,15 +20,15 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Resource {
-    pub root: Option<ResourceTreeRef>,
-    pub node_map: IndexMap<KeyOwned, NodeWeak>,
-    pub link_map: IndexMap<KeyOwned, LinkWeak>,
+    pub(crate) root: Option<ScopeTreeRef>,
+    pub(crate) node_map: IndexMap<KeyOwned, NodeWeak>,
+    pub(crate) link_map: IndexMap<KeyOwned, LinkWeak>,
 }
 
-pub type ResourceTree = Tree<Scope>;
-pub type ResourceTreeRef = TreeRef<Scope>;
+pub type ScopeTree = Tree<Scope>;
+pub type ScopeTreeRef = TreeRef<Scope>;
 
-impl ResourceTreeRef {
+impl ScopeTreeRef {
     pub fn kind(&self) -> ScopeKind {
         let guard = self.read();
         guard.value.kind()

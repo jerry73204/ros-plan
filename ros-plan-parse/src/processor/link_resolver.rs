@@ -7,7 +7,7 @@ use crate::{
         uri::NodeTopicUri,
     },
     error::Error,
-    resource::{Resource, ResourceTreeRef, Scope},
+    resource::{Resource, Scope, ScopeTreeRef},
 };
 use itertools::Itertools;
 use ros_plan_format::{
@@ -114,9 +114,7 @@ impl LinkResolver {
         // Take the link_map out of the node context.
         let mut link_map = {
             let mut guard = current.write();
-            let node_ctx = &mut guard.value;
-
-            match node_ctx {
+            match &mut guard.value {
                 Scope::PlanFile(ctx) => mem::take(&mut ctx.link_map),
                 Scope::Group(ctx) => mem::take(&mut ctx.link_map),
             }
@@ -161,7 +159,7 @@ impl LinkResolver {
 
 fn resolve_link(
     context: &Resource,
-    current: ResourceTreeRef,
+    current: ScopeTreeRef,
     link: &mut LinkContext,
 ) -> Result<(), Error> {
     match link {
@@ -173,7 +171,7 @@ fn resolve_link(
 
 fn resolve_pubsub_link(
     context: &Resource,
-    current: ResourceTreeRef,
+    current: ScopeTreeRef,
     link: &mut PubSubLinkContext,
 ) -> Result<(), Error> {
     let src: Vec<_> = link
@@ -248,7 +246,7 @@ fn resolve_pubsub_link(
 
 fn resolve_service_link(
     context: &Resource,
-    current: ResourceTreeRef,
+    current: ScopeTreeRef,
     link: &mut ServiceLinkContext,
 ) -> Result<(), Error> {
     let listen = {
@@ -315,11 +313,7 @@ fn resolve_service_link(
     Ok(())
 }
 
-fn resolve_node_key(
-    context: &Resource,
-    current: ResourceTreeRef,
-    key: &Key,
-) -> Option<ResolveNode> {
+fn resolve_node_key(context: &Resource, current: ScopeTreeRef, key: &Key) -> Option<ResolveNode> {
     if key.is_absolute() {
         let node_weak = context.node_map.get(key)?;
         let node_arc = node_weak.upgrade().unwrap();
@@ -379,13 +373,13 @@ impl From<VisitNodeJob> for Job {
 
 #[derive(Debug)]
 struct VisitNodeJob {
-    current: ResourceTreeRef,
+    current: ScopeTreeRef,
     current_prefix: KeyOwned,
 }
 
 #[derive(Debug)]
 struct ResolveLinkJob {
-    current: ResourceTreeRef,
+    current: ScopeTreeRef,
     current_prefix: KeyOwned,
 }
 
