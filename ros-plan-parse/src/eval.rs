@@ -352,6 +352,10 @@ fn override_arg_table(
     arg_table: &mut IndexMap<ParamName, ArgContext>,
     override_arg: IndexMap<ParamName, Value>,
 ) -> Result<(), Error> {
+    for (_, entry) in arg_table.iter_mut() {
+        entry.override_ = None;
+    }
+
     for (name, override_) in override_arg {
         let Some(arg_ctx) = arg_table.get_mut(&name) else {
             return Err(Error::ArgumentNotFound { name });
