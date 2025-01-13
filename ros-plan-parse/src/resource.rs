@@ -13,10 +13,11 @@ use parking_lot::{
     MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLockReadGuard, RwLockWriteGuard,
 };
 use ros_plan_format::{
-    key::Key, link::LinkIdent, node::NodeIdent, parameter::ParamName, socket::SocketIdent,
+    expr::Value, key::Key, link::LinkIdent, node::NodeIdent, parameter::ParamName,
+    socket::SocketIdent,
 };
-use serde::Serialize;
-use std::path::PathBuf;
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 pub type ScopeTree = Tree<Scope>;
 pub type ScopeTreeRef = TreeRef<Scope>;
@@ -27,7 +28,7 @@ pub type LinkShared = Shared<LinkContext>;
 pub type SocketOwned = Owned<SocketContext>;
 pub type SocketShared = Shared<SocketContext>;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Resource {
     pub(crate) root: Option<ScopeTreeRef>,
     pub(crate) node_tab: SharedTable<NodeContext>,
@@ -70,9 +71,34 @@ impl ScopeTreeRef {
         let guard = self.write();
         RwLockWriteGuard::try_map(guard, |g| g.value.as_group_mut()).ok()
     }
+
+    pub fn resolve_key(&self, key: &Key) -> Option<Self> {
+        if key.is_absolute() {
+            return None;
+        }
+        if key.is_empty() {
+            return Some(self.clone());
+        }
+
+        // The first step can start from a plan or a group node.
+        let (mut curr, mut suffix) = self.get_child(key)?;
+
+        // In later steps, it can only start from a group node.
+        while let Some(curr_suffix) = suffix.take() {
+            if curr.is_plan_file() {
+                return None;
+            }
+            let (child, next_suffix) = curr.get_child(&curr_suffix)?;
+            curr = child;
+            suffix = next_suffix;
+        }
+
+        Some(curr)
+    }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Scope {
     PlanFile(Box<PlanFileScope>),
     Group(Box<GroupScope>),
@@ -137,7 +163,7 @@ pub enum ScopeKind {
     Group,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PlanFileScope {
     pub path: PathBuf,
     pub when: Option<ExprContext>,
@@ -148,7 +174,7 @@ pub struct PlanFileScope {
     pub link_map: IndexMap<LinkIdent, LinkShared>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GroupScope {
     pub when: Option<ExprContext>,
     pub node_map: IndexMap<NodeIdent, NodeShared>,

@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 by_address = "1.2.1"
-indexmap = "2.7.0"
+indexmap = { version = "2.7.0", features = ["serde"] }
 itertools = "0.13.0"
 mlua = { version = "0.10.2", features = ["luau"] }
 parking_lot = "0.12.3"

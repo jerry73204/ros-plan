@@ -1,9 +1,11 @@
 use super::arc_rwlock::{ArcRwLock, WeakRwLock};
+use indexmap::IndexMap;
 use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
-use serde::{ser::SerializeMap, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stable_vec::StableVec;
 
 #[derive(Debug)]
+#[repr(transparent)]
 pub struct SharedTable<T> {
     inner: ArcRwLock<StableVec<ArcRwLock<T>>>,
 }
@@ -45,15 +47,28 @@ where
         S: Serializer,
     {
         let vec = self.inner.read();
-        let len = vec.iter().count();
-        let mut map = serializer.serialize_map(Some(len))?;
+        let guards: Vec<_> = vec.iter().map(|(k, v)| (k, v.read())).collect();
+        let refs: IndexMap<usize, _> = guards.iter().map(|(k, v)| (*k, &**v)).collect();
+        refs.serialize(serializer)
+    }
+}
 
-        for (key, rwlock) in vec.iter() {
-            let value = rwlock.read();
-            map.serialize_entry(&key, &*value)?;
+impl<'de, T> Deserialize<'de> for SharedTable<T>
+where
+    T: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let mut vec = StableVec::new();
+        let map = IndexMap::<usize, T>::deserialize(deserializer)?;
+        for (k, v) in map {
+            vec.insert(k, ArcRwLock::from(v));
         }
-
-        map.end()
+        Ok(Self {
+            inner: ArcRwLock::from(vec),
+        })
     }
 }
 
@@ -114,5 +129,18 @@ impl<T> Serialize for Shared<T> {
         S: Serializer,
     {
         self.id.serialize(serializer)
+    }
+}
+
+impl<'de, T> Deserialize<'de> for Shared<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let id = usize::deserialize(deserializer)?;
+        Ok(Self {
+            id,
+            tab_weak: WeakRwLock::new_null(),
+        })
     }
 }

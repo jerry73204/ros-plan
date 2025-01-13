@@ -4,9 +4,9 @@ use ros_plan_format::{
     node::{ProcessNodeCfg, RosNodeCfg},
     parameter::ParamName,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NodeContext {
     Ros(RosNodeContext),
@@ -25,13 +25,13 @@ impl From<RosNodeContext> for NodeContext {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RosNodeContext {
     pub config: RosNodeCfg,
     pub param: IndexMap<ParamName, ExprContext>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProcessContext {
     pub config: ProcessNodeCfg,
 }

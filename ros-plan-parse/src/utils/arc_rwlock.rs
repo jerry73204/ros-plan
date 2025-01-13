@@ -1,7 +1,7 @@
 use parking_lot::{
     ArcRwLockReadGuard, ArcRwLockWriteGuard, RawRwLock, RwLock, RwLockReadGuard, RwLockWriteGuard,
 };
-use serde::{ser::SerializeStruct, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::sync::{Arc, Weak};
 
 #[derive(Debug)]
@@ -67,14 +67,29 @@ where
     where
         S: Serializer,
     {
-        let addr = Arc::as_ptr(&self.ref_) as usize;
-        let addr_text = format!("arc@{addr:x}");
-
         let guard = self.read();
-        let mut struct_ = serializer.serialize_struct("Arc", 2)?;
-        struct_.serialize_field("addr", &addr_text)?;
-        struct_.serialize_field("data", &*guard)?;
-        struct_.end()
+        guard.serialize(serializer)
+        // let addr = Arc::as_ptr(&self.ref_) as usize;
+        // let addr_text = format!("arc@{addr:x}");
+
+        // let guard = self.read();
+        // let mut struct_ = serializer.serialize_struct("Arc", 2)?;
+        // struct_.serialize_field("addr", &addr_text)?;
+        // struct_.serialize_field("data", &*guard)?;
+        // struct_.end()
+    }
+}
+
+impl<'de, T> Deserialize<'de> for ArcRwLock<T>
+where
+    T: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let inner = T::deserialize(deserializer)?;
+        Ok(inner.into())
     }
 }
 
@@ -95,19 +110,19 @@ impl<T> WeakRwLock<T> {
     }
 }
 
-impl<T> Serialize for WeakRwLock<T>
-where
-    T: Serialize,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let addr = self.upgrade().map(|arc| {
-            let ptr = Arc::as_ptr(&arc.ref_);
-            let addr = ptr as usize;
-            format!("weak@{addr:x}")
-        });
-        addr.serialize(serializer)
-    }
-}
+// impl<T> Serialize for WeakRwLock<T>
+// where
+//     T: Serialize,
+// {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: Serializer,
+//     {
+//         let addr = self.upgrade().map(|arc| {
+//             let ptr = Arc::as_ptr(&arc.ref_);
+//             let addr = ptr as usize;
+//             format!("weak@{addr:x}")
+//         });
+//         addr.serialize(serializer)
+//     }
+// }

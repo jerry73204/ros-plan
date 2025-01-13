@@ -1,8 +1,8 @@
 use super::uri::NodeTopicUri;
 use ros_plan_format::link::{PubSubLinkCfg, ServiceLinkCfg};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LinkContext {
     Pubsub(PubSubLinkContext),
@@ -21,14 +21,14 @@ impl From<PubSubLinkContext> for LinkContext {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PubSubLinkContext {
     pub config: PubSubLinkCfg,
     pub src: Option<Vec<NodeTopicUri>>,
     pub dst: Option<Vec<NodeTopicUri>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ServiceLinkContext {
     pub config: ServiceLinkCfg,
     pub listen: Option<NodeTopicUri>,

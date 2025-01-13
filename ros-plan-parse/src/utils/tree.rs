@@ -2,49 +2,11 @@ use std::collections::BTreeMap;
 
 use crate::{error::Error, utils::arc_rwlock::ArcRwLock};
 use ros_plan_format::key::{Key, KeyOwned};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub type TreeRef<T> = ArcRwLock<Tree<T>>;
 
-#[derive(Debug, Clone, Serialize)]
-pub struct Tree2<T> {
-    pub value: T,
-    pub children: BTreeMap<KeyOwned, TreeRef<T>>,
-}
-
-// impl<T> Tree2<T> {
-//     pub fn get(&mut self, key: &Key) -> Option<TreeRef<T>> {
-//         if !self.check_disjoint(key) {
-//             return None;
-//         }
-
-//         todo!();
-//     }
-
-//     fn check_disjoint(&self, key: &Key) -> bool {
-//         if key.is_absolute() {
-//             return false;
-//         }
-
-//         let prev = self.children.range(..=key.to_owned()).next_back();
-//         if let Some((prev_key, _)) = prev {
-//             if key.starts_with(prev_key).unwrap() {
-//                 return false;
-//             }
-//         }
-
-//         let next = self.children.range(key.to_owned()..).next();
-//         if let Some((next_key, _)) = next {
-//             if next_key.starts_with(key).unwrap() {
-//                 return false;
-//             }
-//         }
-
-//         true
-//     }
-// }
-
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tree<T> {
     pub value: T,
     pub children: BTreeMap<KeyOwned, TreeRef<T>>,

@@ -1,10 +1,12 @@
 use ros_plan_format::expr::{Value, ValueOrExpr, ValueType};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExprContext {
     pub default: ValueOrExpr,
+    #[serde(rename = "override")]
     pub override_: Option<Value>,
+    #[serde(skip)]
     pub result: Option<Value>,
 }
 

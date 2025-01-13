@@ -2,15 +2,17 @@ use ros_plan_format::{
     argument::{ArgCfg, ArgEntry},
     expr::{Value, ValueOrExpr, ValueType},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArgContext {
     pub ty: ValueType,
     pub help: Option<String>,
     pub default: Option<Value>,
     pub assign: Option<ValueOrExpr>,
+    #[serde(rename = "override")]
     pub override_: Option<ValueOrExpr>,
+    #[serde(skip)]
     pub result: Option<Value>,
 }
 
