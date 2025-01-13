@@ -1,6 +1,7 @@
 use crate::context::expr::ExprContext;
 use indexmap::IndexMap;
 use ros_plan_format::{
+    key::{Key, KeyOwned},
     node::{ProcessNodeCfg, RosNodeCfg},
     parameter::ParamName,
 };
@@ -11,6 +12,15 @@ use serde::{Deserialize, Serialize};
 pub enum NodeContext {
     Ros(RosNodeContext),
     Proc(ProcessContext),
+}
+
+impl NodeContext {
+    pub fn key(&self) -> &Key {
+        match self {
+            NodeContext::Ros(node) => &node.key,
+            NodeContext::Proc(node) => &node.key,
+        }
+    }
 }
 
 impl From<ProcessContext> for NodeContext {
@@ -27,11 +37,13 @@ impl From<RosNodeContext> for NodeContext {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RosNodeContext {
+    pub key: KeyOwned,
     pub config: RosNodeCfg,
     pub param: IndexMap<ParamName, ExprContext>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProcessContext {
+    pub key: KeyOwned,
     pub config: ProcessNodeCfg,
 }

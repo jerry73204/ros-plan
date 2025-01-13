@@ -67,6 +67,8 @@ impl PlanVisitor {
         plan_path: &Path,
         assign_args: IndexMap<ParamName, ValueOrExpr>,
     ) -> Result<(), Error> {
+        let scope_key = Key::root();
+
         // Read plan file
         let plan: Plan = read_toml_file(plan_path)?;
 
@@ -74,8 +76,14 @@ impl PlanVisitor {
         check_arg_assignment(&plan.arg, &assign_args)?;
 
         // Create the context for the inserted plan
-        let (plan_ctx, subplan_tab) =
-            to_plan_context(context, plan_path.to_path_buf(), plan, None, assign_args)?;
+        let (plan_ctx, subplan_tab) = to_plan_scope(
+            context,
+            plan_path.to_path_buf(),
+            scope_key,
+            plan,
+            None,
+            assign_args,
+        )?;
 
         // Insert the plan context to the root node.
         let root = ScopeTreeRef::new(ScopeTree::new(plan_ctx.into()));
@@ -95,7 +103,11 @@ impl PlanVisitor {
         Ok(())
     }
 
-    fn insert_plan(&mut self, context: &mut Resource, job: InsertPlanFileJob) -> Result<(), Error> {
+    fn insert_plan(
+        &mut self,
+        resource: &mut Resource,
+        job: InsertPlanFileJob,
+    ) -> Result<(), Error> {
         let InsertPlanFileJob {
             // plan_parent: _,
             current,
@@ -117,17 +129,17 @@ impl PlanVisitor {
         check_arg_assignment(&plan.arg, &assign_args)?;
 
         // Create the context for the inserted plan
-        let (plan_ctx, subplan_tab) =
-            to_plan_context(context, child_plan_path.clone(), plan, when, assign_args)?;
+        let (plan_ctx, subplan_tab) = to_plan_scope(
+            resource,
+            child_plan_path.clone(),
+            &child_prefix,
+            plan,
+            when,
+            assign_args,
+        )?;
 
         // Create the child node for the plan
         let plan_child = current.insert(child_suffix, plan_ctx.into())?;
-
-        // Insert the plan to the global table
-        // {
-        //     let prev = context.plan_map.insert(child_plan_path, plan_child.clone());
-        //     if prev.is_some() {}
-        // }
 
         // Schedule subplan insertion jobs
         for (subplan_suffix, subplan) in subplan_tab.0 {
@@ -157,7 +169,7 @@ impl PlanVisitor {
         };
 
         // Create the context
-        let (group_scope, subplan_tab) = to_group_scope(context, child_group);
+        let (group_scope, subplan_tab) = to_group_scope(context, &child_prefix, child_group);
 
         // Schedule subplan insertion jobs
         {
@@ -290,9 +302,10 @@ struct InsertPlanFileJob {
     when: Option<ValueOrExpr>,
 }
 
-fn to_plan_context(
+fn to_plan_scope(
     resource: &mut Resource,
     path: PathBuf,
+    scope_key: &Key,
     plan_cfg: Plan,
     when: Option<ValueOrExpr>,
     assign_arg: IndexMap<ParamName, ValueOrExpr>,
@@ -309,7 +322,8 @@ fn to_plan_context(
         .0
         .into_iter()
         .map(|(ident, cfg)| {
-            let ctx = to_node_context(cfg);
+            let node_key = scope_key / &ident;
+            let ctx = to_node_context(node_key, cfg);
             let shared = resource.node_tab.insert(ctx);
             (ident, shared)
         })
@@ -320,7 +334,8 @@ fn to_plan_context(
         .0
         .into_iter()
         .map(|(ident, cfg)| {
-            let ctx = to_socket_context(cfg);
+            let socket_key = scope_key / &ident;
+            let ctx = to_socket_context(socket_key, cfg);
             let shared = resource.socket_tab.insert(ctx);
             (ident, shared)
         })
@@ -331,7 +346,8 @@ fn to_plan_context(
         .0
         .into_iter()
         .map(|(ident, cfg)| {
-            let ctx = to_link_context(cfg);
+            let link_key = scope_key / &ident;
+            let ctx = to_link_context(link_key, cfg);
             let shared = resource.link_tab.insert(ctx);
             (ident, shared)
         })
@@ -366,13 +382,18 @@ fn to_plan_context(
     Ok((plan_ctx, plan_cfg.subplan))
 }
 
-fn to_group_scope(resource: &mut Resource, group: GroupCfg) -> (GroupScope, SubplanTable) {
+fn to_group_scope(
+    resource: &mut Resource,
+    scope_key: &Key,
+    group: GroupCfg,
+) -> (GroupScope, SubplanTable) {
     let local_node_map: IndexMap<_, _> = group
         .node
         .0
         .into_iter()
         .map(|(ident, cfg)| {
-            let ctx = to_node_context(cfg);
+            let node_key = scope_key / &ident;
+            let ctx = to_node_context(node_key, cfg);
             let shared = resource.node_tab.insert(ctx);
             (ident, shared)
         })
@@ -382,7 +403,8 @@ fn to_group_scope(resource: &mut Resource, group: GroupCfg) -> (GroupScope, Subp
         .0
         .into_iter()
         .map(|(ident, cfg)| {
-            let ctx = to_link_context(cfg);
+            let link_key = scope_key / &ident;
+            let ctx = to_link_context(link_key, cfg);
             let shared = resource.link_tab.insert(ctx);
             (ident, shared)
         })
@@ -396,33 +418,47 @@ fn to_group_scope(resource: &mut Resource, group: GroupCfg) -> (GroupScope, Subp
     (ctx, group.subplan)
 }
 
-fn to_socket_context(socket_ctx: SocketCfg) -> SocketContext {
+fn to_socket_context(key: KeyOwned, socket_ctx: SocketCfg) -> SocketContext {
     match socket_ctx {
-        SocketCfg::Pub(config) => PubSocketContext { config, src: None }.into(),
-        SocketCfg::Sub(config) => SubSocketContext { config, dst: None }.into(),
+        SocketCfg::Pub(config) => PubSocketContext {
+            config,
+            src: None,
+            key,
+        }
+        .into(),
+        SocketCfg::Sub(config) => SubSocketContext {
+            config,
+            dst: None,
+            key,
+        }
+        .into(),
         SocketCfg::Srv(config) => ServerSocketContext {
             config,
             listen: None,
+            key,
         }
         .into(),
         SocketCfg::Qry(config) => QuerySocketContext {
             config,
             connect: None,
+            key,
         }
         .into(),
     }
 }
 
-fn to_link_context(link: LinkCfg) -> LinkContext {
-    match link {
-        LinkCfg::Pubsub(link) => PubsubLinkContext {
-            config: link,
+fn to_link_context(key: KeyOwned, link_cfg: LinkCfg) -> LinkContext {
+    match link_cfg {
+        LinkCfg::Pubsub(link_cfg) => PubsubLinkContext {
+            key,
+            config: link_cfg,
             src: None,
             dst: None,
         }
         .into(),
-        LinkCfg::Service(link) => ServiceLinkContext {
-            config: link,
+        LinkCfg::Service(link_cfg) => ServiceLinkContext {
+            key,
+            config: link_cfg,
             listen: None,
             connect: None,
         }
@@ -478,20 +514,26 @@ fn check_arg_assignment(
     Ok(())
 }
 
-fn to_node_context(node_cfg: NodeCfg) -> NodeContext {
+fn to_node_context(key: KeyOwned, node_cfg: NodeCfg) -> NodeContext {
     match node_cfg {
-        NodeCfg::Ros(node_cfg) => RosNodeContext {
-            param: {
-                node_cfg
-                    .param
-                    .clone()
-                    .into_iter()
-                    .map(|(name, eval)| (name, ExprContext::new(eval)))
-                    .collect()
-            },
+        NodeCfg::Ros(node_cfg) => {
+            let param = node_cfg
+                .param
+                .clone()
+                .into_iter()
+                .map(|(name, eval)| (name, ExprContext::new(eval)))
+                .collect();
+            RosNodeContext {
+                key,
+                param,
+                config: node_cfg,
+            }
+            .into()
+        }
+        NodeCfg::Proc(node_cfg) => ProcessContext {
+            key,
             config: node_cfg,
         }
         .into(),
-        NodeCfg::Proc(node_cfg) => ProcessContext { config: node_cfg }.into(),
     }
 }
