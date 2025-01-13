@@ -65,8 +65,14 @@ where
     where
         D: Deserializer<'de>,
     {
-        let mut vec = StableVec::new();
         let map = IndexMap::<usize, T>::deserialize(deserializer)?;
+        let Some(max_id) = map.keys().copied().max() else {
+            return Ok(Self {
+                inner: ArcRwLock::from(StableVec::new()),
+            });
+        };
+
+        let mut vec = StableVec::with_capacity(max_id + 1);
         for (k, v) in map {
             vec.insert(k, ArcRwLock::from(v));
         }

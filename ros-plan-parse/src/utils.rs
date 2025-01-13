@@ -92,9 +92,7 @@ pub fn resolve_node_entity(
     current: ScopeTreeRef,
     key: &Key,
 ) -> Option<ResolveNode> {
-    dbg!(key);
     let (target, node_name) = resolve_entity(resource, &current, key)?;
-    dbg!(node_name);
 
     let guard = target.read();
     let resolve: ResolveNode = match &guard.value {
