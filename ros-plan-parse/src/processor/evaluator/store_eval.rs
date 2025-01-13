@@ -176,7 +176,7 @@ pub fn store_eval_subplan_table(
     lua: &Lua,
     children: &BTreeMap<KeyOwned, ScopeTreeRef>,
 ) -> Result<(), Error> {
-    for (_name, child) in children {
+    for child in children.values() {
         let mut child = child.write();
         match &mut child.value {
             Scope::PlanFile(scope) => {

@@ -91,17 +91,19 @@ pub fn resolve_node_entity(
     current: ScopeTreeRef,
     key: &Key,
 ) -> Option<ResolveNode> {
+    dbg!(key);
     let (target, node_name) = resolve_entity(resource, &current, key)?;
+    dbg!(node_name);
 
     let guard = target.read();
     let resolve: ResolveNode = match &guard.value {
         Scope::PlanFile(ctx) => {
-            let shared = ctx.socket_map.get(node_name)?;
+            let shared = ctx.node_map.get(node_name)?;
             shared.upgrade().unwrap().into()
         }
         Scope::Group(ctx) => {
-            let node_arc = ctx.node_map.get(node_name)?;
-            node_arc.upgrade().unwrap().into()
+            let shared = ctx.node_map.get(node_name)?;
+            shared.upgrade().unwrap().into()
         }
     };
 
@@ -131,9 +133,9 @@ pub fn resolve_scope(
     let found = if key.is_empty() {
         current.clone()
     } else if key.is_absolute() {
-        resource.find_scope(key)?
+        resource.resolve_absolute_key(key)?
     } else {
-        current.find(key)?
+        current.resolve_key(key)?
     };
     Some(found)
 }

@@ -43,26 +43,6 @@ impl<T> TreeRef<T> {
         None
     }
 
-    pub fn find(&self, key: &Key) -> Option<Self> {
-        if key.is_absolute() {
-            return None;
-        }
-        if key.is_empty() {
-            return Some(self.clone());
-        }
-
-        let mut curr = self.clone();
-        let mut suffix = Some(key.to_owned());
-
-        while let Some(curr_suffix) = suffix.take() {
-            let (child, next_suffix) = curr.get_child(&curr_suffix)?;
-            curr = child;
-            suffix = next_suffix;
-        }
-
-        Some(curr)
-    }
-
     pub fn insert(&self, key: KeyOwned, value: T) -> Result<Self, Error> {
         // Reject absolute keys.
         if key.is_absolute() {

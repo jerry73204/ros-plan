@@ -96,6 +96,10 @@ impl<T> Owned<T> {
             tab_weak: self.tab_weak,
         }
     }
+
+    pub fn id(&self) -> usize {
+        self.id
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -120,6 +124,10 @@ impl<T> Shared<T> {
             tab_guard,
             tab_weak: self.tab_weak.clone(),
         })
+    }
+
+    pub fn id(&self) -> usize {
+        self.id
     }
 }
 

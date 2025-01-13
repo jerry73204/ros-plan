@@ -3,6 +3,11 @@ use crate::{
         arg::ArgContext, expr::ExprContext, link::LinkContext, node::NodeContext,
         socket::SocketContext,
     },
+    error::Error,
+    processor::{
+        evaluator::Evaluator, link_resolver::LinkResolver, plan_visitor::PlanVisitor,
+        socket_resolver::SocketResolver,
+    },
     utils::{
         shared_table::{Owned, Shared, SharedTable},
         tree::{Tree, TreeRef},
@@ -37,12 +42,65 @@ pub struct Resource {
 }
 
 impl Resource {
-    pub fn find_scope(&self, key: &Key) -> Option<ScopeTreeRef> {
+    /// Construct the resource tree from the provided file.
+    pub fn from_plan_file<P>(path: P) -> Result<Resource, Error>
+    where
+        P: AsRef<Path>,
+    {
+        let path = path.as_ref();
+
+        // Perform plan/hereplan expansion
+        let mut resource = {
+            let mut visitor = PlanVisitor::default();
+            visitor.traverse(path)?
+        };
+
+        // Perform plan socket resolution
+        {
+            let mut resolver = SocketResolver::default();
+            resolver.traverse(&mut resource)?;
+        }
+
+        // Perform plan socket resolution
+        {
+            let mut resolver = LinkResolver::default();
+            resolver.traverse(&mut resource)?;
+        }
+
+        Ok(resource)
+    }
+
+    /// Evaluate embedded scripts.
+    pub fn eval(&mut self, args: IndexMap<ParamName, Value>) -> Result<(), Error> {
+        let mut evaluator = Evaluator::default();
+        evaluator.eval_resource(self, args)?;
+        Ok(())
+    }
+
+    /// Locate the scope specified by an absolute key.
+    pub fn resolve_absolute_key(&self, key: &Key) -> Option<ScopeTreeRef> {
         let suffix = match key.strip_prefix("/".parse().unwrap()) {
             Ok(Some(suffix)) => suffix,
             _ => return None,
         };
-        self.root.as_ref()?.find(suffix)
+
+        // Check the key == "/" case
+        let root = self.root.clone().unwrap();
+        if suffix.is_empty() {
+            return Some(root.clone());
+        }
+
+        // Walk down to descent child nodes
+        let mut curr = root.clone();
+        let mut suffix = Some(suffix.to_owned());
+
+        while let Some(curr_suffix) = suffix {
+            let (child, new_suffix) = curr.get_child(&curr_suffix)?;
+            curr = child;
+            suffix = new_suffix;
+        }
+
+        Some(curr)
     }
 }
 
@@ -50,6 +108,15 @@ impl ScopeTreeRef {
     pub fn kind(&self) -> ScopeKind {
         let guard = self.read();
         guard.value.kind()
+    }
+
+    pub fn is_plan_file(&self) -> bool {
+        let guard = self.read();
+        if let Scope::PlanFile(_) = guard.value {
+            true
+        } else {
+            false
+        }
     }
 
     pub fn as_plan_file(&self) -> Option<MappedRwLockReadGuard<PlanFileScope>> {
@@ -60,6 +127,15 @@ impl ScopeTreeRef {
     pub fn as_plan_file_mut(&self) -> Option<MappedRwLockWriteGuard<PlanFileScope>> {
         let guard = self.write();
         RwLockWriteGuard::try_map(guard, |g| g.value.as_plan_file_mut()).ok()
+    }
+
+    pub fn is_group(&self) -> bool {
+        let guard = self.read();
+        if let Scope::Group(_) = guard.value {
+            true
+        } else {
+            false
+        }
     }
 
     pub fn as_group(&self) -> Option<MappedRwLockReadGuard<GroupScope>> {
@@ -112,6 +188,10 @@ impl Scope {
         }
     }
 
+    pub fn is_plan_file(&self) -> bool {
+        matches!(self, Self::PlanFile(_))
+    }
+
     pub fn as_plan_file(&self) -> Option<&PlanFileScope> {
         if let Self::PlanFile(v) = self {
             Some(v)
@@ -126,6 +206,10 @@ impl Scope {
         } else {
             None
         }
+    }
+
+    pub fn is_group(&self) -> bool {
+        matches!(self, Self::Group(_))
     }
 
     pub fn as_group(&self) -> Option<&GroupScope> {
