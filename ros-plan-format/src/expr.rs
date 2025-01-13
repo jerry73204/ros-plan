@@ -111,7 +111,7 @@ impl Serialize for Expr {
         S: Serializer,
     {
         let code = &self.0;
-        format!("{{{code}}}").serialize(serializer)
+        code.serialize(serializer)
     }
 }
 
