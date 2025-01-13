@@ -1,4 +1,4 @@
-use crate::{context::expr::ExprContext, resource::NodeShared};
+use crate::{context::expr::ExprContext, scope::NodeShared};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

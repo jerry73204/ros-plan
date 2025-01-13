@@ -8,7 +8,8 @@ use crate::{
         uri::NodeTopicUri,
     },
     error::Error,
-    resource::{Resource, Scope, ScopeTreeRef},
+    resource::Resource,
+    scope::{Scope, ScopeTreeRef},
     utils::{resolve_node_entity, ResolveNode},
 };
 use itertools::Itertools;

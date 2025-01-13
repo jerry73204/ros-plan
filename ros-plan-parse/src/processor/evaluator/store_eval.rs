@@ -7,7 +7,7 @@ use crate::{
         socket::SocketContext,
     },
     error::Error,
-    resource::{LinkShared, NodeShared, Scope, ScopeTreeRef, SocketShared},
+    scope::{LinkShared, NodeShared, Scope, ScopeTreeRef, SocketShared},
 };
 use indexmap::IndexMap;
 use mlua::prelude::*;

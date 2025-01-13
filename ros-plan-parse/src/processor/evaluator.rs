@@ -5,7 +5,8 @@ mod store_eval;
 use crate::{
     context::{arg::ArgContext, expr::ExprContext},
     error::Error,
-    resource::{Resource, ScopeKind, ScopeTreeRef},
+    resource::Resource,
+    scope::{ScopeKind, ScopeTreeRef},
 };
 use indexmap::IndexMap;
 use lua::{new_lua, ValueToLua};
@@ -124,7 +125,7 @@ impl Evaluator {
 
     fn schedule_subplan_jobs(&mut self, lua: &Lua, current: &ScopeTreeRef) -> Result<(), Error> {
         let guard = current.read();
-        for (_key, child) in &guard.children {
+        for child in guard.children.values() {
             let job = match child.kind() {
                 ScopeKind::PlanFile => Job::PlanFile {
                     current: child.clone(),

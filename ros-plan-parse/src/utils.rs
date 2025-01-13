@@ -4,7 +4,8 @@ pub mod tree;
 
 use crate::{
     error::Error,
-    resource::{NodeOwned, Resource, Scope, ScopeTreeRef, SocketOwned},
+    resource::Resource,
+    scope::{NodeOwned, Scope, ScopeTreeRef, SocketOwned},
 };
 use ros_plan_format::{ident::Ident, key::Key};
 use serde::Deserialize;

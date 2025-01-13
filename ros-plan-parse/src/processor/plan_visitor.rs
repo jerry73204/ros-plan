@@ -10,7 +10,8 @@ use crate::{
         },
     },
     error::Error,
-    resource::{GroupScope, PlanFileScope, Resource, Scope, ScopeTree, ScopeTreeRef},
+    resource::Resource,
+    scope::{GroupScope, PlanFileScope, Scope, ScopeTree, ScopeTreeRef},
     utils::{find_plan_file_from_pkg, read_toml_file, shared_table::SharedTable},
 };
 use indexmap::IndexMap;
@@ -371,7 +372,7 @@ fn to_group_scope(resource: &mut Resource, group: GroupCfg) -> (GroupScope, Subp
         .0
         .into_iter()
         .map(|(ident, cfg)| {
-            let ctx = to_node_context(cfg).into();
+            let ctx = to_node_context(cfg);
             let shared = resource.node_tab.insert(ctx);
             (ident, shared)
         })
