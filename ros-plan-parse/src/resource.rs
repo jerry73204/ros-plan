@@ -3,7 +3,7 @@ use crate::{
     error::Error,
     processor::{
         evaluator::Evaluator, link_resolver::LinkResolver, plan_visitor::PlanVisitor,
-        socket_resolver::SocketResolver,
+        shared_ref_initializer::SharedRefInitializer, socket_resolver::SocketResolver,
     },
     scope::ScopeTreeRef,
     utils::shared_table::SharedTable,
@@ -54,6 +54,12 @@ impl Resource {
     pub fn eval(&mut self, args: IndexMap<ParamName, Value>) -> Result<(), Error> {
         let mut evaluator = Evaluator::default();
         evaluator.eval_resource(self, args)?;
+        Ok(())
+    }
+
+    pub fn initialize_internal_references(&mut self) -> Result<(), Error> {
+        let mut updater = SharedRefInitializer::default();
+        updater.initialize(self)?;
         Ok(())
     }
 
