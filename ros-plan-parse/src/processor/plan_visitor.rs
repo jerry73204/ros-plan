@@ -11,7 +11,7 @@ use crate::{
     },
     error::Error,
     resource::{GroupScope, PlanFileScope, Resource, Scope, ScopeTree, ScopeTreeRef},
-    utils::{find_plan_file_from_pkg, read_toml_file, SharedTable},
+    utils::{find_plan_file_from_pkg, read_toml_file, shared_table::SharedTable},
 };
 use indexmap::IndexMap;
 use ros_plan_format::{

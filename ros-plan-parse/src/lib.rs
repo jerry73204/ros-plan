@@ -2,7 +2,6 @@ pub mod context;
 pub mod error;
 pub mod processor;
 pub mod resource;
-pub mod tree;
 pub mod utils;
 
 use crate::{

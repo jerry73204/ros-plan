@@ -3,8 +3,10 @@ use crate::{
         arg::ArgContext, expr::ExprContext, link::LinkContext, node::NodeContext,
         socket::SocketContext,
     },
-    tree::{Tree, TreeRef},
-    utils::{Owned, Shared, SharedTable},
+    utils::{
+        shared_table::{Owned, Shared, SharedTable},
+        tree::{Tree, TreeRef},
+    },
 };
 use indexmap::IndexMap;
 use parking_lot::{
