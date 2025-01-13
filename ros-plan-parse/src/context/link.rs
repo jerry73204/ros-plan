@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LinkContext {
-    Pubsub(PubSubLinkContext),
+    Pubsub(PubsubLinkContext),
     Service(ServiceLinkContext),
 }
 
@@ -15,14 +15,14 @@ impl From<ServiceLinkContext> for LinkContext {
     }
 }
 
-impl From<PubSubLinkContext> for LinkContext {
-    fn from(v: PubSubLinkContext) -> Self {
+impl From<PubsubLinkContext> for LinkContext {
+    fn from(v: PubsubLinkContext) -> Self {
         Self::Pubsub(v)
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct PubSubLinkContext {
+pub struct PubsubLinkContext {
     pub config: PubSubLinkCfg,
     pub src: Option<Vec<NodeTopicUri>>,
     pub dst: Option<Vec<NodeTopicUri>>,

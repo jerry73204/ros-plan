@@ -28,6 +28,10 @@ impl<T> SharedTable<T> {
             tab_weak: self.inner.downgrade(),
         })
     }
+
+    pub fn read_inner(&self) -> RwLockReadGuard<'_, StableVec<ArcRwLock<T>>> {
+        self.inner.read()
+    }
 }
 
 impl<T> Default for SharedTable<T> {

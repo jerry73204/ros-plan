@@ -2,7 +2,7 @@ use crate::{
     context::{
         arg::ArgContext,
         expr::ExprContext,
-        link::{LinkContext, PubSubLinkContext, ServiceLinkContext},
+        link::{LinkContext, PubsubLinkContext, ServiceLinkContext},
         node::{NodeContext, ProcessContext, RosNodeContext},
         socket::{
             PubSocketContext, QuerySocketContext, ServerSocketContext, SocketContext,
@@ -415,7 +415,7 @@ fn to_socket_context(socket_ctx: SocketCfg) -> SocketContext {
 
 fn to_link_context(link: LinkCfg) -> LinkContext {
     match link {
-        LinkCfg::Pubsub(link) => PubSubLinkContext {
+        LinkCfg::Pubsub(link) => PubsubLinkContext {
             config: link,
             src: None,
             dst: None,

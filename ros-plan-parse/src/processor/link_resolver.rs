@@ -1,7 +1,7 @@
 use crate::{
     context::{
         expr::ExprContext,
-        link::{LinkContext, PubSubLinkContext, ServiceLinkContext},
+        link::{LinkContext, PubsubLinkContext, ServiceLinkContext},
         socket::SocketContext,
         uri::NodeTopicUri,
     },
@@ -161,7 +161,7 @@ fn resolve_link(
 fn resolve_pubsub_link(
     context: &Resource,
     current: ScopeTreeRef,
-    link: &mut PubSubLinkContext,
+    link: &mut PubsubLinkContext,
 ) -> Result<(), Error> {
     let src: Vec<_> = link
         .config
