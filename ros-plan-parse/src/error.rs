@@ -21,8 +21,11 @@ pub enum Error {
     #[error("the variable `{0}` is already defined")]
     MultipleDefinitionOfVariable(ParamName),
 
-    #[error("unable to insert the key `{new}` because it conflicts with `{old}`")]
-    ConflictingKeys { old: KeyOwned, new: KeyOwned },
+    #[error("unable to insert the key `{inserted}` because it conflicts with `{offender}`")]
+    ConflictingKeys {
+        offender: KeyOwned,
+        inserted: KeyOwned,
+    },
 
     #[error("invalid subplan name `{key}`: {reason}")]
     InvalidSubplanName { key: KeyOwned, reason: String },

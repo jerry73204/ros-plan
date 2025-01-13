@@ -2,7 +2,11 @@ pub mod arc_rwlock;
 pub mod shared_table;
 pub mod tree;
 
-use crate::error::Error;
+use crate::{
+    error::Error,
+    resource::{NodeOwned, Resource, Scope, ScopeTreeRef, SocketOwned},
+};
+use ros_plan_format::{ident::Ident, key::Key};
 use serde::Deserialize;
 use std::{
     ffi::OsString,
@@ -62,4 +66,74 @@ pub fn find_plan_file_from_pkg(pkg: &str, file: &str) -> Result<PathBuf, Error> 
     let pkg_dir = find_pkg_dir(pkg)?;
     let plan_path = pkg_dir.join("share").join(pkg).join("plan").join(file);
     Ok(plan_path)
+}
+
+#[derive(Debug)]
+pub enum ResolveNode {
+    Node(NodeOwned),
+    Socket(SocketOwned),
+}
+
+impl From<SocketOwned> for ResolveNode {
+    fn from(v: SocketOwned) -> Self {
+        Self::Socket(v)
+    }
+}
+
+impl From<NodeOwned> for ResolveNode {
+    fn from(v: NodeOwned) -> Self {
+        Self::Node(v)
+    }
+}
+
+pub fn resolve_node_entity(
+    resource: &Resource,
+    current: ScopeTreeRef,
+    key: &Key,
+) -> Option<ResolveNode> {
+    let (target, node_name) = resolve_entity(resource, &current, key)?;
+
+    let guard = target.read();
+    let resolve: ResolveNode = match &guard.value {
+        Scope::PlanFile(ctx) => {
+            let shared = ctx.socket_map.get(node_name)?;
+            shared.upgrade().unwrap().into()
+        }
+        Scope::Group(ctx) => {
+            let node_arc = ctx.node_map.get(node_name)?;
+            node_arc.upgrade().unwrap().into()
+        }
+    };
+
+    Some(resolve)
+}
+
+pub fn resolve_entity<'a>(
+    resource: &Resource,
+    current: &ScopeTreeRef,
+    key: &'a Key,
+) -> Option<(ScopeTreeRef, &'a Ident)> {
+    let (prefix, entity) = key.split_parent();
+    let entity_name = entity.expect("the key should not be empty");
+
+    let target = match prefix {
+        None => current.clone(),
+        Some(prefix) => resolve_scope(resource, current, prefix)?,
+    };
+    Some((target, entity_name))
+}
+
+pub fn resolve_scope(
+    resource: &Resource,
+    current: &ScopeTreeRef,
+    key: &Key,
+) -> Option<ScopeTreeRef> {
+    let found = if key.is_empty() {
+        current.clone()
+    } else if key.is_absolute() {
+        resource.find_scope(key)?
+    } else {
+        current.find(key)?
+    };
+    Some(found)
 }

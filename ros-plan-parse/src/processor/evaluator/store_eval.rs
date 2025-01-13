@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use super::eval::Eval;
 use crate::{
     context::{
@@ -172,7 +174,7 @@ pub fn store_eval_arg_table(
 
 pub fn store_eval_subplan_table(
     lua: &Lua,
-    children: &IndexMap<KeyOwned, ScopeTreeRef>,
+    children: &BTreeMap<KeyOwned, ScopeTreeRef>,
 ) -> Result<(), Error> {
     for (_name, child) in children {
         let mut child = child.write();

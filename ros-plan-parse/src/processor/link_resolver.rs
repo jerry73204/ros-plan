@@ -6,13 +6,11 @@ use crate::{
         uri::NodeTopicUri,
     },
     error::Error,
-    resource::{NodeOwned, Resource, Scope, ScopeTreeRef, SocketOwned},
+    resource::{Resource, Scope, ScopeTreeRef},
+    utils::{resolve_node_entity, ResolveNode},
 };
 use itertools::Itertools;
-use ros_plan_format::{
-    key::{Key, KeyOwned},
-    link::TopicUri,
-};
+use ros_plan_format::{key::KeyOwned, link::TopicUri};
 use std::{collections::VecDeque, mem};
 
 macro_rules! bail_resolve_key_error {
@@ -173,7 +171,7 @@ fn resolve_pubsub_link(
                 node: node_key,
                 topic,
             } = uri;
-            let Some(resolve) = resolve_node_key(context, current.clone(), node_key) else {
+            let Some(resolve) = resolve_node_entity(context, current.clone(), node_key) else {
                 bail_resolve_key_error!(node_key, "unable to resolve key");
             };
 
@@ -205,13 +203,13 @@ fn resolve_pubsub_link(
                 node: node_key,
                 topic,
             } = uri;
-            let Some(resolve) = resolve_node_key(context, current.clone(), node_key) else {
+            let Some(resolve) = resolve_node_entity(context, current.clone(), node_key) else {
                 bail_resolve_key_error!(node_key, "unable to resolve key");
             };
 
             let uris: Vec<_> = match resolve {
-                ResolveNode::Node(node_arc) => vec![NodeTopicUri {
-                    node: node_arc.downgrade(),
+                ResolveNode::Node(shared) => vec![NodeTopicUri {
+                    node: shared.downgrade(),
                     topic: ExprContext::new(topic.clone()),
                 }],
                 ResolveNode::Socket(socket_arc) => {
@@ -244,7 +242,7 @@ fn resolve_service_link(
             node: node_key,
             topic,
         } = &link.config.listen;
-        let Some(resolve) = resolve_node_key(context, current.clone(), node_key) else {
+        let Some(resolve) = resolve_node_entity(context, current.clone(), node_key) else {
             bail_resolve_key_error!(node_key, "unable to resolve key");
         };
 
@@ -274,7 +272,7 @@ fn resolve_service_link(
                 node: node_key,
                 topic,
             } = uri;
-            let Some(resolve) = resolve_node_key(context, current.clone(), node_key) else {
+            let Some(resolve) = resolve_node_entity(context, current.clone(), node_key) else {
                 bail_resolve_key_error!(node_key, "unable to resolve key");
             };
 
@@ -301,47 +299,6 @@ fn resolve_service_link(
     link.connect = Some(connect);
 
     Ok(())
-}
-
-fn resolve_node_key(_context: &Resource, current: ScopeTreeRef, key: &Key) -> Option<ResolveNode> {
-    if key.is_absolute() {
-        // let node_weak = context.node_key_map.get(key)?;
-        // let node_arc = node_weak.upgrade().unwrap();
-        // Some(node_arc.into())
-        todo!()
-    } else {
-        let (prefix, node_name) = key.split_parent();
-        let node_name = node_name.expect("the key should not be empty");
-
-        let resolve: ResolveNode = match prefix {
-            Some(prefix) => {
-                let child = current.get_child(prefix)?;
-                let guard = child.read();
-                match &guard.value {
-                    Scope::PlanFile(ctx) => {
-                        let shared = ctx.socket_map.get(node_name)?;
-                        shared.upgrade().unwrap().into()
-                    }
-                    Scope::Group(ctx) => {
-                        let node_arc = ctx.node_map.get(node_name)?;
-                        node_arc.upgrade().unwrap().into()
-                    }
-                }
-            }
-            None => {
-                let guard = current.read();
-                let node_ctx = &guard.value;
-                let node_map = match node_ctx {
-                    Scope::PlanFile(ctx) => &ctx.node_map,
-                    Scope::Group(ctx) => &ctx.node_map,
-                };
-                let node_arc = node_map.get(node_name)?;
-                node_arc.upgrade().unwrap().into()
-            }
-        };
-
-        Some(resolve)
-    }
 }
 
 #[derive(Debug)]
@@ -372,22 +329,4 @@ struct VisitNodeJob {
 struct ResolveLinkJob {
     current: ScopeTreeRef,
     current_prefix: KeyOwned,
-}
-
-#[derive(Debug)]
-enum ResolveNode {
-    Node(NodeOwned),
-    Socket(SocketOwned),
-}
-
-impl From<SocketOwned> for ResolveNode {
-    fn from(v: SocketOwned) -> Self {
-        Self::Socket(v)
-    }
-}
-
-impl From<NodeOwned> for ResolveNode {
-    fn from(v: NodeOwned) -> Self {
-        Self::Node(v)
-    }
 }

@@ -1,5 +1,5 @@
 use crate::{
-    error::KeyCreationError,
+    error::{InvalidKeyPrefixError, KeyCreationError},
     ident::{Ident, IdentOwned},
 };
 use regex::Regex;
@@ -76,6 +76,46 @@ impl Key {
                 (None, name)
             }
         }
+    }
+
+    pub fn starts_with(&self, prefix: &Key) -> Result<bool, InvalidKeyPrefixError> {
+        if self.is_absolute() != prefix.is_absolute() {
+            return Err(InvalidKeyPrefixError {
+                checked: self.to_owned(),
+                prefix: prefix.to_owned(),
+            });
+        }
+
+        let me = self.as_str();
+        let prefix = prefix.as_str();
+
+        let Some(suffix) = me.strip_prefix(prefix) else {
+            return Ok(false);
+        };
+
+        Ok(suffix.is_empty() || suffix.starts_with('/'))
+    }
+
+    pub fn strip_prefix(&self, prefix: &Key) -> Result<Option<&Key>, InvalidKeyPrefixError> {
+        if self.is_absolute() != prefix.is_absolute() {
+            return Err(InvalidKeyPrefixError {
+                checked: self.to_owned(),
+                prefix: prefix.to_owned(),
+            });
+        }
+
+        let Some(suffix) = self.as_str().strip_prefix(prefix.as_str()) else {
+            return Ok(None);
+        };
+        let suffix = if suffix.is_empty() {
+            suffix
+        } else if let Some(suffix) = suffix.strip_prefix('/') {
+            suffix
+        } else {
+            return Ok(None);
+        };
+
+        Ok(Some(suffix.parse().unwrap()))
     }
 
     pub fn components(&self) -> Box<dyn Iterator<Item = &Ident> + '_> {

@@ -13,7 +13,7 @@ use parking_lot::{
     MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLockReadGuard, RwLockWriteGuard,
 };
 use ros_plan_format::{
-    link::LinkIdent, node::NodeIdent, parameter::ParamName, socket::SocketIdent,
+    key::Key, link::LinkIdent, node::NodeIdent, parameter::ParamName, socket::SocketIdent,
 };
 use serde::Serialize;
 use std::path::PathBuf;
@@ -33,6 +33,16 @@ pub struct Resource {
     pub(crate) node_tab: SharedTable<NodeContext>,
     pub(crate) link_tab: SharedTable<LinkContext>,
     pub(crate) socket_tab: SharedTable<SocketContext>,
+}
+
+impl Resource {
+    pub fn find_scope(&self, key: &Key) -> Option<ScopeTreeRef> {
+        let suffix = match key.strip_prefix("/".parse().unwrap()) {
+            Ok(Some(suffix)) => suffix,
+            _ => return None,
+        };
+        self.root.as_ref()?.find(suffix)
+    }
 }
 
 impl ScopeTreeRef {

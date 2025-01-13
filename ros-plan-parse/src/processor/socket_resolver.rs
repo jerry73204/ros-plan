@@ -8,13 +8,11 @@ use crate::{
         uri::NodeTopicUri,
     },
     error::Error,
-    resource::{NodeOwned, Resource, Scope, ScopeTreeRef, SocketOwned},
+    resource::{Resource, Scope, ScopeTreeRef},
+    utils::{resolve_node_entity, ResolveNode},
 };
 use itertools::Itertools;
-use ros_plan_format::{
-    key::{Key, KeyOwned},
-    link::TopicUri,
-};
+use ros_plan_format::{key::KeyOwned, link::TopicUri};
 use std::collections::VecDeque;
 
 macro_rules! bail_resolve_key_error {
@@ -47,7 +45,7 @@ impl SocketResolver {
                     self.visit_node(job)?;
                 }
                 Job::ResolveSocket(job) => {
-                    self.resolve_sockets_in_plan(job)?;
+                    self.resolve_sockets_in_plan(context, job)?;
                 }
             }
         }
@@ -92,7 +90,11 @@ impl SocketResolver {
         Ok(())
     }
 
-    fn resolve_sockets_in_plan(&self, job: ResolveSocketJob) -> Result<(), Error> {
+    fn resolve_sockets_in_plan(
+        &self,
+        resource: &mut Resource,
+        job: ResolveSocketJob,
+    ) -> Result<(), Error> {
         let ResolveSocketJob {
             current,
             // current_prefix: _,
@@ -113,7 +115,7 @@ impl SocketResolver {
             .try_for_each(|shared| -> Result<_, Error> {
                 let owned = shared.upgrade().unwrap();
                 let mut guard = owned.write();
-                resolve_socket_topics(current.clone(), &mut guard)
+                resolve_socket_topics(resource, current.clone(), &mut guard)
             })?;
 
         // Update plan context
@@ -130,19 +132,21 @@ impl SocketResolver {
 }
 
 fn resolve_socket_topics(
+    resource: &mut Resource,
     current: ScopeTreeRef,
     socket_ctx: &mut SocketContext,
 ) -> Result<(), Error> {
     match socket_ctx {
-        SocketContext::Pub(pub_ctx) => resolve_pub_socket_topics(current, pub_ctx)?,
-        SocketContext::Sub(sub_ctx) => resolve_sub_socket_topics(current, sub_ctx)?,
-        SocketContext::Srv(srv_ctx) => resolve_srv_socket_topics(current, srv_ctx)?,
-        SocketContext::Qry(qry_ctx) => resolve_qry_socket_topics(current, qry_ctx)?,
+        SocketContext::Pub(pub_ctx) => resolve_pub_socket_topics(resource, current, pub_ctx)?,
+        SocketContext::Sub(sub_ctx) => resolve_sub_socket_topics(resource, current, sub_ctx)?,
+        SocketContext::Srv(srv_ctx) => resolve_srv_socket_topics(resource, current, srv_ctx)?,
+        SocketContext::Qry(qry_ctx) => resolve_qry_socket_topics(resource, current, qry_ctx)?,
     }
     Ok(())
 }
 
 fn resolve_pub_socket_topics(
+    resource: &mut Resource,
     current: ScopeTreeRef,
     pub_: &mut PubSocketContext,
 ) -> Result<(), Error> {
@@ -156,7 +160,7 @@ fn resolve_pub_socket_topics(
                 topic,
             } = uri;
 
-            let Some(resolve) = resolve_node_key(current.clone(), node_key) else {
+            let Some(resolve) = resolve_node_entity(resource, current.clone(), node_key) else {
                 bail_resolve_key_error!(
                     node_key,
                     "the key does not resolve to a node or a plan socket"
@@ -187,6 +191,7 @@ fn resolve_pub_socket_topics(
 }
 
 fn resolve_sub_socket_topics(
+    resource: &mut Resource,
     current: ScopeTreeRef,
     sub: &mut SubSocketContext,
 ) -> Result<(), Error> {
@@ -200,7 +205,7 @@ fn resolve_sub_socket_topics(
                 topic,
             } = uri;
 
-            let Some(resolve) = resolve_node_key(current.clone(), node_key) else {
+            let Some(resolve) = resolve_node_entity(resource, current.clone(), node_key) else {
                 bail_resolve_key_error!(
                     node_key,
                     "the key does not resolve to a node or a plan socket"
@@ -231,6 +236,7 @@ fn resolve_sub_socket_topics(
 }
 
 fn resolve_srv_socket_topics(
+    resource: &mut Resource,
     current: ScopeTreeRef,
     srv: &mut ServerSocketContext,
 ) -> Result<(), Error> {
@@ -239,7 +245,7 @@ fn resolve_srv_socket_topics(
         topic,
     } = &srv.config.listen;
 
-    let Some(resolve) = resolve_node_key(current.clone(), node_key) else {
+    let Some(resolve) = resolve_node_entity(resource, current.clone(), node_key) else {
         bail_resolve_key_error!(
             node_key,
             "the key does not resolve to a node or a plan socket"
@@ -265,6 +271,7 @@ fn resolve_srv_socket_topics(
 }
 
 fn resolve_qry_socket_topics(
+    resource: &mut Resource,
     current: ScopeTreeRef,
     qry: &mut QuerySocketContext,
 ) -> Result<(), Error> {
@@ -278,7 +285,7 @@ fn resolve_qry_socket_topics(
                 topic,
             } = uri;
 
-            let Some(resolve) = resolve_node_key(current.clone(), node_key) else {
+            let Some(resolve) = resolve_node_entity(resource, current.clone(), node_key) else {
                 bail_resolve_key_error!(
                     node_key,
                     "the key does not resolve to a node or a plan socket"
@@ -308,45 +315,45 @@ fn resolve_qry_socket_topics(
     Ok(())
 }
 
-fn resolve_node_key(root: ScopeTreeRef, key: &Key) -> Option<ResolveNode> {
-    {
-        let guard = root.read();
-        if !matches!(guard.value, Scope::PlanFile { .. }) {
-            panic!("the search must starts at a plan node");
-        }
-    }
-    assert!(!key.is_absolute(), "the key must be relative");
+// fn resolve_node_key(root: ScopeTreeRef, key: &Key) -> Option<ResolveNode> {
+//     {
+//         let guard = root.read();
+//         if !matches!(guard.value, Scope::PlanFile { .. }) {
+//             panic!("the search must starts at a plan node");
+//         }
+//     }
+//     assert!(!key.is_absolute(), "the key must be relative");
 
-    let (prefix, node_name) = key.split_parent();
-    let node_name = node_name.expect("the key should not be empty");
+//     let (prefix, node_name) = key.split_parent();
+//     let node_name = node_name.expect("the key should not be empty");
 
-    let resolve: ResolveNode = match prefix {
-        Some(prefix) => {
-            let child = root.get_child(prefix)?;
-            let guard = child.read();
-            match &guard.value {
-                Scope::PlanFile(ctx) => {
-                    let shared = ctx.socket_map.get(node_name)?;
-                    shared.upgrade().unwrap().into()
-                }
-                Scope::Group(ctx) => {
-                    let shared = ctx.node_map.get(node_name)?;
-                    shared.upgrade().unwrap().into()
-                }
-            }
-        }
-        None => {
-            let guard = root.read();
-            let Scope::PlanFile(ctx) = &guard.value else {
-                unreachable!();
-            };
-            let shared = ctx.node_map.get(node_name)?;
-            shared.upgrade().unwrap().into()
-        }
-    };
+//     let resolve: ResolveNode = match prefix {
+//         Some(prefix) => {
+//             let child = root.get_child(prefix)?;
+//             let guard = child.read();
+//             match &guard.value {
+//                 Scope::PlanFile(ctx) => {
+//                     let shared = ctx.socket_map.get(node_name)?;
+//                     shared.upgrade().unwrap().into()
+//                 }
+//                 Scope::Group(ctx) => {
+//                     let shared = ctx.node_map.get(node_name)?;
+//                     shared.upgrade().unwrap().into()
+//                 }
+//             }
+//         }
+//         None => {
+//             let guard = root.read();
+//             let Scope::PlanFile(ctx) = &guard.value else {
+//                 unreachable!();
+//             };
+//             let shared = ctx.node_map.get(node_name)?;
+//             shared.upgrade().unwrap().into()
+//         }
+//     };
 
-    Some(resolve)
-}
+//     Some(resolve)
+// }
 
 #[derive(Debug)]
 pub enum Job {
@@ -378,20 +385,20 @@ pub struct ResolveSocketJob {
     // current_prefix: KeyOwned,
 }
 
-#[derive(Debug)]
-enum ResolveNode {
-    Node(NodeOwned),
-    Socket(SocketOwned),
-}
+// #[derive(Debug)]
+// enum ResolveNode {
+//     Node(NodeOwned),
+//     Socket(SocketOwned),
+// }
 
-impl From<SocketOwned> for ResolveNode {
-    fn from(v: SocketOwned) -> Self {
-        Self::Socket(v)
-    }
-}
+// impl From<SocketOwned> for ResolveNode {
+//     fn from(v: SocketOwned) -> Self {
+//         Self::Socket(v)
+//     }
+// }
 
-impl From<NodeOwned> for ResolveNode {
-    fn from(v: NodeOwned) -> Self {
-        Self::Node(v)
-    }
-}
+// impl From<NodeOwned> for ResolveNode {
+//     fn from(v: NodeOwned) -> Self {
+//         Self::Node(v)
+//     }
+// }

@@ -114,3 +114,10 @@ pub struct InvalidRosType {
 pub struct InvalidByteArrayData {
     pub reason: String,
 }
+
+#[derive(Debug, thiserror::Error)]
+#[error("unable to check if `{prefix}` is the prefix of `{checked}`")]
+pub struct InvalidKeyPrefixError {
+    pub checked: KeyOwned,
+    pub prefix: KeyOwned,
+}
