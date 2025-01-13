@@ -3,6 +3,7 @@ use ros_plan_format::socket::{PubSocketCfg, QuerySocketCfg, ServerSocketCfg, Sub
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SocketContext {
     Pub(PubSocketContext),
     Sub(SubSocketContext),

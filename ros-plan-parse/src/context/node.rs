@@ -7,6 +7,7 @@ use ros_plan_format::{
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum NodeContext {
     Ros(RosNodeContext),
     Proc(ProcessContext),
