@@ -1,25 +1,31 @@
 use crate::{
-    context::{
-        link::{LinkContext, PubsubLinkContext, ServiceLinkContext},
-        socket::SocketContext,
-        uri::NodeTopicUri,
-    },
+    context::link::{LinkContext, PubsubLinkContext, ServiceLinkContext},
     error::Error,
     resource::Resource,
-    scope::{Scope, ScopeTreeRef},
-    utils::{resolve_node_entity, ResolveNode},
+    scope::{LinkOwned, Scope, ScopeTreeRef},
+    utils::{
+        resolve_node_client, resolve_node_publication, resolve_node_server,
+        resolve_node_subscription,
+    },
 };
 use itertools::Itertools;
 use ros_plan_format::key::KeyOwned;
 use std::{collections::VecDeque, mem};
 
-macro_rules! bail_resolve_key_error {
+macro_rules! bail {
     ($key:expr, $reason:expr) => {
         return Err(Error::KeyResolutionError {
             key: $key.to_owned().into(),
             reason: $reason.to_string(),
         });
     };
+}
+
+macro_rules! set_or_panic {
+    ($opt:expr, $value:expr) => {{
+        let old = $opt.replace($value);
+        assert!(old.is_none());
+    }};
 }
 
 #[derive(Debug, Default)]
@@ -122,8 +128,12 @@ impl LinkResolver {
             .values_mut()
             .try_for_each(|shared| -> Result<_, Error> {
                 let owned = shared.upgrade().unwrap();
-                let mut guard = owned.write();
-                resolve_link(context, current.clone(), &mut guard)
+                {
+                    let mut guard = owned.write();
+                    resolve_sockets_in_link(context, current.clone(), &mut guard)?;
+                }
+                associate_link_on_node_sockets(owned);
+                Ok(())
             })?;
 
         // Push the resolved links back to the node context
@@ -145,119 +155,78 @@ impl LinkResolver {
     }
 }
 
-fn resolve_link(
+fn resolve_sockets_in_link(
     context: &Resource,
     current: ScopeTreeRef,
     link: &mut LinkContext,
 ) -> Result<(), Error> {
     match link {
-        LinkContext::PubSub(link) => resolve_pubsub_link(context, current, link)?,
-        LinkContext::Service(link) => resolve_service_link(context, current, link)?,
+        LinkContext::PubSub(link) => resolve_sockets_in_pubsub_link(context, current, link)?,
+        LinkContext::Service(link) => resolve_sockets_in_service_link(context, current, link)?,
     }
     Ok(())
 }
 
-fn resolve_pubsub_link(
+fn resolve_sockets_in_pubsub_link(
     context: &Resource,
     current: ScopeTreeRef,
     link: &mut PubsubLinkContext,
 ) -> Result<(), Error> {
-    let src: Vec<_> = link
-        .config
-        .src
-        .iter()
-        .map(|socket_key| {
-            let (Some(node_key), Some(socket_name)) = socket_key.split_parent() else {
-                bail_resolve_key_error!(socket_key, "unable to resolve socket");
-            };
-            let Some(resolve) = resolve_node_entity(context, current.clone(), node_key) else {
-                bail_resolve_key_error!(node_key, "unable to resolve node");
-            };
+    {
+        let src: Vec<_> = link
+            .config
+            .src
+            .iter()
+            .map(|socket_key| {
+                let Some(sockets) = resolve_node_publication(context, current.clone(), socket_key)
+                else {
+                    bail!(
+                        socket_key,
+                        "the key does not resolve to a publication socket"
+                    );
+                };
+                Ok(sockets)
+            })
+            .flatten_ok()
+            .try_collect()?;
 
-            let uris: Vec<_> = match resolve {
-                ResolveNode::Node(node_arc) => vec![NodeTopicUri {
-                    node: node_arc.downgrade(),
-                    topic: socket_name.to_owned(),
-                }],
-                ResolveNode::Socket(socket_arc) => {
-                    let guard = socket_arc.read();
-                    let SocketContext::Pub(pub_ctx) = &*guard else {
-                        bail_resolve_key_error!(node_key, "expect a pub socket");
-                    };
-                    pub_ctx.src.clone().unwrap()
-                }
-            };
+        set_or_panic!(link.src, src);
+    }
 
-            Ok(uris)
-        })
-        .flatten_ok()
-        .try_collect()?;
+    {
+        let dst: Vec<_> = link
+            .config
+            .dst
+            .iter()
+            .map(|socket_key| {
+                let Some(sockets) = resolve_node_subscription(context, current.clone(), socket_key)
+                else {
+                    bail!(
+                        socket_key,
+                        "the key does not resolve to a subscription socket"
+                    );
+                };
+                Ok(sockets)
+            })
+            .flatten_ok()
+            .try_collect()?;
 
-    let dst: Vec<_> = link
-        .config
-        .dst
-        .iter()
-        .map(|socket_key| {
-            let (Some(node_key), Some(socket_name)) = socket_key.split_parent() else {
-                bail_resolve_key_error!(socket_key, "unable to resolve socket");
-            };
-            let Some(resolve) = resolve_node_entity(context, current.clone(), node_key) else {
-                bail_resolve_key_error!(node_key, "unable to resolve node");
-            };
-
-            let uris: Vec<_> = match resolve {
-                ResolveNode::Node(shared) => vec![NodeTopicUri {
-                    node: shared.downgrade(),
-                    topic: socket_name.to_owned(),
-                }],
-                ResolveNode::Socket(socket_arc) => {
-                    let guard = socket_arc.read();
-                    let SocketContext::Sub(sub_ctx) = &*guard else {
-                        bail_resolve_key_error!(node_key, "expect a sub socket");
-                    };
-                    sub_ctx.dst.clone().unwrap()
-                }
-            };
-
-            Ok(uris)
-        })
-        .flatten_ok()
-        .try_collect()?;
-
-    link.src = Some(src);
-    link.dst = Some(dst);
-
+        set_or_panic!(link.dst, dst);
+    }
     Ok(())
 }
 
-fn resolve_service_link(
+fn resolve_sockets_in_service_link(
     context: &Resource,
     current: ScopeTreeRef,
     link: &mut ServiceLinkContext,
 ) -> Result<(), Error> {
     let listen = {
-        let (Some(node_key), Some(socket_name)) = link.config.listen.split_parent() else {
-            bail_resolve_key_error!(link.config.listen, "unable to resolve socket");
+        let socket_key = &link.config.listen;
+        let Some(socket) = resolve_node_server(context, current.clone(), socket_key) else {
+            bail!(socket_key, "the key does not resolve to a server socket");
         };
-        let Some(resolve) = resolve_node_entity(context, current.clone(), node_key) else {
-            bail_resolve_key_error!(node_key, "unable to resolve key");
-        };
-
-        let uri = match resolve {
-            ResolveNode::Node(node_arc) => NodeTopicUri {
-                node: node_arc.downgrade(),
-                topic: socket_name.to_owned(),
-            },
-            ResolveNode::Socket(socket_arc) => {
-                let guard = socket_arc.read();
-                let SocketContext::Srv(srv_ctx) = &*guard else {
-                    bail_resolve_key_error!(node_key, "expect a qry socket");
-                };
-                srv_ctx.listen.clone().unwrap()
-            }
-        };
-
-        uri
+        socket
     };
 
     let connect: Vec<_> = link
@@ -265,36 +234,57 @@ fn resolve_service_link(
         .connect
         .iter()
         .map(|socket_key| {
-            let (Some(node_key), Some(socket_name)) = socket_key.split_parent() else {
-                bail_resolve_key_error!(socket_key, "unable to resolve socket");
+            let Some(sockets) = resolve_node_client(context, current.clone(), socket_key) else {
+                bail!(socket_key, "the key does not resolve to a client socket");
             };
-            let Some(resolve) = resolve_node_entity(context, current.clone(), node_key) else {
-                bail_resolve_key_error!(node_key, "unable to resolve node");
-            };
-
-            let uris: Vec<_> = match resolve {
-                ResolveNode::Node(node_arc) => vec![NodeTopicUri {
-                    node: node_arc.downgrade(),
-                    topic: socket_name.to_owned(),
-                }],
-                ResolveNode::Socket(socket_arc) => {
-                    let guard = socket_arc.read();
-                    let SocketContext::Qry(qry_ctx) = &*guard else {
-                        bail_resolve_key_error!(node_key, "expect a qry socket");
-                    };
-                    qry_ctx.connect.clone().unwrap()
-                }
-            };
-
-            Ok(uris)
+            Ok(sockets)
         })
         .flatten_ok()
         .try_collect()?;
 
-    link.listen = Some(listen);
-    link.connect = Some(connect);
+    set_or_panic!(link.listen, listen);
+    set_or_panic!(link.connect, connect);
 
     Ok(())
+}
+
+fn associate_link_on_node_sockets(link_owned: LinkOwned) {
+    let link_shared = link_owned.downgrade();
+
+    let guard = link_owned.read();
+    match &*guard {
+        LinkContext::PubSub(pubsub) => {
+            for socket_shared in pubsub.src.as_ref().unwrap() {
+                let socket_owned = socket_shared.upgrade().unwrap();
+                let mut guard = socket_owned.write();
+                let pub_ = guard.as_publication_mut().unwrap();
+                set_or_panic!(pub_.link_to, link_shared.clone());
+            }
+
+            for socket_shared in pubsub.dst.as_ref().unwrap() {
+                let socket_owned = socket_shared.upgrade().unwrap();
+                let mut guard = socket_owned.write();
+                let sub = guard.as_subscription_mut().unwrap();
+                set_or_panic!(sub.link_to, link_shared.clone());
+            }
+        }
+        LinkContext::Service(service) => {
+            {
+                let socket_shared = service.listen.as_ref().unwrap();
+                let socket_owned = socket_shared.upgrade().unwrap();
+                let mut guard = socket_owned.write();
+                let srv = guard.as_server_mut().unwrap();
+                set_or_panic!(srv.link_to, link_shared.clone());
+            }
+
+            for socket_shared in service.connect.as_ref().unwrap() {
+                let socket_owned = socket_shared.upgrade().unwrap();
+                let mut guard = socket_owned.write();
+                let cli = guard.as_client_mut().unwrap();
+                set_or_panic!(cli.link_to, link_shared.clone());
+            }
+        }
+    }
 }
 
 #[derive(Debug)]

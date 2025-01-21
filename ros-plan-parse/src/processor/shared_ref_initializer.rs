@@ -1,18 +1,24 @@
 use crate::{
     context::{
         link::{LinkContext, PubsubLinkContext, ServiceLinkContext},
-        socket::{
-            PubSocketContext, QuerySocketContext, ServerSocketContext, SocketContext,
-            SubSocketContext,
+        node_socket::{
+            NodeClientContext, NodePublicationContext, NodeServerContext, NodeSocketContext,
+            NodeSubscriptionContext,
         },
-        uri::NodeTopicUri,
+        plan_socket::{
+            PlanClientContext, PlanPublicationContext, PlanServerContext, PlanSocketContext,
+            PlanSubscriptionContext,
+        },
     },
     error::Error,
-    scope::{GroupScope, LinkShared, NodeShared, PlanFileScope, Scope, ScopeTreeRef, SocketShared},
+    scope::{
+        GroupScope, LinkShared, NodeShared, NodeSocketShared, PlanFileScope, PlanSocketShared,
+        Scope, ScopeTreeRef,
+    },
     Resource,
 };
 use indexmap::IndexMap;
-use ros_plan_format::{link::LinkIdent, node::NodeIdent, socket::SocketIdent};
+use ros_plan_format::{link::LinkIdent, node::NodeIdent, plan_socket::PlanSocketIdent};
 use std::collections::VecDeque;
 
 pub struct SharedRefInitializer {
@@ -24,7 +30,8 @@ impl SharedRefInitializer {
         {
             let Resource {
                 link_tab,
-                socket_tab,
+                plan_socket_tab,
+                node_socket_tab,
                 ..
             } = resource;
 
@@ -32,8 +39,12 @@ impl SharedRefInitializer {
                 update_link_context(resource, &mut link.write())?;
             }
 
-            for (_id, socket) in socket_tab.read_inner().iter() {
-                update_socket_context(resource, &mut socket.write())?;
+            for (_id, socket) in plan_socket_tab.read_inner().iter() {
+                update_plan_socket_context(resource, &mut socket.write())?;
+            }
+
+            for (_id, socket) in node_socket_tab.read_inner().iter() {
+                update_node_socket_context(resource, &mut socket.write())?;
             }
         }
 
@@ -116,10 +127,10 @@ fn update_link_map(
 
 fn update_socket_map(
     resource: &Resource,
-    socket_map: &mut IndexMap<SocketIdent, SocketShared>,
+    socket_map: &mut IndexMap<PlanSocketIdent, PlanSocketShared>,
 ) -> Result<(), Error> {
     for shared in socket_map.values_mut() {
-        let Some(owned) = resource.socket_tab.get(shared.id()) else {
+        let Some(owned) = resource.plan_socket_tab.get(shared.id()) else {
             todo!()
         };
         *shared = owned.downgrade();
@@ -142,11 +153,11 @@ fn update_pubsub_link_context(
     let PubsubLinkContext { src, dst, .. } = link;
 
     for uri in src.iter_mut().flatten() {
-        update_topic_uri(resource, uri)?;
+        initialize_node_socket_shared(resource, uri)?;
     }
 
     for uri in dst.iter_mut().flatten() {
-        update_topic_uri(resource, uri)?;
+        initialize_node_socket_shared(resource, uri)?;
     }
 
     Ok(())
@@ -161,80 +172,151 @@ fn update_service_link_context(
     } = link;
 
     if let Some(uri) = listen {
-        update_topic_uri(resource, uri)?;
+        initialize_node_socket_shared(resource, uri)?;
     }
 
     for uri in connect.iter_mut().flatten() {
-        update_topic_uri(resource, uri)?;
+        initialize_node_socket_shared(resource, uri)?;
     }
     Ok(())
 }
 
-fn update_socket_context(resource: &Resource, socket: &mut SocketContext) -> Result<(), Error> {
-    match socket {
-        SocketContext::Pub(socket) => update_pub_socket_context(resource, socket)?,
-        SocketContext::Sub(socket) => update_sub_socket_context(resource, socket)?,
-        SocketContext::Srv(socket) => update_server_socket_context(resource, socket)?,
-        SocketContext::Qry(socket) => update_query_socket_context(resource, socket)?,
-    }
-    Ok(())
-}
-
-fn update_pub_socket_context(
+fn update_plan_socket_context(
     resource: &Resource,
-    socket: &mut PubSocketContext,
+    socket: &mut PlanSocketContext,
 ) -> Result<(), Error> {
-    let PubSocketContext { src, .. } = socket;
+    match socket {
+        PlanSocketContext::Publication(socket) => update_plan_pub_context(resource, socket)?,
+        PlanSocketContext::Subscription(socket) => update_plan_sub_context(resource, socket)?,
+        PlanSocketContext::Server(socket) => update_plan_server_context(resource, socket)?,
+        PlanSocketContext::Client(socket) => update_plan_client_context(resource, socket)?,
+    }
+    Ok(())
+}
+
+fn update_plan_pub_context(
+    resource: &Resource,
+    socket: &mut PlanPublicationContext,
+) -> Result<(), Error> {
+    let PlanPublicationContext { src, .. } = socket;
 
     for uri in src.iter_mut().flatten() {
-        update_topic_uri(resource, uri)?;
+        initialize_node_socket_shared(resource, uri)?;
     }
 
     Ok(())
 }
 
-fn update_sub_socket_context(
+fn update_plan_sub_context(
     resource: &Resource,
-    socket: &mut SubSocketContext,
+    socket: &mut PlanSubscriptionContext,
 ) -> Result<(), Error> {
-    let SubSocketContext { dst, .. } = socket;
+    let PlanSubscriptionContext { dst, .. } = socket;
 
     for uri in dst.iter_mut().flatten() {
-        update_topic_uri(resource, uri)?;
+        initialize_node_socket_shared(resource, uri)?;
     }
 
     Ok(())
 }
 
-fn update_server_socket_context(
+fn update_plan_server_context(
     resource: &Resource,
-    socket: &mut ServerSocketContext,
+    socket: &mut PlanServerContext,
 ) -> Result<(), Error> {
-    let ServerSocketContext { listen, .. } = socket;
+    let PlanServerContext { listen, .. } = socket;
 
     if let Some(uri) = listen {
-        update_topic_uri(resource, uri)?;
+        initialize_node_socket_shared(resource, uri)?;
     }
 
     Ok(())
 }
 
-fn update_query_socket_context(
+fn update_plan_client_context(
     resource: &Resource,
-    socket: &mut QuerySocketContext,
+    socket: &mut PlanClientContext,
 ) -> Result<(), Error> {
-    let QuerySocketContext { connect, .. } = socket;
+    let PlanClientContext { connect, .. } = socket;
 
     for uri in connect.iter_mut().flatten() {
-        update_topic_uri(resource, uri)?;
+        initialize_node_socket_shared(resource, uri)?;
     }
 
     Ok(())
 }
 
-fn update_topic_uri(resource: &Resource, uri: &mut NodeTopicUri) -> Result<(), Error> {
-    let NodeTopicUri { node: shared, .. } = uri;
-    let Some(owned) = resource.node_tab.get(shared.id()) else {
+fn update_node_socket_context(
+    resource: &Resource,
+    socket: &mut NodeSocketContext,
+) -> Result<(), Error> {
+    match socket {
+        NodeSocketContext::Publication(socket) => update_node_pub_context(resource, socket)?,
+        NodeSocketContext::Subscription(socket) => update_node_sub_context(resource, socket)?,
+        NodeSocketContext::Server(socket) => update_node_server_context(resource, socket)?,
+        NodeSocketContext::Client(socket) => update_node_client_context(resource, socket)?,
+    }
+    Ok(())
+}
+
+fn update_node_pub_context(
+    resource: &Resource,
+    socket: &mut NodePublicationContext,
+) -> Result<(), Error> {
+    let NodePublicationContext { link_to, .. } = socket;
+    if let Some(link_to) = link_to {
+        initialize_link_shared(resource, link_to)?;
+    }
+    Ok(())
+}
+
+fn update_node_sub_context(
+    resource: &Resource,
+    socket: &mut NodeSubscriptionContext,
+) -> Result<(), Error> {
+    let NodeSubscriptionContext { link_to, .. } = socket;
+    if let Some(link_to) = link_to {
+        initialize_link_shared(resource, link_to)?;
+    }
+    Ok(())
+}
+
+fn update_node_server_context(
+    resource: &Resource,
+    socket: &mut NodeServerContext,
+) -> Result<(), Error> {
+    let NodeServerContext { link_to, .. } = socket;
+    if let Some(link_to) = link_to {
+        initialize_link_shared(resource, link_to)?;
+    }
+
+    Ok(())
+}
+
+fn update_node_client_context(
+    resource: &Resource,
+    socket: &mut NodeClientContext,
+) -> Result<(), Error> {
+    let NodeClientContext { link_to, .. } = socket;
+    if let Some(link_to) = link_to {
+        initialize_link_shared(resource, link_to)?;
+    }
+    Ok(())
+}
+
+fn initialize_node_socket_shared(
+    resource: &Resource,
+    shared: &mut NodeSocketShared,
+) -> Result<(), Error> {
+    let Some(owned) = resource.node_socket_tab.get(shared.id()) else {
+        todo!()
+    };
+    *shared = owned.downgrade();
+    Ok(())
+}
+
+fn initialize_link_shared(resource: &Resource, shared: &mut LinkShared) -> Result<(), Error> {
+    let Some(owned) = resource.link_tab.get(shared.id()) else {
         todo!()
     };
     *shared = owned.downgrade();

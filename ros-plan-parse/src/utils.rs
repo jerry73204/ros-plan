@@ -4,9 +4,9 @@ pub mod shared_table;
 use crate::{
     error::Error,
     resource::Resource,
-    scope::{NodeOwned, Scope, ScopeTreeRef, SocketOwned},
+    scope::{NodeSocketOwned, NodeSocketShared, PlanSocketOwned, ScopeTreeRef},
 };
-use ros_plan_format::{ident::Ident, key::Key};
+use ros_plan_format::key::Key;
 use serde::Deserialize;
 use std::{
     ffi::OsString,
@@ -69,69 +69,193 @@ pub fn find_plan_file_from_pkg(pkg: &str, file: &str) -> Result<PathBuf, Error> 
 }
 
 #[derive(Debug)]
-pub enum ResolveNode {
-    Node(NodeOwned),
-    Socket(SocketOwned),
+pub enum FindSocket {
+    Node(NodeSocketOwned),
+    Plan(PlanSocketOwned),
 }
 
-impl From<SocketOwned> for ResolveNode {
-    fn from(v: SocketOwned) -> Self {
-        Self::Socket(v)
+impl FindSocket {
+    pub fn to_node_pub_src(&self) -> Option<Vec<NodeSocketShared>> {
+        Some(match self {
+            FindSocket::Node(socket) => {
+                if !socket.read().is_publication() {
+                    return None;
+                }
+                vec![socket.downgrade()]
+            }
+            FindSocket::Plan(socket) => {
+                let guard = socket.read();
+                let inner = guard.as_publication()?;
+                inner.src.clone().unwrap()
+            }
+        })
+    }
+
+    pub fn to_node_sub_dst(&self) -> Option<Vec<NodeSocketShared>> {
+        Some(match self {
+            FindSocket::Node(socket) => {
+                if !socket.read().is_subscription() {
+                    return None;
+                }
+                vec![socket.downgrade()]
+            }
+            FindSocket::Plan(socket) => {
+                let guard = socket.read();
+                let inner = guard.as_subscription()?;
+                inner.dst.clone().unwrap()
+            }
+        })
+    }
+
+    pub fn to_node_server_listen(&self) -> Option<NodeSocketShared> {
+        Some(match self {
+            FindSocket::Node(socket) => {
+                if !socket.read().is_server() {
+                    return None;
+                }
+                socket.downgrade()
+            }
+            FindSocket::Plan(socket) => {
+                let guard = socket.read();
+                let inner = guard.as_server()?;
+                inner.listen.clone().unwrap()
+            }
+        })
+    }
+
+    pub fn to_node_client_connect(&self) -> Option<Vec<NodeSocketShared>> {
+        Some(match self {
+            FindSocket::Node(socket) => {
+                if !socket.read().is_client() {
+                    return None;
+                }
+                vec![socket.downgrade()]
+            }
+            FindSocket::Plan(socket) => {
+                let guard = socket.read();
+                let inner = guard.as_client()?;
+                inner.connect.clone().unwrap()
+            }
+        })
     }
 }
 
-impl From<NodeOwned> for ResolveNode {
-    fn from(v: NodeOwned) -> Self {
+impl From<NodeSocketOwned> for FindSocket {
+    fn from(v: NodeSocketOwned) -> Self {
         Self::Node(v)
     }
 }
 
-pub fn resolve_node_entity(
+impl From<PlanSocketOwned> for FindSocket {
+    fn from(v: PlanSocketOwned) -> Self {
+        Self::Plan(v)
+    }
+}
+
+pub fn find_plan_or_node_socket(
     resource: &Resource,
     current: ScopeTreeRef,
-    key: &Key,
-) -> Option<ResolveNode> {
-    let (target, node_name) = resolve_entity(resource, &current, key)?;
-
-    let guard = target.read();
-    let resolve: ResolveNode = match &guard.value {
-        Scope::PlanFile(ctx) => {
-            let shared = ctx.node_map.get(node_name)?;
-            shared.upgrade().unwrap().into()
+    socket_key: &Key,
+) -> Option<FindSocket> {
+    let output: FindSocket = if socket_key.is_absolute() {
+        resource.find_node_socket(socket_key)?.into()
+    } else if socket_key.is_relative() {
+        if let Some(socket) = current.find_node_socket_within_scope(socket_key) {
+            socket.into()
+        } else {
+            let socket = current.find_subplan_socket_within_scope(socket_key)?;
+            socket.into()
         }
-        Scope::Group(ctx) => {
-            let shared = ctx.node_map.get(node_name)?;
-            shared.upgrade().unwrap().into()
-        }
-    };
-
-    Some(resolve)
-}
-
-pub fn resolve_entity<'a>(
-    resource: &Resource,
-    current: &ScopeTreeRef,
-    key: &'a Key,
-) -> Option<(ScopeTreeRef, &'a Ident)> {
-    let (prefix, entity) = key.split_parent();
-    let entity_name = entity.expect("the key should not be empty");
-
-    let target = match prefix {
-        None => current.clone(),
-        Some(prefix) => resolve_scope(resource, current, prefix)?,
-    };
-    Some((target, entity_name))
-}
-
-pub fn resolve_scope(
-    resource: &Resource,
-    current: &ScopeTreeRef,
-    key: &Key,
-) -> Option<ScopeTreeRef> {
-    let found = if key.is_absolute() {
-        resource.find_scope(key)?
     } else {
-        current.get_subscope(key)?
+        return None;
     };
-    Some(found)
+    Some(output)
+}
+
+pub fn resolve_node_publication(
+    resource: &Resource,
+    current: ScopeTreeRef,
+    socket_key: &Key,
+) -> Option<Vec<NodeSocketShared>> {
+    let find_socket = find_plan_or_node_socket(resource, current, socket_key)?;
+    let sockets = match find_socket {
+        FindSocket::Node(socket) => {
+            if !socket.read().is_publication() {
+                return None;
+            }
+            vec![socket.downgrade()]
+        }
+        FindSocket::Plan(socket) => {
+            let guard = socket.read();
+            let inner = guard.as_publication()?;
+            inner.src.clone().unwrap()
+        }
+    };
+    Some(sockets)
+}
+
+pub fn resolve_node_subscription(
+    resource: &Resource,
+    current: ScopeTreeRef,
+    socket_key: &Key,
+) -> Option<Vec<NodeSocketShared>> {
+    let find_socket = find_plan_or_node_socket(resource, current, socket_key)?;
+    let sockets = match find_socket {
+        FindSocket::Node(socket) => {
+            if !socket.read().is_subscription() {
+                return None;
+            }
+            vec![socket.downgrade()]
+        }
+        FindSocket::Plan(socket) => {
+            let guard = socket.read();
+            let inner = guard.as_subscription()?;
+            inner.dst.clone().unwrap()
+        }
+    };
+    Some(sockets)
+}
+
+pub fn resolve_node_server(
+    resource: &Resource,
+    current: ScopeTreeRef,
+    socket_key: &Key,
+) -> Option<NodeSocketShared> {
+    let find_socket = find_plan_or_node_socket(resource, current, socket_key)?;
+    let socket = match find_socket {
+        FindSocket::Node(socket) => {
+            if !socket.read().is_server() {
+                return None;
+            }
+            socket.downgrade()
+        }
+        FindSocket::Plan(socket) => {
+            let guard = socket.read();
+            let inner = guard.as_server()?;
+            inner.listen.clone().unwrap()
+        }
+    };
+    Some(socket)
+}
+
+pub fn resolve_node_client(
+    resource: &Resource,
+    current: ScopeTreeRef,
+    socket_key: &Key,
+) -> Option<Vec<NodeSocketShared>> {
+    let find_socket = find_plan_or_node_socket(resource, current, socket_key)?;
+    let sockets = match find_socket {
+        FindSocket::Node(socket) => {
+            if !socket.read().is_client() {
+                return None;
+            }
+            vec![socket.downgrade()]
+        }
+        FindSocket::Plan(socket) => {
+            let guard = socket.read();
+            let inner = guard.as_client()?;
+            inner.connect.clone().unwrap()
+        }
+    };
+    Some(sockets)
 }

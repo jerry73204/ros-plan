@@ -1,4 +1,6 @@
-use crate::{expr::ValueOrExpr, ident::IdentOwned, parameter::ParamName};
+use crate::{
+    expr::ValueOrExpr, ident::IdentOwned, node_socket::NodeSocketTable, parameter::ParamName,
+};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
@@ -24,4 +26,7 @@ pub struct NodeCfg {
 
     #[serde(default)]
     pub param: IndexMap<ParamName, ValueOrExpr>,
+
+    #[serde(default)]
+    pub socket: NodeSocketTable,
 }

@@ -1,11 +1,14 @@
 use crate::{
-    context::{link::LinkContext, node::NodeContext, socket::SocketContext},
+    context::{
+        link::LinkContext, node::NodeContext, node_socket::NodeSocketContext,
+        plan_socket::PlanSocketContext,
+    },
     error::Error,
     processor::{
         evaluator::Evaluator, link_resolver::LinkResolver, plan_visitor::PlanVisitor,
         shared_ref_initializer::SharedRefInitializer, socket_resolver::SocketResolver,
     },
-    scope::ScopeTreeRef,
+    scope::{NodeOwned, NodeSocketOwned, ScopeTreeRef},
     utils::shared_table::SharedTable,
 };
 use indexmap::IndexMap;
@@ -22,7 +25,8 @@ pub struct Resource {
     pub(crate) root: Option<ScopeTreeRef>,
     pub(crate) node_tab: SharedTable<NodeContext>,
     pub(crate) link_tab: SharedTable<LinkContext>,
-    pub(crate) socket_tab: SharedTable<SocketContext>,
+    pub(crate) plan_socket_tab: SharedTable<PlanSocketContext>,
+    pub(crate) node_socket_tab: SharedTable<NodeSocketContext>,
 }
 
 impl Resource {
@@ -33,7 +37,7 @@ impl Resource {
     {
         let path = path.as_ref();
 
-        // Perform plan/hereplan expansion
+        // Perform plan/group expansion
         let mut resource = {
             let mut visitor = PlanVisitor::default();
             visitor.traverse(path)?
@@ -67,7 +71,7 @@ impl Resource {
         Ok(())
     }
 
-    /// Locate the scope specified by an absolute key.
+    /// Locate a scope specified by an absolute key.
     pub fn find_scope(&self, key: &Key) -> Option<ScopeTreeRef> {
         let suffix = match key.strip_prefix("/".parse().unwrap()) {
             StripKeyPrefix::ImproperPrefix => {
@@ -85,6 +89,34 @@ impl Resource {
         };
 
         // Walk down to descent child nodes
-        self.root.as_ref().unwrap().get_subscope(suffix)
+        self.root.as_ref().unwrap().find_subscope_unbounded(suffix)
+    }
+
+    /// Locate a node specified by an absolute key.
+    pub fn find_node(&self, key: &Key) -> Option<NodeOwned> {
+        let (Some(scope_key), Some(node_name)) = key.split_parent() else {
+            return None;
+        };
+        let scope = self.find_scope(scope_key)?;
+        let node = {
+            let guard = scope.read();
+            let shared = guard.value.node_map().get(node_name)?;
+            shared.upgrade().unwrap()
+        };
+        Some(node)
+    }
+
+    /// Locate a socket on a node specified by an absolute key.
+    pub fn find_node_socket(&self, key: &Key) -> Option<NodeSocketOwned> {
+        let (Some(node_key), Some(socket_name)) = key.split_parent() else {
+            return None;
+        };
+        let node = self.find_node(node_key)?;
+        let socket = {
+            let guard = node.read();
+            let shared = guard.socket.get(socket_name)?;
+            shared.upgrade().unwrap()
+        };
+        Some(socket)
     }
 }

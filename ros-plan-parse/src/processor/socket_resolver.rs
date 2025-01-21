@@ -1,27 +1,34 @@
 use crate::{
-    context::{
-        socket::{
-            PubSocketContext, QuerySocketContext, ServerSocketContext, SocketContext,
-            SubSocketContext,
-        },
-        uri::NodeTopicUri,
+    context::plan_socket::{
+        PlanClientContext, PlanPublicationContext, PlanServerContext, PlanSocketContext,
+        PlanSubscriptionContext,
     },
     error::Error,
     resource::Resource,
     scope::{Scope, ScopeTreeRef},
-    utils::{resolve_node_entity, ResolveNode},
+    utils::{
+        resolve_node_client, resolve_node_publication, resolve_node_server,
+        resolve_node_subscription,
+    },
 };
 use itertools::Itertools;
 use ros_plan_format::key::KeyOwned;
 use std::collections::VecDeque;
 
-macro_rules! bail_resolve_key_error {
+macro_rules! bail {
     ($key:expr, $reason:expr) => {
         return Err(Error::KeyResolutionError {
             key: $key.to_owned().into(),
             reason: $reason.to_string(),
         });
     };
+}
+
+macro_rules! set_or_panic {
+    ($opt:expr, $value:expr) => {{
+        let old = $opt.replace($value);
+        assert!(old.is_none());
+    }};
 }
 
 #[derive(Debug, Default)]
@@ -134,13 +141,21 @@ impl SocketResolver {
 fn resolve_socket_topics(
     resource: &mut Resource,
     current: ScopeTreeRef,
-    socket_ctx: &mut SocketContext,
+    socket_ctx: &mut PlanSocketContext,
 ) -> Result<(), Error> {
     match socket_ctx {
-        SocketContext::Pub(pub_ctx) => resolve_pub_socket_topics(resource, current, pub_ctx)?,
-        SocketContext::Sub(sub_ctx) => resolve_sub_socket_topics(resource, current, sub_ctx)?,
-        SocketContext::Srv(srv_ctx) => resolve_srv_socket_topics(resource, current, srv_ctx)?,
-        SocketContext::Qry(qry_ctx) => resolve_qry_socket_topics(resource, current, qry_ctx)?,
+        PlanSocketContext::Publication(pub_ctx) => {
+            resolve_pub_socket_topics(resource, current, pub_ctx)?
+        }
+        PlanSocketContext::Subscription(sub_ctx) => {
+            resolve_sub_socket_topics(resource, current, sub_ctx)?
+        }
+        PlanSocketContext::Server(srv_ctx) => {
+            resolve_srv_socket_topics(resource, current, srv_ctx)?
+        }
+        PlanSocketContext::Client(qry_ctx) => {
+            resolve_qry_socket_topics(resource, current, qry_ctx)?
+        }
     }
     Ok(())
 }
@@ -148,208 +163,90 @@ fn resolve_socket_topics(
 fn resolve_pub_socket_topics(
     resource: &mut Resource,
     current: ScopeTreeRef,
-    pub_: &mut PubSocketContext,
+    pub_: &mut PlanPublicationContext,
 ) -> Result<(), Error> {
     let src: Vec<_> = pub_
         .config
         .src
         .iter()
         .map(|socket_key| {
-            let (Some(node_key), Some(socket_name)) = socket_key.split_parent() else {
-                bail_resolve_key_error!(socket_key, "unable to resolve socket");
-            };
-
-            let Some(resolve) = resolve_node_entity(resource, current.clone(), node_key) else {
-                bail_resolve_key_error!(
-                    node_key,
-                    "the key does not resolve to a node or a plan socket"
+            let Some(sockets) = resolve_node_publication(resource, current.clone(), socket_key)
+            else {
+                bail!(
+                    socket_key,
+                    "the key does not resolve to a publication socket"
                 );
             };
-
-            let topic_uris = match resolve {
-                ResolveNode::Node(child_node_arc) => vec![NodeTopicUri {
-                    node: child_node_arc.downgrade(),
-                    topic: socket_name.to_owned(),
-                }],
-                ResolveNode::Socket(child_socket_arc) => {
-                    let guard = child_socket_arc.read();
-                    let SocketContext::Pub(child_pub_ctx) = &*guard else {
-                        bail_resolve_key_error!(node_key, "socket type mismatch");
-                    };
-                    child_pub_ctx.src.clone().unwrap()
-                }
-            };
-
-            Ok(topic_uris)
+            Ok(sockets)
         })
         .flatten_ok()
         .try_collect()?;
-    pub_.src = Some(src);
 
+    set_or_panic!(pub_.src, src);
     Ok(())
 }
 
 fn resolve_sub_socket_topics(
     resource: &mut Resource,
     current: ScopeTreeRef,
-    sub: &mut SubSocketContext,
+    sub: &mut PlanSubscriptionContext,
 ) -> Result<(), Error> {
     let dst: Vec<_> = sub
         .config
         .dst
         .iter()
         .map(|socket_key| {
-            let (Some(node_key), Some(socket_name)) = socket_key.split_parent() else {
-                bail_resolve_key_error!(socket_key, "unable to resolve socket");
-            };
-
-            let Some(resolve) = resolve_node_entity(resource, current.clone(), node_key) else {
-                bail_resolve_key_error!(
-                    node_key,
-                    "the key does not resolve to a node or a plan socket"
+            let Some(sockets) = resolve_node_subscription(resource, current.clone(), socket_key)
+            else {
+                bail!(
+                    socket_key,
+                    "the key does not resolve to a subscription socket"
                 );
             };
-
-            let topic_uris = match resolve {
-                ResolveNode::Node(child_node_arc) => vec![NodeTopicUri {
-                    node: child_node_arc.downgrade(),
-                    topic: socket_name.to_owned(),
-                }],
-                ResolveNode::Socket(child_socket_arc) => {
-                    let guard = child_socket_arc.read();
-                    let SocketContext::Sub(child_sub_ctx) = &*guard else {
-                        bail_resolve_key_error!(node_key, "socket type mismatch");
-                    };
-                    child_sub_ctx.dst.clone().unwrap()
-                }
-            };
-
-            Ok(topic_uris)
+            Ok(sockets)
         })
         .flatten_ok()
         .try_collect()?;
 
-    sub.dst = Some(dst);
+    set_or_panic!(sub.dst, dst);
     Ok(())
 }
 
 fn resolve_srv_socket_topics(
     resource: &mut Resource,
     current: ScopeTreeRef,
-    srv: &mut ServerSocketContext,
+    srv: &mut PlanServerContext,
 ) -> Result<(), Error> {
-    let (Some(node_key), Some(socket_name)) = srv.config.listen.split_parent() else {
-        bail_resolve_key_error!(srv.config.listen, "unable to resolve socket");
+    let socket_key = &srv.config.listen;
+    let Some(socket) = resolve_node_server(resource, current.clone(), socket_key) else {
+        bail!(socket_key, "the key does not resolve to a server socket");
     };
 
-    let Some(resolve) = resolve_node_entity(resource, current.clone(), node_key) else {
-        bail_resolve_key_error!(
-            node_key,
-            "the key does not resolve to a node or a plan socket"
-        );
-    };
-
-    let listen = match resolve {
-        ResolveNode::Node(child_node_arc) => NodeTopicUri {
-            node: child_node_arc.downgrade(),
-            topic: socket_name.to_owned(),
-        },
-        ResolveNode::Socket(child_socket_arc) => {
-            let guard = child_socket_arc.read();
-            let SocketContext::Srv(child_srv_ctx) = &*guard else {
-                bail_resolve_key_error!(node_key, "socket type mismatch");
-            };
-            child_srv_ctx.listen.clone().unwrap()
-        }
-    };
-
-    srv.listen = Some(listen);
+    set_or_panic!(srv.listen, socket);
     Ok(())
 }
 
 fn resolve_qry_socket_topics(
     resource: &mut Resource,
     current: ScopeTreeRef,
-    qry: &mut QuerySocketContext,
+    qry: &mut PlanClientContext,
 ) -> Result<(), Error> {
     let connect: Vec<_> = qry
         .config
         .connect
         .iter()
         .map(|socket_key| {
-            let (Some(node_key), Some(socket_name)) = socket_key.split_parent() else {
-                bail_resolve_key_error!(socket_key, "unable to resolve socket");
+            let Some(sockets) = resolve_node_client(resource, current.clone(), socket_key) else {
+                bail!(socket_key, "the key does not resolve to a client socket");
             };
-
-            let Some(resolve) = resolve_node_entity(resource, current.clone(), node_key) else {
-                bail_resolve_key_error!(
-                    node_key,
-                    "the key does not resolve to a node or a plan socket"
-                );
-            };
-
-            let topic_uris = match resolve {
-                ResolveNode::Node(child_node_arc) => vec![NodeTopicUri {
-                    node: child_node_arc.downgrade(),
-                    topic: socket_name.to_owned(),
-                }],
-                ResolveNode::Socket(child_socket_arc) => {
-                    let guard = child_socket_arc.read();
-                    let SocketContext::Qry(child_qry_ctx) = &*guard else {
-                        bail_resolve_key_error!(node_key, "socket type mismatch");
-                    };
-                    child_qry_ctx.connect.clone().unwrap()
-                }
-            };
-
-            Ok(topic_uris)
+            Ok(sockets)
         })
         .flatten_ok()
         .try_collect()?;
 
-    qry.connect = Some(connect);
+    set_or_panic!(qry.connect, connect);
     Ok(())
 }
-
-// fn resolve_node_key(root: ScopeTreeRef, key: &Key) -> Option<ResolveNode> {
-//     {
-//         let guard = root.read();
-//         if !matches!(guard.value, Scope::PlanFile { .. }) {
-//             panic!("the search must starts at a plan node");
-//         }
-//     }
-//     assert!(!key.is_absolute(), "the key must be relative");
-
-//     let (prefix, node_name) = key.split_parent();
-//     let node_name = node_name.expect("the key should not be empty");
-
-//     let resolve: ResolveNode = match prefix {
-//         Some(prefix) => {
-//             let child = root.get_child(prefix)?;
-//             let guard = child.read();
-//             match &guard.value {
-//                 Scope::PlanFile(ctx) => {
-//                     let shared = ctx.socket_map.get(node_name)?;
-//                     shared.upgrade().unwrap().into()
-//                 }
-//                 Scope::Group(ctx) => {
-//                     let shared = ctx.node_map.get(node_name)?;
-//                     shared.upgrade().unwrap().into()
-//                 }
-//             }
-//         }
-//         None => {
-//             let guard = root.read();
-//             let Scope::PlanFile(ctx) = &guard.value else {
-//                 unreachable!();
-//             };
-//             let shared = ctx.node_map.get(node_name)?;
-//             shared.upgrade().unwrap().into()
-//         }
-//     };
-
-//     Some(resolve)
-// }
 
 #[derive(Debug)]
 pub enum Job {

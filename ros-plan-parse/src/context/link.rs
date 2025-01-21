@@ -1,11 +1,12 @@
-use super::uri::NodeTopicUri;
 use ros_plan_format::{
     key::{Key, KeyOwned},
     link::{PubSubLinkCfg, ServiceLinkCfg},
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+use crate::scope::NodeSocketShared;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LinkContext {
     #[serde(rename = "pubsub")]
     PubSub(PubsubLinkContext),
@@ -34,18 +35,18 @@ impl From<PubsubLinkContext> for LinkContext {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PubsubLinkContext {
     pub key: KeyOwned,
     pub config: PubSubLinkCfg,
-    pub src: Option<Vec<NodeTopicUri>>,
-    pub dst: Option<Vec<NodeTopicUri>>,
+    pub src: Option<Vec<NodeSocketShared>>,
+    pub dst: Option<Vec<NodeSocketShared>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceLinkContext {
     pub key: KeyOwned,
     pub config: ServiceLinkCfg,
-    pub listen: Option<NodeTopicUri>,
-    pub connect: Option<Vec<NodeTopicUri>>,
+    pub listen: Option<NodeSocketShared>,
+    pub connect: Option<Vec<NodeSocketShared>>,
 }

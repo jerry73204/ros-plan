@@ -4,9 +4,13 @@ use crate::{
         expr::ExprContext,
         link::{LinkContext, PubsubLinkContext, ServiceLinkContext},
         node::NodeContext,
-        socket::{
-            PubSocketContext, QuerySocketContext, ServerSocketContext, SocketContext,
-            SubSocketContext,
+        node_socket::{
+            NodeClientContext, NodePublicationContext, NodeServerContext, NodeSocketContext,
+            NodeSubscriptionContext,
+        },
+        plan_socket::{
+            PlanClientContext, PlanPublicationContext, PlanServerContext, PlanSocketContext,
+            PlanSubscriptionContext,
         },
     },
     error::Error,
@@ -21,9 +25,10 @@ use ros_plan_format::{
     key::{Key, KeyOwned},
     link::LinkCfg,
     node::NodeCfg,
+    node_socket::NodeSocketCfg,
     parameter::ParamName,
     plan::Plan,
-    socket::SocketCfg,
+    plan_socket::PlanSocketCfg,
     subplan::{GroupCfg, SubplanCfg, SubplanTable},
 };
 use std::{
@@ -42,7 +47,8 @@ impl PlanVisitor {
             root: None,
             node_tab: SharedTable::default(),
             link_tab: SharedTable::default(),
-            socket_tab: SharedTable::default(),
+            plan_socket_tab: SharedTable::default(),
+            node_socket_tab: SharedTable::default(),
         };
 
         self.insert_root_plan(&mut context, path, IndexMap::new())?;
@@ -324,7 +330,7 @@ fn to_plan_scope(
         .into_iter()
         .map(|(ident, cfg)| {
             let node_key = scope_key / &ident;
-            let ctx = to_node_context(node_key, cfg);
+            let ctx = to_node_context(resource, node_key, cfg);
             let shared = resource.node_tab.insert(ctx);
             (ident, shared)
         })
@@ -337,7 +343,7 @@ fn to_plan_scope(
         .map(|(ident, cfg)| {
             let socket_key = scope_key / &ident;
             let ctx = to_socket_context(socket_key, cfg);
-            let shared = resource.socket_tab.insert(ctx);
+            let shared = resource.plan_socket_tab.insert(ctx);
             (ident, shared)
         })
         .collect();
@@ -394,7 +400,7 @@ fn to_group_scope(
         .into_iter()
         .map(|(ident, cfg)| {
             let node_key = scope_key / &ident;
-            let ctx = to_node_context(node_key, cfg);
+            let ctx = to_node_context(resource, node_key, cfg);
             let shared = resource.node_tab.insert(ctx);
             (ident, shared)
         })
@@ -419,27 +425,27 @@ fn to_group_scope(
     (ctx, group.subplan)
 }
 
-fn to_socket_context(key: KeyOwned, socket_ctx: SocketCfg) -> SocketContext {
+fn to_socket_context(key: KeyOwned, socket_ctx: PlanSocketCfg) -> PlanSocketContext {
     match socket_ctx {
-        SocketCfg::Pub(config) => PubSocketContext {
+        PlanSocketCfg::Publication(config) => PlanPublicationContext {
             config,
             src: None,
             key,
         }
         .into(),
-        SocketCfg::Sub(config) => SubSocketContext {
+        PlanSocketCfg::Subscription(config) => PlanSubscriptionContext {
             config,
             dst: None,
             key,
         }
         .into(),
-        SocketCfg::Srv(config) => ServerSocketContext {
+        PlanSocketCfg::Server(config) => PlanServerContext {
             config,
             listen: None,
             key,
         }
         .into(),
-        SocketCfg::Qry(config) => QuerySocketContext {
+        PlanSocketCfg::Client(config) => PlanClientContext {
             config,
             connect: None,
             key,
@@ -515,16 +521,57 @@ fn check_arg_assignment(
     Ok(())
 }
 
-fn to_node_context(key: KeyOwned, node_cfg: NodeCfg) -> NodeContext {
+fn to_node_context(resource: &mut Resource, node_key: KeyOwned, node_cfg: NodeCfg) -> NodeContext {
     let param = node_cfg
         .param
-        .clone()
-        .into_iter()
-        .map(|(name, eval)| (name, ExprContext::new(eval)))
+        .iter()
+        .map(|(name, eval)| (name.clone(), ExprContext::new(eval.clone())))
         .collect();
+    let socket: IndexMap<_, _> = node_cfg
+        .socket
+        .0
+        .iter()
+        .map(|(name, socket_cfg)| {
+            let socket_key = &node_key / name;
+            let ctx = to_node_socket_context(socket_key, socket_cfg.clone());
+            let shared = resource.node_socket_tab.insert(ctx);
+            (name.clone(), shared)
+        })
+        .collect();
+
     NodeContext {
-        key,
-        param,
         config: node_cfg,
+        key: node_key,
+        param,
+        socket,
+    }
+}
+
+fn to_node_socket_context(key: KeyOwned, cfg: NodeSocketCfg) -> NodeSocketContext {
+    match cfg {
+        NodeSocketCfg::Publication(cfg) => NodePublicationContext {
+            key,
+            config: cfg,
+            link_to: None,
+        }
+        .into(),
+        NodeSocketCfg::Subscription(cfg) => NodeSubscriptionContext {
+            key,
+            config: cfg,
+            link_to: None,
+        }
+        .into(),
+        NodeSocketCfg::Server(cfg) => NodeServerContext {
+            key,
+            config: cfg,
+            link_to: None,
+        }
+        .into(),
+        NodeSocketCfg::Client(cfg) => NodeClientContext {
+            key,
+            config: cfg,
+            link_to: None,
+        }
+        .into(),
     }
 }

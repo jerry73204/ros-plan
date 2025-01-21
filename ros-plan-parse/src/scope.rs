@@ -1,7 +1,7 @@
 use crate::{
     context::{
         arg::ArgContext, expr::ExprContext, link::LinkContext, node::NodeContext,
-        socket::SocketContext,
+        node_socket::NodeSocketContext, plan_socket::PlanSocketContext,
     },
     error::Error,
     utils::{
@@ -18,7 +18,7 @@ use ros_plan_format::{
     link::LinkIdent,
     node::NodeIdent,
     parameter::ParamName,
-    socket::SocketIdent,
+    plan_socket::PlanSocketIdent,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, ops::Bound, path::PathBuf};
@@ -29,8 +29,11 @@ pub type NodeShared = Shared<NodeContext>;
 pub type LinkOwned = Owned<LinkContext>;
 pub type LinkShared = Shared<LinkContext>;
 
-pub type SocketOwned = Owned<SocketContext>;
-pub type SocketShared = Shared<SocketContext>;
+pub type PlanSocketOwned = Owned<PlanSocketContext>;
+pub type PlanSocketShared = Shared<PlanSocketContext>;
+
+pub type NodeSocketOwned = Owned<NodeSocketContext>;
+pub type NodeSocketShared = Shared<NodeSocketContext>;
 
 pub type ScopeTreeRef = ArcRwLock<ScopeTree>;
 
@@ -85,7 +88,7 @@ impl ScopeTreeRef {
         RwLockWriteGuard::try_map(guard, |g| g.value.as_group_mut()).ok()
     }
 
-    pub fn get_immediate_subscope(&self, key: &Key) -> Option<(Self, Option<KeyOwned>)> {
+    pub fn get_immediate_subscope<'a>(&self, key: &'a Key) -> Option<(Self, Option<&'a Key>)> {
         if !key.is_relative() {
             return None;
         }
@@ -99,7 +102,7 @@ impl ScopeTreeRef {
         let suffix = match key.strip_prefix(prev_key) {
             StripKeyPrefix::ImproperPrefix => return None,
             StripKeyPrefix::EmptySuffix => None,
-            StripKeyPrefix::Suffix(suffix) => Some(suffix.to_owned()),
+            StripKeyPrefix::Suffix(suffix) => Some(suffix),
         };
         Some((prev_child.clone(), suffix))
     }
@@ -147,7 +150,7 @@ impl ScopeTreeRef {
         Ok(child)
     }
 
-    pub fn get_subscope(&self, key: &Key) -> Option<Self> {
+    pub fn find_subscope_within_scope(&self, key: &Key) -> Option<Self> {
         if !key.is_relative() {
             return None;
         }
@@ -160,6 +163,63 @@ impl ScopeTreeRef {
             if curr.is_plan_file() {
                 return None;
             }
+            let (child, next_suffix) = curr.get_immediate_subscope(&curr_suffix)?;
+            curr = child;
+            suffix = next_suffix;
+        }
+
+        Some(curr)
+    }
+
+    pub fn find_node_within_scope(&self, key: &Key) -> Option<NodeOwned> {
+        let (scope_key, Some(node_name)) = key.split_parent() else {
+            return None;
+        };
+        let scope = match scope_key {
+            Some(key) => self.find_subscope_within_scope(key)?,
+            None => self.clone(),
+        };
+        let node = {
+            let guard = scope.read();
+            let shared = guard.value.node_map().get(node_name)?;
+            shared.upgrade().unwrap()
+        };
+        Some(node)
+    }
+
+    pub fn find_node_socket_within_scope(&self, key: &Key) -> Option<NodeSocketOwned> {
+        let (Some(node_key), Some(socket_name)) = key.split_parent() else {
+            return None;
+        };
+        let node = self.find_node_within_scope(node_key)?;
+        let socket = {
+            let guard = node.read();
+            let shared = guard.socket.get(socket_name)?;
+            shared.upgrade().unwrap()
+        };
+        Some(socket)
+    }
+
+    pub fn find_subplan_socket_within_scope(&self, key: &Key) -> Option<PlanSocketOwned> {
+        let (Some(scope_key), Some(socket_name)) = key.split_parent() else {
+            return None;
+        };
+        let subscope = self.find_subscope_within_scope(scope_key)?;
+        let plan_file = subscope.as_plan_file()?;
+        let shared = plan_file.socket_map.get(socket_name)?;
+        let socket = shared.upgrade().unwrap();
+        Some(socket)
+    }
+
+    pub fn find_subscope_unbounded(&self, key: &Key) -> Option<Self> {
+        if !key.is_relative() {
+            return None;
+        }
+
+        let mut curr = self.clone();
+        let mut suffix = Some(key);
+
+        while let Some(curr_suffix) = suffix.take() {
             let (child, next_suffix) = curr.get_immediate_subscope(&curr_suffix)?;
             curr = child;
             suffix = next_suffix;
@@ -223,6 +283,13 @@ impl Scope {
             None
         }
     }
+
+    pub fn node_map(&self) -> &IndexMap<NodeIdent, NodeShared> {
+        match self {
+            Scope::PlanFile(scope) => &scope.node_map,
+            Scope::Group(scope) => &scope.node_map,
+        }
+    }
 }
 
 impl From<PlanFileScope> for Scope {
@@ -249,7 +316,7 @@ pub struct PlanFileScope {
     pub when: Option<ExprContext>,
     pub arg_map: IndexMap<ParamName, ArgContext>,
     pub var_map: IndexMap<ParamName, ExprContext>,
-    pub socket_map: IndexMap<SocketIdent, SocketShared>,
+    pub socket_map: IndexMap<PlanSocketIdent, PlanSocketShared>,
     pub node_map: IndexMap<NodeIdent, NodeShared>,
     pub link_map: IndexMap<LinkIdent, LinkShared>,
 }

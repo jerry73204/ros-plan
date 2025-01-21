@@ -100,10 +100,10 @@ impl<T> Owned<T> {
         entry.write()
     }
 
-    pub fn downgrade(self) -> Shared<T> {
+    pub fn downgrade(&self) -> Shared<T> {
         Shared {
             id: self.id,
-            tab_weak: self.tab_weak,
+            tab_weak: self.tab_weak.clone(),
         }
     }
 

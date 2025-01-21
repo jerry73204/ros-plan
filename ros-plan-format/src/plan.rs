@@ -1,6 +1,6 @@
 use crate::{
     argument::ArgEntry, expr::ValueOrExpr, link::LinkTable, node::NodeTable, parameter::ParamName,
-    socket::SocketTable, subplan::SubplanTable,
+    plan_socket::PlanSocketTable, subplan::SubplanTable,
 };
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -15,7 +15,7 @@ pub struct Plan {
     pub var: IndexMap<ParamName, ValueOrExpr>,
 
     #[serde(default)]
-    pub socket: SocketTable,
+    pub socket: PlanSocketTable,
 
     #[serde(default)]
     pub node: NodeTable,
