@@ -21,7 +21,8 @@ pub enum ArgCfg {
 #[serde(deny_unknown_fields)]
 struct SerializedArgEntry {
     pub help: Option<String>,
-    pub require: Option<ValueType>,
+    #[serde(rename = "type")]
+    pub ty: Option<ValueType>,
     pub default: Option<Value>,
 }
 
@@ -30,7 +31,7 @@ impl TryFrom<SerializedArgEntry> for ArgEntry {
 
     fn try_from(entry: SerializedArgEntry) -> Result<Self, Self::Error> {
         let SerializedArgEntry {
-            require: expect,
+            ty: expect,
             default,
             help,
         } = entry;
@@ -55,12 +56,12 @@ impl From<ArgEntry> for SerializedArgEntry {
 
         match slot {
             ArgCfg::Required { ty } => Self {
-                require: Some(ty),
+                ty: Some(ty),
                 default: None,
                 help,
             },
             ArgCfg::Optional { default } => Self {
-                require: None,
+                ty: None,
                 default: Some(default),
                 help,
             },

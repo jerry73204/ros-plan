@@ -1,6 +1,5 @@
 pub mod arc_rwlock;
 pub mod shared_table;
-pub mod tree;
 
 use crate::{
     error::Error,
@@ -17,7 +16,7 @@ use std::{
     process::Command,
 };
 
-pub fn read_toml_file<T, P>(path: P) -> Result<T, Error>
+pub fn read_yaml_file<T, P>(path: P) -> Result<T, Error>
 where
     T: for<'de> Deserialize<'de>,
     P: AsRef<Path>,
@@ -27,7 +26,7 @@ where
         path: path.to_owned(),
         error,
     })?;
-    let data = toml::from_str(&text).map_err(|error| Error::ParsePlanFileError {
+    let data = serde_yaml::from_str(&text).map_err(|error| Error::ParsePlanFileError {
         path: path.to_owned(),
         error,
     })?;
@@ -129,12 +128,10 @@ pub fn resolve_scope(
     current: &ScopeTreeRef,
     key: &Key,
 ) -> Option<ScopeTreeRef> {
-    let found = if key.is_empty() {
-        current.clone()
-    } else if key.is_absolute() {
-        resource.resolve_absolute_key(key)?
+    let found = if key.is_absolute() {
+        resource.find_scope(key)?
     } else {
-        current.resolve_key(key)?
+        current.get_subscope(key)?
     };
     Some(found)
 }

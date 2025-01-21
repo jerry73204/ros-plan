@@ -3,9 +3,10 @@ use crate::{
         arg::ArgContext, expr::ExprContext, link::LinkContext, node::NodeContext,
         socket::SocketContext,
     },
+    error::Error,
     utils::{
+        arc_rwlock::ArcRwLock,
         shared_table::{Owned, Shared},
-        tree::{Tree, TreeRef},
     },
 };
 use indexmap::IndexMap;
@@ -13,10 +14,14 @@ use parking_lot::{
     MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLockReadGuard, RwLockWriteGuard,
 };
 use ros_plan_format::{
-    key::Key, link::LinkIdent, node::NodeIdent, parameter::ParamName, socket::SocketIdent,
+    key::{Key, KeyOwned, StripKeyPrefix},
+    link::LinkIdent,
+    node::NodeIdent,
+    parameter::ParamName,
+    socket::SocketIdent,
 };
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{collections::BTreeMap, ops::Bound, path::PathBuf};
 
 pub type NodeOwned = Owned<NodeContext>;
 pub type NodeShared = Shared<NodeContext>;
@@ -27,8 +32,22 @@ pub type LinkShared = Shared<LinkContext>;
 pub type SocketOwned = Owned<SocketContext>;
 pub type SocketShared = Shared<SocketContext>;
 
-pub type ScopeTree = Tree<Scope>;
-pub type ScopeTreeRef = TreeRef<Scope>;
+pub type ScopeTreeRef = ArcRwLock<ScopeTree>;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ScopeTree {
+    pub value: Scope,
+    pub children: BTreeMap<KeyOwned, ScopeTreeRef>,
+}
+
+impl ScopeTree {
+    pub fn new(value: Scope) -> Self {
+        Self {
+            value,
+            children: BTreeMap::new(),
+        }
+    }
+}
 
 impl ScopeTreeRef {
     pub fn kind(&self) -> ScopeKind {
@@ -66,23 +85,82 @@ impl ScopeTreeRef {
         RwLockWriteGuard::try_map(guard, |g| g.value.as_group_mut()).ok()
     }
 
-    pub fn resolve_key(&self, key: &Key) -> Option<Self> {
-        if key.is_absolute() {
+    pub fn get_immediate_subscope(&self, key: &Key) -> Option<(Self, Option<KeyOwned>)> {
+        if !key.is_relative() {
             return None;
         }
-        if key.is_empty() {
-            return Some(self.clone());
+
+        let guard = self.read();
+        let children = &guard.children;
+
+        let (prev_key, prev_child) = children
+            .range::<Key, _>((Bound::Unbounded, Bound::Included(key)))
+            .next_back()?;
+        let suffix = match key.strip_prefix(prev_key) {
+            StripKeyPrefix::ImproperPrefix => return None,
+            StripKeyPrefix::EmptySuffix => None,
+            StripKeyPrefix::Suffix(suffix) => Some(suffix.to_owned()),
+        };
+        Some((prev_child.clone(), suffix))
+    }
+
+    pub fn insert_immediate_subscope(&self, key: KeyOwned, value: Scope) -> Result<Self, Error> {
+        // Reject non-relative keys.
+        if !key.is_relative() {
+            return Err(Error::InvalidSubplanName {
+                key: key.to_owned(),
+                reason: "absolute key is not allowed".to_string(),
+            });
+        }
+
+        // Return error if the key is a prefix or an extension of an
+        // existing key.
+        let mut guard = self.write();
+        let children = &mut guard.children;
+
+        if let Some((prev_key, _)) = children.range(..key.clone()).next_back() {
+            if key.starts_with(prev_key) {
+                return Err(Error::ConflictingKeys {
+                    offender: prev_key.to_owned(),
+                    inserted: key.to_owned(),
+                });
+            }
+        }
+
+        if let Some((next_key, _)) = children.range(key.clone()..).next() {
+            if next_key.starts_with(&key) {
+                return Err(Error::ConflictingKeys {
+                    offender: next_key.to_owned(),
+                    inserted: key.to_owned(),
+                });
+            }
+        }
+
+        // Create the child
+        let child: ScopeTreeRef = ScopeTree {
+            children: BTreeMap::new(),
+            value,
+        }
+        .into();
+        children.insert(key, child.clone());
+
+        Ok(child)
+    }
+
+    pub fn get_subscope(&self, key: &Key) -> Option<Self> {
+        if !key.is_relative() {
+            return None;
         }
 
         // The first step can start from a plan or a group node.
-        let (mut curr, mut suffix) = self.get_child(key)?;
+        let (mut curr, mut suffix) = self.get_immediate_subscope(key)?;
 
         // In later steps, it can only start from a group node.
         while let Some(curr_suffix) = suffix.take() {
             if curr.is_plan_file() {
                 return None;
             }
-            let (child, next_suffix) = curr.get_child(&curr_suffix)?;
+            let (child, next_suffix) = curr.get_immediate_subscope(&curr_suffix)?;
             curr = child;
             suffix = next_suffix;
         }

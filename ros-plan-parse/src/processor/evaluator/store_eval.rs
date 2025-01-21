@@ -2,18 +2,13 @@ use std::collections::BTreeMap;
 
 use super::eval::Eval;
 use crate::{
-    context::{
-        arg::ArgContext, expr::ExprContext, link::LinkContext, node::NodeContext,
-        socket::SocketContext,
-    },
+    context::{arg::ArgContext, expr::ExprContext, node::NodeContext},
     error::Error,
-    scope::{LinkShared, NodeShared, Scope, ScopeTreeRef, SocketShared},
+    scope::{NodeShared, Scope, ScopeTreeRef},
 };
 use indexmap::IndexMap;
 use mlua::prelude::*;
-use ros_plan_format::{
-    key::KeyOwned, link::LinkIdent, node::NodeIdent, parameter::ParamName, socket::SocketIdent,
-};
+use ros_plan_format::{key::KeyOwned, node::NodeIdent, parameter::ParamName};
 
 pub trait StoreEval {
     fn store_eval(&mut self, lua: &Lua) -> Result<(), Error>;
@@ -37,66 +32,10 @@ impl StoreEval for ExprContext {
     }
 }
 
-impl StoreEval for SocketContext {
-    fn store_eval(&mut self, lua: &Lua) -> Result<(), Error> {
-        match self {
-            SocketContext::Pub(socket) => {
-                for uri in socket.src.as_mut().unwrap() {
-                    uri.topic.store_eval(lua)?;
-                }
-            }
-            SocketContext::Sub(socket) => {
-                for uri in socket.dst.as_mut().unwrap() {
-                    uri.topic.store_eval(lua)?;
-                }
-            }
-            SocketContext::Srv(socket) => {
-                socket.listen.as_mut().unwrap().topic.store_eval(lua)?;
-            }
-            SocketContext::Qry(socket) => {
-                for uri in socket.connect.as_mut().unwrap() {
-                    uri.topic.store_eval(lua)?;
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-impl StoreEval for LinkContext {
-    fn store_eval(&mut self, lua: &Lua) -> Result<(), Error> {
-        match self {
-            LinkContext::Pubsub(link) => {
-                for uri in link.src.as_mut().unwrap() {
-                    uri.topic.store_eval(lua)?;
-                }
-                for uri in link.dst.as_mut().unwrap() {
-                    uri.topic.store_eval(lua)?;
-                }
-            }
-            LinkContext::Service(link) => {
-                link.listen.as_mut().unwrap().topic.store_eval(lua)?;
-                for uri in link.connect.as_mut().unwrap() {
-                    uri.topic.store_eval(lua)?;
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
-
 impl StoreEval for NodeContext {
     fn store_eval(&mut self, lua: &Lua) -> Result<(), Error> {
-        match self {
-            NodeContext::Ros(node) => {
-                for param in node.param.values_mut() {
-                    param.store_eval(lua)?;
-                }
-            }
-            NodeContext::Proc(_node) => {
-                // nothing
-            }
+        for param in self.param.values_mut() {
+            param.store_eval(lua)?;
         }
 
         Ok(())
@@ -116,31 +55,31 @@ pub fn store_eval_node_map(
     Ok(())
 }
 
-pub fn store_eval_link_map(
-    lua: &Lua,
-    link_map: &mut IndexMap<LinkIdent, LinkShared>,
-) -> Result<(), Error> {
-    for (_key, shared) in link_map {
-        let owned = shared.upgrade().unwrap();
-        let mut guard = owned.write();
-        guard.store_eval(lua)?;
-    }
+// pub fn store_eval_link_map(
+//     lua: &Lua,
+//     link_map: &mut IndexMap<LinkIdent, LinkShared>,
+// ) -> Result<(), Error> {
+//     for (_key, shared) in link_map {
+//         let owned = shared.upgrade().unwrap();
+//         let mut guard = owned.write();
+//         guard.store_eval(lua)?;
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
-pub fn store_eval_socket_map(
-    lua: &Lua,
-    socket_map: &mut IndexMap<SocketIdent, SocketShared>,
-) -> Result<(), Error> {
-    for (_key, shared) in socket_map {
-        let owned = shared.upgrade().unwrap();
-        let mut guard = owned.write();
-        guard.store_eval(lua)?;
-    }
+// pub fn store_eval_socket_map(
+//     lua: &Lua,
+//     socket_map: &mut IndexMap<SocketIdent, SocketShared>,
+// ) -> Result<(), Error> {
+//     for (_key, shared) in socket_map {
+//         let owned = shared.upgrade().unwrap();
+//         let mut guard = owned.write();
+//         guard.store_eval(lua)?;
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 pub fn store_eval_root_arg_table(
     arg_table: &mut IndexMap<ParamName, ArgContext>,

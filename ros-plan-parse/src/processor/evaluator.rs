@@ -14,8 +14,7 @@ use mlua::prelude::*;
 use ros_plan_format::{expr::Value, parameter::ParamName};
 use std::collections::VecDeque;
 use store_eval::{
-    store_eval_link_map, store_eval_node_map, store_eval_root_arg_table, store_eval_socket_map,
-    store_eval_subplan_table, StoreEval,
+    store_eval_node_map, store_eval_root_arg_table, store_eval_subplan_table, StoreEval,
 };
 
 #[derive(Debug, Default)]
@@ -83,10 +82,10 @@ impl Evaluator {
             store_eval_node_map(&lua, &mut scope_guard.node_map)?;
 
             // Evaluate the link table
-            store_eval_link_map(&lua, &mut scope_guard.link_map)?;
+            // store_eval_link_map(&lua, &mut scope_guard.link_map)?;
 
             // Evaluate the socket table
-            store_eval_socket_map(&lua, &mut scope_guard.socket_map)?;
+            // store_eval_socket_map(&lua, &mut scope_guard.socket_map)?;
 
             // Evaluate assigned arguments and `when` conditions on
             // subscopes.
@@ -111,7 +110,7 @@ impl Evaluator {
             store_eval_node_map(lua, &mut scope_guard.node_map)?;
 
             // Evaluate the link table
-            store_eval_link_map(lua, &mut scope_guard.link_map)?;
+            // store_eval_link_map(lua, &mut scope_guard.link_map)?;
 
             // Evaluate assigned arguments and `when` condition on
             // subscopes

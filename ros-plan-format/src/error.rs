@@ -103,10 +103,16 @@ pub enum KeyCreationError {
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("`{bad_type}` is not a valid ROS type: {reason}")]
-pub struct InvalidRosType {
-    pub bad_type: String,
+#[error("cannot create a ROS topic from string `{topic}: {reason}`")]
+pub struct TopicCreationError {
+    pub topic: String,
     pub reason: String,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("`{name}` is not a proper interface type name")]
+pub struct InvalidInterfaceType {
+    pub name: String,
 }
 
 #[derive(Debug, thiserror::Error)]

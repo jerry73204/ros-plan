@@ -6,16 +6,17 @@ use ros_plan_format::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub enum LinkContext {
-    Pubsub(PubsubLinkContext),
+    #[serde(rename = "pubsub")]
+    PubSub(PubsubLinkContext),
+    #[serde(rename = "service")]
     Service(ServiceLinkContext),
 }
 
 impl LinkContext {
     pub fn key(&self) -> &Key {
         match self {
-            LinkContext::Pubsub(link) => &link.key,
+            LinkContext::PubSub(link) => &link.key,
             LinkContext::Service(link) => &link.key,
         }
     }
@@ -29,7 +30,7 @@ impl From<ServiceLinkContext> for LinkContext {
 
 impl From<PubsubLinkContext> for LinkContext {
     fn from(v: PubsubLinkContext) -> Self {
-        Self::Pubsub(v)
+        Self::PubSub(v)
     }
 }
 

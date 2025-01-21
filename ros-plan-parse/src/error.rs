@@ -9,7 +9,7 @@ pub enum Error {
     #[error("unable to parse plan file `{path}`: {error}")]
     ParsePlanFileError {
         path: PathBuf,
-        error: toml::de::Error,
+        error: serde_yaml::Error,
     },
 
     #[error("repeated publication or subscription key {0}")]

@@ -23,18 +23,18 @@ impl IntoLua for ValueToLua<'_> {
 
         match self.0 {
             Value::Bool(val) => val.into_lua(lua),
-            Value::Integer(val) => val.into_lua(lua),
-            Value::Double(val) => val.into_lua(lua),
+            Value::I64(val) => val.into_lua(lua),
+            Value::F64(val) => val.into_lua(lua),
             Value::String(val) => val.as_str().into_lua(lua),
-            Value::ByteArray { bytes } => {
+            Value::Binary(bytes) => {
                 let buffer = lua.create_buffer(bytes.as_slice())?;
                 lua.convert(buffer)
             }
             // Arrays are converted to Lua tables with an optional "_type" field.
-            Value::BoolArray(vec) => convert_array(lua, vec, ValueType::Bool),
-            Value::IntegerArray(vec) => convert_array(lua, vec, ValueType::Integer),
-            Value::DoubleArray(vec) => convert_array(lua, vec, ValueType::Double),
-            Value::StringArray(vec) => convert_array(lua, vec, ValueType::String),
+            Value::BoolList(vec) => convert_array(lua, vec, ValueType::Bool),
+            Value::I64List(vec) => convert_array(lua, vec, ValueType::I64),
+            Value::F64List(vec) => convert_array(lua, vec, ValueType::F64),
+            Value::StringList(vec) => convert_array(lua, vec, ValueType::String),
         }
     }
 }
@@ -62,8 +62,8 @@ impl FromLua for ValueFromLua {
                     let first: LuaValue = table.get(1)?;
                     match first {
                         LuaValue::Boolean(_) => ValueType::Bool,
-                        LuaValue::Integer(_) => ValueType::Integer,
-                        LuaValue::Number(_) => ValueType::Double,
+                        LuaValue::Integer(_) => ValueType::I64,
+                        LuaValue::Number(_) => ValueType::F64,
                         LuaValue::String(_) => ValueType::String,
                         LuaNil => {
                             return Err(LuaError::external(format!(
@@ -106,8 +106,8 @@ impl FromLua for ValueFromLua {
 
                 let array: Value = match ty {
                     ValueType::Bool => convert!(Bool),
-                    ValueType::Integer => convert!(Integer),
-                    ValueType::Double => convert!(Double),
+                    ValueType::I64 => convert!(I64),
+                    ValueType::F64 => convert!(F64),
                     ValueType::String => convert!(String),
                     _ => return Err(LuaError::external(format!("unknown type `{ty}`"))),
                 };

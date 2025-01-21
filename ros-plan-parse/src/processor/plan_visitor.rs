@@ -3,7 +3,7 @@ use crate::{
         arg::ArgContext,
         expr::ExprContext,
         link::{LinkContext, PubsubLinkContext, ServiceLinkContext},
-        node::{NodeContext, ProcessContext, RosNodeContext},
+        node::NodeContext,
         socket::{
             PubSocketContext, QuerySocketContext, ServerSocketContext, SocketContext,
             SubSocketContext,
@@ -12,7 +12,7 @@ use crate::{
     error::Error,
     resource::Resource,
     scope::{GroupScope, PlanFileScope, Scope, ScopeTree, ScopeTreeRef},
-    utils::{find_plan_file_from_pkg, read_toml_file, shared_table::SharedTable},
+    utils::{find_plan_file_from_pkg, read_yaml_file, shared_table::SharedTable},
 };
 use indexmap::IndexMap;
 use ros_plan_format::{
@@ -70,7 +70,7 @@ impl PlanVisitor {
         let scope_key = Key::root();
 
         // Read plan file
-        let plan: Plan = read_toml_file(plan_path)?;
+        let plan: Plan = read_yaml_file(plan_path)?;
 
         // Check arg assignment
         check_arg_assignment(&plan.arg, &assign_args)?;
@@ -123,7 +123,7 @@ impl PlanVisitor {
         };
 
         // Read plan file
-        let plan: Plan = read_toml_file(&child_plan_path)?;
+        let plan: Plan = read_yaml_file(&child_plan_path)?;
 
         // Check arg assignment
         check_arg_assignment(&plan.arg, &assign_args)?;
@@ -139,7 +139,7 @@ impl PlanVisitor {
         )?;
 
         // Create the child node for the plan
-        let plan_child = current.insert(child_suffix, plan_ctx.into())?;
+        let plan_child = current.insert_immediate_subscope(child_suffix, plan_ctx.into())?;
 
         // Schedule subplan insertion jobs
         for (subplan_suffix, subplan) in subplan_tab.0 {
@@ -173,7 +173,8 @@ impl PlanVisitor {
 
         // Schedule subplan insertion jobs
         {
-            let group_child = current.insert(child_suffix, group_scope.into())?;
+            let group_child =
+                current.insert_immediate_subscope(child_suffix, group_scope.into())?;
 
             for (subplan_suffix, subplan) in subplan_tab.0 {
                 self.schedule_subplan_insertion(
@@ -449,7 +450,7 @@ fn to_socket_context(key: KeyOwned, socket_ctx: SocketCfg) -> SocketContext {
 
 fn to_link_context(key: KeyOwned, link_cfg: LinkCfg) -> LinkContext {
     match link_cfg {
-        LinkCfg::Pubsub(link_cfg) => PubsubLinkContext {
+        LinkCfg::PubSub(link_cfg) => PubsubLinkContext {
             key,
             config: link_cfg,
             src: None,
@@ -515,25 +516,15 @@ fn check_arg_assignment(
 }
 
 fn to_node_context(key: KeyOwned, node_cfg: NodeCfg) -> NodeContext {
-    match node_cfg {
-        NodeCfg::Ros(node_cfg) => {
-            let param = node_cfg
-                .param
-                .clone()
-                .into_iter()
-                .map(|(name, eval)| (name, ExprContext::new(eval)))
-                .collect();
-            RosNodeContext {
-                key,
-                param,
-                config: node_cfg,
-            }
-            .into()
-        }
-        NodeCfg::Proc(node_cfg) => ProcessContext {
-            key,
-            config: node_cfg,
-        }
-        .into(),
+    let param = node_cfg
+        .param
+        .clone()
+        .into_iter()
+        .map(|(name, eval)| (name, ExprContext::new(eval)))
+        .collect();
+    NodeContext {
+        key,
+        param,
+        config: node_cfg,
     }
 }

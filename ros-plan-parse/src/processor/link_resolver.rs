@@ -1,6 +1,5 @@
 use crate::{
     context::{
-        expr::ExprContext,
         link::{LinkContext, PubsubLinkContext, ServiceLinkContext},
         socket::SocketContext,
         uri::NodeTopicUri,
@@ -11,13 +10,13 @@ use crate::{
     utils::{resolve_node_entity, ResolveNode},
 };
 use itertools::Itertools;
-use ros_plan_format::{key::KeyOwned, link::TopicUri};
+use ros_plan_format::key::KeyOwned;
 use std::{collections::VecDeque, mem};
 
 macro_rules! bail_resolve_key_error {
     ($key:expr, $reason:expr) => {
         return Err(Error::KeyResolutionError {
-            key: $key.clone().into(),
+            key: $key.to_owned().into(),
             reason: $reason.to_string(),
         });
     };
@@ -152,7 +151,7 @@ fn resolve_link(
     link: &mut LinkContext,
 ) -> Result<(), Error> {
     match link {
-        LinkContext::Pubsub(link) => resolve_pubsub_link(context, current, link)?,
+        LinkContext::PubSub(link) => resolve_pubsub_link(context, current, link)?,
         LinkContext::Service(link) => resolve_service_link(context, current, link)?,
     }
     Ok(())
@@ -167,19 +166,18 @@ fn resolve_pubsub_link(
         .config
         .src
         .iter()
-        .map(|uri| {
-            let TopicUri {
-                node: node_key,
-                topic,
-            } = uri;
+        .map(|socket_key| {
+            let (Some(node_key), Some(socket_name)) = socket_key.split_parent() else {
+                bail_resolve_key_error!(socket_key, "unable to resolve socket");
+            };
             let Some(resolve) = resolve_node_entity(context, current.clone(), node_key) else {
-                bail_resolve_key_error!(node_key, "unable to resolve key");
+                bail_resolve_key_error!(node_key, "unable to resolve node");
             };
 
             let uris: Vec<_> = match resolve {
                 ResolveNode::Node(node_arc) => vec![NodeTopicUri {
                     node: node_arc.downgrade(),
-                    topic: ExprContext::new(topic.clone()),
+                    topic: socket_name.to_owned(),
                 }],
                 ResolveNode::Socket(socket_arc) => {
                     let guard = socket_arc.read();
@@ -199,19 +197,18 @@ fn resolve_pubsub_link(
         .config
         .dst
         .iter()
-        .map(|uri| {
-            let TopicUri {
-                node: node_key,
-                topic,
-            } = uri;
+        .map(|socket_key| {
+            let (Some(node_key), Some(socket_name)) = socket_key.split_parent() else {
+                bail_resolve_key_error!(socket_key, "unable to resolve socket");
+            };
             let Some(resolve) = resolve_node_entity(context, current.clone(), node_key) else {
-                bail_resolve_key_error!(node_key, "unable to resolve key");
+                bail_resolve_key_error!(node_key, "unable to resolve node");
             };
 
             let uris: Vec<_> = match resolve {
                 ResolveNode::Node(shared) => vec![NodeTopicUri {
                     node: shared.downgrade(),
-                    topic: ExprContext::new(topic.clone()),
+                    topic: socket_name.to_owned(),
                 }],
                 ResolveNode::Socket(socket_arc) => {
                     let guard = socket_arc.read();
@@ -239,10 +236,9 @@ fn resolve_service_link(
     link: &mut ServiceLinkContext,
 ) -> Result<(), Error> {
     let listen = {
-        let TopicUri {
-            node: node_key,
-            topic,
-        } = &link.config.listen;
+        let (Some(node_key), Some(socket_name)) = link.config.listen.split_parent() else {
+            bail_resolve_key_error!(link.config.listen, "unable to resolve socket");
+        };
         let Some(resolve) = resolve_node_entity(context, current.clone(), node_key) else {
             bail_resolve_key_error!(node_key, "unable to resolve key");
         };
@@ -250,7 +246,7 @@ fn resolve_service_link(
         let uri = match resolve {
             ResolveNode::Node(node_arc) => NodeTopicUri {
                 node: node_arc.downgrade(),
-                topic: ExprContext::new(topic.clone()),
+                topic: socket_name.to_owned(),
             },
             ResolveNode::Socket(socket_arc) => {
                 let guard = socket_arc.read();
@@ -268,19 +264,18 @@ fn resolve_service_link(
         .config
         .connect
         .iter()
-        .map(|uri| {
-            let TopicUri {
-                node: node_key,
-                topic,
-            } = uri;
+        .map(|socket_key| {
+            let (Some(node_key), Some(socket_name)) = socket_key.split_parent() else {
+                bail_resolve_key_error!(socket_key, "unable to resolve socket");
+            };
             let Some(resolve) = resolve_node_entity(context, current.clone(), node_key) else {
-                bail_resolve_key_error!(node_key, "unable to resolve key");
+                bail_resolve_key_error!(node_key, "unable to resolve node");
             };
 
             let uris: Vec<_> = match resolve {
                 ResolveNode::Node(node_arc) => vec![NodeTopicUri {
                     node: node_arc.downgrade(),
-                    topic: ExprContext::new(topic.clone()),
+                    topic: socket_name.to_owned(),
                 }],
                 ResolveNode::Socket(socket_arc) => {
                     let guard = socket_arc.read();

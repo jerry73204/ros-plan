@@ -2,6 +2,7 @@ pub mod argument;
 pub mod error;
 pub mod expr;
 pub mod ident;
+pub mod interface_type;
 pub mod key;
 pub mod link;
 pub mod node;
@@ -9,7 +10,6 @@ pub mod parameter;
 pub mod plan;
 pub mod qos;
 pub mod qos_requirement;
-pub mod ros_type;
 pub mod socket;
 pub mod subplan;
 

@@ -1,6 +1,5 @@
-use crate::error::InvalidByteArrayData;
 use base64::prelude::*;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{de::Error as _, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{self, Debug, Display};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,64 +152,78 @@ impl Display for Expr {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
 pub enum Value {
+    #[serde(rename = "bool")]
     Bool(bool),
-    Integer(i64),
-    Double(f64),
+
+    #[serde(rename = "i64")]
+    I64(i64),
+
+    #[serde(rename = "f64")]
+    F64(f64),
+
+    #[serde(rename = "str")]
     String(String),
-    BoolArray(Vec<bool>),
-    IntegerArray(Vec<i64>),
-    DoubleArray(Vec<f64>),
-    StringArray(Vec<String>),
-    ByteArray { bytes: ByteArrayData },
+
+    #[serde(rename = "bool_list")]
+    BoolList(Vec<bool>),
+
+    #[serde(rename = "i64_list")]
+    I64List(Vec<i64>),
+
+    #[serde(rename = "f64_list")]
+    F64List(Vec<f64>),
+
+    #[serde(rename = "str_list")]
+    StringList(Vec<String>),
+
+    #[serde(rename = "binary")]
+    Binary(Binary),
 }
 
 impl Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Value::Bool(val) => Debug::fmt(val, f),
-            Value::Integer(val) => Debug::fmt(val, f),
-            Value::Double(val) => Debug::fmt(val, f),
+            Value::I64(val) => Debug::fmt(val, f),
+            Value::F64(val) => Debug::fmt(val, f),
             Value::String(val) => Debug::fmt(val, f),
-            Value::BoolArray(vec) => Debug::fmt(vec, f),
-            Value::IntegerArray(vec) => Debug::fmt(vec, f),
-            Value::DoubleArray(vec) => Debug::fmt(vec, f),
-            Value::StringArray(vec) => Debug::fmt(vec, f),
-            Value::ByteArray { bytes } => Debug::fmt(bytes, f),
+            Value::BoolList(vec) => Debug::fmt(vec, f),
+            Value::I64List(vec) => Debug::fmt(vec, f),
+            Value::F64List(vec) => Debug::fmt(vec, f),
+            Value::StringList(vec) => Debug::fmt(vec, f),
+            Value::Binary(bytes) => Debug::fmt(bytes, f),
         }
     }
 }
 
 impl From<Vec<String>> for Value {
     fn from(v: Vec<String>) -> Self {
-        Self::StringArray(v)
+        Self::StringList(v)
     }
 }
 
 impl From<Vec<f64>> for Value {
     fn from(v: Vec<f64>) -> Self {
-        Self::DoubleArray(v)
+        Self::F64List(v)
     }
 }
 
 impl From<Vec<i64>> for Value {
     fn from(v: Vec<i64>) -> Self {
-        Self::IntegerArray(v)
+        Self::I64List(v)
     }
 }
 
 impl From<Vec<u8>> for Value {
     fn from(v: Vec<u8>) -> Self {
-        Self::ByteArray {
-            bytes: ByteArrayData(v),
-        }
+        Self::Binary(Binary(v))
     }
 }
 
 impl From<Vec<bool>> for Value {
     fn from(v: Vec<bool>) -> Self {
-        Self::BoolArray(v)
+        Self::BoolList(v)
     }
 }
 
@@ -222,13 +235,13 @@ impl From<String> for Value {
 
 impl From<f64> for Value {
     fn from(v: f64) -> Self {
-        Self::Double(v)
+        Self::F64(v)
     }
 }
 
 impl From<i64> for Value {
     fn from(v: i64) -> Self {
-        Self::Integer(v)
+        Self::I64(v)
     }
 }
 
@@ -238,87 +251,18 @@ impl From<bool> for Value {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(try_from = "SerializedByteArrayData", into = "SerializedByteArrayData")]
-pub struct ByteArrayData(pub Vec<u8>);
-
-impl ByteArrayData {
-    pub fn as_slice(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl From<Vec<u8>> for ByteArrayData {
-    fn from(value: Vec<u8>) -> Self {
-        Self(value)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-enum SerializedByteArrayData {
-    Array(Vec<u8>),
-    Text(String),
-}
-
-impl TryFrom<SerializedByteArrayData> for ByteArrayData {
-    type Error = InvalidByteArrayData;
-
-    fn try_from(data: SerializedByteArrayData) -> Result<Self, Self::Error> {
-        let data = match data {
-            SerializedByteArrayData::Array(data) => data,
-            SerializedByteArrayData::Text(text) => {
-                let Some((prefix, suffix)) = text.split_once(':') else {
-                    return Err(InvalidByteArrayData {
-                        reason: "the byte array data must starts with \
-                                     \"hex:\" or \"base64:\""
-                            .to_string(),
-                    });
-                };
-
-                match prefix {
-                    "hex" => hex::decode(suffix).map_err(|err| InvalidByteArrayData {
-                        reason: format!("bad hex data: {err}"),
-                    })?,
-                    "base64" => {
-                        BASE64_STANDARD
-                            .decode(suffix)
-                            .map_err(|err| InvalidByteArrayData {
-                                reason: format!("bad base64 data: {err}"),
-                            })?
-                    }
-                    _ => {
-                        return Err(InvalidByteArrayData {
-                            reason: "the byte array data must starts with \
-                                     \"hex:\" or \"base64:\""
-                                .to_string(),
-                        })
-                    }
-                }
-            }
-        };
-        Ok(data.into())
-    }
-}
-
-impl From<ByteArrayData> for SerializedByteArrayData {
-    fn from(value: ByteArrayData) -> Self {
-        Self::Array(value.0)
-    }
-}
-
 impl Value {
     pub fn ty(&self) -> ValueType {
         match self {
             Value::Bool(_) => ValueType::Bool,
-            Value::Integer(_) => ValueType::Integer,
-            Value::Double(_) => ValueType::Double,
+            Value::I64(_) => ValueType::I64,
+            Value::F64(_) => ValueType::F64,
             Value::String(_) => ValueType::String,
-            Value::BoolArray(_) => ValueType::BoolArray,
-            Value::ByteArray { .. } => ValueType::ByteArray,
-            Value::IntegerArray(_) => ValueType::IntegerArray,
-            Value::DoubleArray(_) => ValueType::DoubleArray,
-            Value::StringArray(_) => ValueType::StringArray,
+            Value::BoolList(_) => ValueType::BoolList,
+            Value::Binary { .. } => ValueType::Binary,
+            Value::I64List(_) => ValueType::I64List,
+            Value::F64List(_) => ValueType::F64List,
+            Value::StringList(_) => ValueType::StringList,
         }
     }
 
@@ -331,7 +275,7 @@ impl Value {
     }
 
     pub fn to_i64(&self) -> Option<i64> {
-        if let Self::Integer(v) = self {
+        if let Self::I64(v) = self {
             Some(*v)
         } else {
             None
@@ -339,7 +283,7 @@ impl Value {
     }
 
     pub fn to_f64(&self) -> Option<f64> {
-        if let Self::Double(v) = self {
+        if let Self::F64(v) = self {
             Some(*v)
         } else {
             None
@@ -355,7 +299,7 @@ impl Value {
     }
 
     pub fn as_bytes(&self) -> Option<&[u8]> {
-        if let Self::ByteArray { bytes } = self {
+        if let Self::Binary(bytes) = self {
             Some(bytes.as_slice())
         } else {
             None
@@ -363,7 +307,7 @@ impl Value {
     }
 
     pub fn as_bool_slice(&self) -> Option<&[bool]> {
-        if let Self::BoolArray(v) = self {
+        if let Self::BoolList(v) = self {
             Some(v)
         } else {
             None
@@ -371,7 +315,7 @@ impl Value {
     }
 
     pub fn as_i64_slice(&self) -> Option<&[i64]> {
-        if let Self::IntegerArray(v) = self {
+        if let Self::I64List(v) = self {
             Some(v)
         } else {
             None
@@ -379,7 +323,7 @@ impl Value {
     }
 
     pub fn as_f64_slice(&self) -> Option<&[f64]> {
-        if let Self::DoubleArray(v) = self {
+        if let Self::F64List(v) = self {
             Some(v)
         } else {
             None
@@ -387,7 +331,7 @@ impl Value {
     }
 
     pub fn as_string_slice(&self) -> Option<&[String]> {
-        if let Self::StringArray(v) = self {
+        if let Self::StringList(v) = self {
             Some(v)
         } else {
             None
@@ -407,7 +351,7 @@ impl Value {
     /// [`Integer`]: Value::Integer
     #[must_use]
     pub fn is_integer(&self) -> bool {
-        matches!(self, Self::Integer(..))
+        matches!(self, Self::I64(..))
     }
 
     /// Returns `true` if the value is [`Double`].
@@ -415,7 +359,7 @@ impl Value {
     /// [`Double`]: Value::Double
     #[must_use]
     pub fn is_double(&self) -> bool {
-        matches!(self, Self::Double(..))
+        matches!(self, Self::F64(..))
     }
 
     /// Returns `true` if the value is [`String`].
@@ -431,7 +375,7 @@ impl Value {
     /// [`BoolArray`]: Value::BoolArray
     #[must_use]
     pub fn is_bool_array(&self) -> bool {
-        matches!(self, Self::BoolArray(..))
+        matches!(self, Self::BoolList(..))
     }
 
     /// Returns `true` if the value is [`IntegerArray`].
@@ -439,7 +383,7 @@ impl Value {
     /// [`IntegerArray`]: Value::IntegerArray
     #[must_use]
     pub fn is_integer_array(&self) -> bool {
-        matches!(self, Self::IntegerArray(..))
+        matches!(self, Self::I64List(..))
     }
 
     /// Returns `true` if the value is [`DoubleArray`].
@@ -447,7 +391,7 @@ impl Value {
     /// [`DoubleArray`]: Value::DoubleArray
     #[must_use]
     pub fn is_double_array(&self) -> bool {
-        matches!(self, Self::DoubleArray(..))
+        matches!(self, Self::F64List(..))
     }
 
     /// Returns `true` if the value is [`StringArray`].
@@ -455,7 +399,7 @@ impl Value {
     /// [`StringArray`]: Value::StringArray
     #[must_use]
     pub fn is_string_array(&self) -> bool {
-        matches!(self, Self::StringArray(..))
+        matches!(self, Self::StringList(..))
     }
 
     /// Returns `true` if the value is [`ByteArray`].
@@ -463,7 +407,50 @@ impl Value {
     /// [`ByteArray`]: Value::ByteArray
     #[must_use]
     pub fn is_byte_array(&self) -> bool {
-        matches!(self, Self::ByteArray { .. })
+        matches!(self, Self::Binary { .. })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Binary(pub Vec<u8>);
+
+impl Binary {
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl From<Vec<u8>> for Binary {
+    fn from(value: Vec<u8>) -> Self {
+        Self(value)
+    }
+}
+
+impl From<Binary> for Vec<u8> {
+    fn from(value: Binary) -> Self {
+        value.0
+    }
+}
+
+impl Serialize for Binary {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        BASE64_STANDARD.encode(&self.0).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Binary {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let base64_text = String::deserialize(deserializer)?;
+        let binary = BASE64_STANDARD
+            .decode(&base64_text)
+            .map_err(|err| D::Error::custom(format!("{err}")))?;
+        Ok(Self(binary))
     }
 }
 
@@ -479,36 +466,40 @@ impl Value {
     Serialize,
     Deserialize,
 )]
-#[serde(rename_all = "snake_case")]
 pub enum ValueType {
+    #[serde(rename = "bool")]
     #[strum(serialize = "bool")]
     Bool,
 
     #[serde(rename = "i64")]
     #[strum(serialize = "i64")]
-    Integer,
+    I64,
 
     #[serde(rename = "f64")]
     #[strum(serialize = "f64")]
-    Double,
+    F64,
 
-    #[strum(serialize = "string")]
+    #[serde(rename = "str")]
+    #[strum(serialize = "str")]
     String,
 
-    #[strum(serialize = "bool_array")]
-    BoolArray,
+    #[serde(rename = "bool_list")]
+    #[strum(serialize = "bool_list")]
+    BoolList,
 
-    #[strum(serialize = "byte_array")]
-    ByteArray,
+    #[serde(rename = "binary")]
+    #[strum(serialize = "binary")]
+    Binary,
 
-    #[serde(rename = "i64_array")]
-    #[strum(serialize = "i64_array")]
-    IntegerArray,
+    #[serde(rename = "i64_list")]
+    #[strum(serialize = "i64_list")]
+    I64List,
 
-    #[serde(rename = "f64_array")]
-    #[strum(serialize = "f64_array")]
-    DoubleArray,
+    #[serde(rename = "f64_list")]
+    #[strum(serialize = "f64_list")]
+    F64List,
 
-    #[strum(serialize = "string_array")]
-    StringArray,
+    #[serde(rename = "str_list")]
+    #[strum(serialize = "str_list")]
+    StringList,
 }

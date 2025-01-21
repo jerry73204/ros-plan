@@ -129,7 +129,7 @@ fn update_socket_map(
 
 fn update_link_context(resource: &Resource, link: &mut LinkContext) -> Result<(), Error> {
     match link {
-        LinkContext::Pubsub(link) => update_pubsub_link_context(resource, link)?,
+        LinkContext::PubSub(link) => update_pubsub_link_context(resource, link)?,
         LinkContext::Service(link) => update_service_link_context(resource, link)?,
     }
     Ok(())

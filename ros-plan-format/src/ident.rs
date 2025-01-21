@@ -2,6 +2,7 @@ use crate::{
     error::IdentifierCreationError,
     key::{Key, KeyOwned},
 };
+use pomsky_macro::pomsky;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -13,7 +14,10 @@ use std::{
 };
 
 pub static RE_IDENT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new("^[[:alpha:]]([[:alnum:]]|-|_)*$").expect("invalid regex for identifier")
+    let rule = pomsky! {
+        ^ ['a'-'z' 'A'-'Z' '_'] [ascii_word]* $
+    };
+    Regex::new(rule).expect("invalid regex for identifier")
 });
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]

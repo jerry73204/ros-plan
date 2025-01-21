@@ -1,6 +1,6 @@
 use crate::{
-    error::InvalidSubplanDeclaration, expr::ValueOrExpr, key::NonEmptyRelativeKeyOwned,
-    link::LinkTable, node::NodeTable, parameter::ParamName,
+    error::InvalidSubplanDeclaration, expr::ValueOrExpr, key::RelativeKeyOwned, link::LinkTable,
+    node::NodeTable, parameter::ParamName,
 };
 use indexmap::IndexMap;
 use itertools::{chain, Itertools};
@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "SerializedSubplanTable", into = "SerializedSubplanTable")]
-pub struct SubplanTable(pub IndexMap<NonEmptyRelativeKeyOwned, SubplanCfg>);
+pub struct SubplanTable(pub IndexMap<RelativeKeyOwned, SubplanCfg>);
 
 impl Default for SubplanTable {
     fn default() -> Self {
@@ -21,10 +21,10 @@ impl Default for SubplanTable {
 #[serde(deny_unknown_fields)]
 pub struct SerializedSubplanTable {
     #[serde(default)]
-    pub include: IndexMap<NonEmptyRelativeKeyOwned, SerializedIncludeEntry>,
+    pub include: IndexMap<RelativeKeyOwned, SerializedIncludeEntry>,
 
     #[serde(default)]
-    pub group: IndexMap<NonEmptyRelativeKeyOwned, GroupCfg>,
+    pub group: IndexMap<RelativeKeyOwned, GroupCfg>,
 }
 
 impl TryFrom<SerializedSubplanTable> for SubplanTable {

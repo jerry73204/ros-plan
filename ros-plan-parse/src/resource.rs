@@ -9,7 +9,11 @@ use crate::{
     utils::shared_table::SharedTable,
 };
 use indexmap::IndexMap;
-use ros_plan_format::{expr::Value, key::Key, parameter::ParamName};
+use ros_plan_format::{
+    expr::Value,
+    key::{Key, StripKeyPrefix},
+    parameter::ParamName,
+};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -64,28 +68,23 @@ impl Resource {
     }
 
     /// Locate the scope specified by an absolute key.
-    pub fn resolve_absolute_key(&self, key: &Key) -> Option<ScopeTreeRef> {
+    pub fn find_scope(&self, key: &Key) -> Option<ScopeTreeRef> {
         let suffix = match key.strip_prefix("/".parse().unwrap()) {
-            Ok(Some(suffix)) => suffix,
-            _ => return None,
+            StripKeyPrefix::ImproperPrefix => {
+                // Case: key not starting with "/"
+                return None;
+            }
+            StripKeyPrefix::EmptySuffix => {
+                // Case: key == "/"
+                return Some(self.root.clone().unwrap());
+            }
+            StripKeyPrefix::Suffix(suffix) => {
+                // Case: key starting with "/"
+                suffix
+            }
         };
 
-        // Check the key == "/" case
-        let root = self.root.clone().unwrap();
-        if suffix.is_empty() {
-            return Some(root.clone());
-        }
-
         // Walk down to descent child nodes
-        let mut curr = root.clone();
-        let mut suffix = Some(suffix.to_owned());
-
-        while let Some(curr_suffix) = suffix {
-            let (child, new_suffix) = curr.get_child(&curr_suffix)?;
-            curr = child;
-            suffix = new_suffix;
-        }
-
-        Some(curr)
+        self.root.as_ref().unwrap().get_subscope(suffix)
     }
 }

@@ -1,6 +1,5 @@
 use crate::{
     context::{
-        expr::ExprContext,
         socket::{
             PubSocketContext, QuerySocketContext, ServerSocketContext, SocketContext,
             SubSocketContext,
@@ -13,13 +12,13 @@ use crate::{
     utils::{resolve_node_entity, ResolveNode},
 };
 use itertools::Itertools;
-use ros_plan_format::{key::KeyOwned, link::TopicUri};
+use ros_plan_format::key::KeyOwned;
 use std::collections::VecDeque;
 
 macro_rules! bail_resolve_key_error {
     ($key:expr, $reason:expr) => {
         return Err(Error::KeyResolutionError {
-            key: $key.clone().into(),
+            key: $key.to_owned().into(),
             reason: $reason.to_string(),
         });
     };
@@ -155,11 +154,10 @@ fn resolve_pub_socket_topics(
         .config
         .src
         .iter()
-        .map(|uri| {
-            let TopicUri {
-                node: node_key,
-                topic,
-            } = uri;
+        .map(|socket_key| {
+            let (Some(node_key), Some(socket_name)) = socket_key.split_parent() else {
+                bail_resolve_key_error!(socket_key, "unable to resolve socket");
+            };
 
             let Some(resolve) = resolve_node_entity(resource, current.clone(), node_key) else {
                 bail_resolve_key_error!(
@@ -171,7 +169,7 @@ fn resolve_pub_socket_topics(
             let topic_uris = match resolve {
                 ResolveNode::Node(child_node_arc) => vec![NodeTopicUri {
                     node: child_node_arc.downgrade(),
-                    topic: ExprContext::new(topic.clone()),
+                    topic: socket_name.to_owned(),
                 }],
                 ResolveNode::Socket(child_socket_arc) => {
                     let guard = child_socket_arc.read();
@@ -200,11 +198,10 @@ fn resolve_sub_socket_topics(
         .config
         .dst
         .iter()
-        .map(|uri| {
-            let TopicUri {
-                node: node_key,
-                topic,
-            } = uri;
+        .map(|socket_key| {
+            let (Some(node_key), Some(socket_name)) = socket_key.split_parent() else {
+                bail_resolve_key_error!(socket_key, "unable to resolve socket");
+            };
 
             let Some(resolve) = resolve_node_entity(resource, current.clone(), node_key) else {
                 bail_resolve_key_error!(
@@ -216,7 +213,7 @@ fn resolve_sub_socket_topics(
             let topic_uris = match resolve {
                 ResolveNode::Node(child_node_arc) => vec![NodeTopicUri {
                     node: child_node_arc.downgrade(),
-                    topic: ExprContext::new(topic.clone()),
+                    topic: socket_name.to_owned(),
                 }],
                 ResolveNode::Socket(child_socket_arc) => {
                     let guard = child_socket_arc.read();
@@ -241,10 +238,9 @@ fn resolve_srv_socket_topics(
     current: ScopeTreeRef,
     srv: &mut ServerSocketContext,
 ) -> Result<(), Error> {
-    let TopicUri {
-        node: node_key,
-        topic,
-    } = &srv.config.listen;
+    let (Some(node_key), Some(socket_name)) = srv.config.listen.split_parent() else {
+        bail_resolve_key_error!(srv.config.listen, "unable to resolve socket");
+    };
 
     let Some(resolve) = resolve_node_entity(resource, current.clone(), node_key) else {
         bail_resolve_key_error!(
@@ -256,7 +252,7 @@ fn resolve_srv_socket_topics(
     let listen = match resolve {
         ResolveNode::Node(child_node_arc) => NodeTopicUri {
             node: child_node_arc.downgrade(),
-            topic: ExprContext::new(topic.clone()),
+            topic: socket_name.to_owned(),
         },
         ResolveNode::Socket(child_socket_arc) => {
             let guard = child_socket_arc.read();
@@ -280,11 +276,10 @@ fn resolve_qry_socket_topics(
         .config
         .connect
         .iter()
-        .map(|uri| {
-            let TopicUri {
-                node: node_key,
-                topic,
-            } = uri;
+        .map(|socket_key| {
+            let (Some(node_key), Some(socket_name)) = socket_key.split_parent() else {
+                bail_resolve_key_error!(socket_key, "unable to resolve socket");
+            };
 
             let Some(resolve) = resolve_node_entity(resource, current.clone(), node_key) else {
                 bail_resolve_key_error!(
@@ -296,7 +291,7 @@ fn resolve_qry_socket_topics(
             let topic_uris = match resolve {
                 ResolveNode::Node(child_node_arc) => vec![NodeTopicUri {
                     node: child_node_arc.downgrade(),
-                    topic: ExprContext::new(topic.clone()),
+                    topic: socket_name.to_owned(),
                 }],
                 ResolveNode::Socket(child_socket_arc) => {
                     let guard = child_socket_arc.read();
