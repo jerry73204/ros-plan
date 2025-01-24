@@ -1,7 +1,5 @@
-from dataclasses import dataclass
 from typing import Union
 
-from launch import LaunchDescription
 from launch.utilities import is_a
 from launch.launch_description_entity import LaunchDescriptionEntity
 from launch.actions.declare_launch_argument import DeclareLaunchArgument
@@ -11,7 +9,6 @@ from launch.actions.group_action import GroupAction
 from launch.actions.include_launch_description import IncludeLaunchDescription
 from launch_ros.actions.composable_node_container import ComposableNodeContainer
 from launch_ros.actions.node import Node
-from launch_ros.actions.push_ros_namespace import PushRosNamespace
 from launch_ros.actions.load_composable_nodes import LoadComposableNodes
 from launch_ros.actions.set_use_sim_time import SetUseSimTime
 

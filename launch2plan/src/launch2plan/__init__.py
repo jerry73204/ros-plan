@@ -1,5 +1,5 @@
+import dataclasses
 import os
-import json
 from collections import OrderedDict
 import argparse
 from typing import List  # noqa: F401
@@ -15,6 +15,7 @@ from ros2launch.api import MultipleLaunchFilesError
 from ament_index_python.packages import PackageNotFoundError
 
 from .inspector import LaunchInspector
+from .utils import dump_yaml
 
 
 def main() -> int:
@@ -23,7 +24,7 @@ def main() -> int:
     parser.add_argument("launch_file_name", nargs="?")
     parser.add_argument("launch_arguments", nargs="*")
     parser.add_argument("--debug", action="store_true")
-    parser.add_argument("-o", "--output", default="record.json")
+    parser.add_argument("-o", "--output", default="dump.yaml")
     args = parser.parse_args()
 
     launch_arguments = list()
@@ -75,10 +76,11 @@ def main() -> int:
 
     inspector.run(shutdown_when_idle=True)
 
-    # TODO
-    # dump = inspector.dump()
-    # with open(output_file, "w") as fp:
-    #     json.dump(dump, fp, sort_keys=True, indent=4)
+    # Save data dump
+    session = inspector.session
+    text = dump_yaml(session)
+    with open(output_file, "w") as fp:
+        fp.write(text)
 
     return 0
 

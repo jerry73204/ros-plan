@@ -15,7 +15,6 @@ lark==1.2.2
 packaging==24.2
     # via launch2plan
 pyyaml==6.0.2
-    # via launch2plan
 ruamel-yaml==0.18.10
     # via launch2plan
 ruamel-yaml-clib==0.2.12

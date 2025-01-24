@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from launch.utilities import is_a
 from launch.actions.group_action import GroupAction
@@ -8,6 +8,8 @@ from launch.actions.pop_launch_configurations import PopLaunchConfigurations
 from launch.actions.reset_launch_configurations import ResetLaunchConfigurations
 from launch.actions.push_environment import PushEnvironment
 from launch.actions.pop_environment import PopEnvironment
+from launch.actions.opaque_function import OpaqueFunction
+from launch.actions.include_launch_description import IncludeLaunchDescription
 from launch.actions.reset_environment import ResetEnvironment
 from launch.actions.set_launch_configuration import SetLaunchConfiguration
 from launch.actions.declare_launch_argument import DeclareLaunchArgument
@@ -15,16 +17,33 @@ from launch_ros.actions.set_parameter import SetParameter
 from launch_ros.actions.set_parameters_from_file import SetParametersFromFile
 from launch_ros.actions.set_remap import SetRemap
 from launch_ros.actions.push_ros_namespace import PushRosNamespace
+from launch_ros.actions.composable_node_container import ComposableNodeContainer
+from launch_ros.actions.load_composable_nodes import LoadComposableNodes
+from launch_ros.actions.node import Node
+from launch_ros.actions.set_use_sim_time import SetUseSimTime
 
-from .substitution import serialize_substitution, SubstitutionExpr
+from .substitution import serialize_text_or_substitution, TextOrSubstitutionExpr
+from .node import NodeDump, serialize_node
+from .declare_launch_argument import (
+    serialize_declare_launch_argument,
+    DeclareLaunchArgumentDump,
+)
+from .set_launch_configuration import (
+    serialize_set_launch_configuration,
+    SetLaunchConfigurationDump,
+)
+from .include_launch_description import IncludeLaunchDescriptionDump
 
 
 @dataclass
 class GroupActionDump:
     scoped: bool
     forwarding: bool
-    push_namespace: Optional[SubstitutionExpr]
-    action_list: List["ActionDump"]
+    push_namespace: Optional[TextOrSubstitutionExpr]
+    var_list: List[Union[DeclareLaunchArgumentDump, SetLaunchConfigurationDump]]
+    node_list: List[NodeDump]
+    include_list: List[IncludeLaunchDescriptionDump]
+    group_list: List["GroupActionDump"]
 
 
 def serialize_group_action(
@@ -60,7 +79,10 @@ def serialize_group_action(
 
     # Process action entities
     push_namespace = None
-    action_list = list()
+    var_list = list()
+    node_list = list()
+    group_list = list()
+    include_list = list()
 
     for entity in action_entities:
         from .entity import serialize_action  # Due to circular import
@@ -85,16 +107,64 @@ def serialize_group_action(
                 raise ValueError(
                     "PushRosNamespace in non-scoped group is not supported"
                 )
-            push_namespace = serialize_substitution(entity.namespace)
+            push_namespace = serialize_text_or_substitution(entity.namespace)
 
-        # Process the action
+        elif is_a(entity, DeclareLaunchArgument):
+            arg = serialize_declare_launch_argument(entity)
+            var_list.append(arg)
+
+        elif is_a(entity, SetLaunchConfiguration):
+            var = serialize_set_launch_configuration(entity)
+            var_list.append(var)
+
+        elif is_a(entity, OpaqueFunction):
+            # TODO
+            pass
+
+        elif is_a(entity, GroupAction):
+            group = serialize_group_action(entity, dump)
+            group_list.append(group)
+
+        elif is_a(entity, IncludeLaunchDescription):
+            # Late import due to circular import
+            from .include_launch_description import serialize_include_launch_description
+
+            include = serialize_include_launch_description(entity)
+            include_list.append(include)
+
+        elif is_a(entity, ComposableNodeContainer):
+            # TODO
+            pass
+
+        elif is_a(entity, LoadComposableNodes):
+            # TODO
+            pass
+
+        elif is_a(entity, Node):
+            node = serialize_node(entity)
+            node_list.append(node)
+
+        elif is_a(entity, SetUseSimTime):
+            raise ValueError("SetUseSimTime in group is not supported")
+
         else:
-            action = serialize_action(entity, dump)
-            action_list.append(action)
+            # The following entity types are excluded
+            # - PushLaunchConfigurations
+            # - PopLaunchConfigurations
+            # - PushEnvironment
+            # - PushRosNamespace
+            # - PopEnvironment
+            # - SetParameter
+            # - SetParametersFromFile
+            # - SetRemap
+            raise ValueError(f"unknown entity type; {type(entity)}")
 
     return GroupActionDump(
         scoped=scoped,
         forwarding=forwarding,
         push_namespace=push_namespace,
-        action_list=action_list,
+        var_list=var_list,
+        node_list=node_list,
+        group_list=group_list,
+        include_list=include_list,
     )

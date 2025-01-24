@@ -1,6 +1,5 @@
 """Module for the LaunchInspector class."""
 
-import dataclasses
 import asyncio
 import collections.abc
 import contextlib
@@ -8,12 +7,10 @@ import logging
 import platform
 import signal
 import threading
-import traceback
 from typing import Coroutine
 from typing import Iterable
 from typing import List  # noqa: F401
 from typing import Optional
-from typing import Set  # noqa: F401
 from typing import Text
 from typing import Tuple  # noqa: F401
 
@@ -33,6 +30,7 @@ from launch.utilities import is_a_subclass
 
 from ros_cmdline import parse_ros_cmdline
 
+from .visitor import Session
 from .event_handlers import OnIncludeLaunchDescription
 from .visitor import visit_entity
 
@@ -95,6 +93,9 @@ class LaunchInspector:
         self.__return_code = 0
 
         # Used to collect executed nodes in this launch
+
+        # Setup session
+        self.__session = Session(launch_desc_list=list())
 
     def emit_event(self, event: Event) -> None:
         """
@@ -261,7 +262,7 @@ class LaunchInspector:
                             )
                         )
 
-                    pairs = visit_entity(entity, self.__context)
+                    pairs = visit_entity(entity, self.__context, self.__session)
 
                     for entity, future in pairs:
                         self._entity_future_pairs.append((entity, future))
@@ -492,9 +493,9 @@ class LaunchInspector:
                     force_sync=force_sync,
                 )
 
-    def dump(self):
-        # TODO
-        pass
+    @property
+    def session(self) -> Session:
+        return self.__session
 
     @property
     def context(self):

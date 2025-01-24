@@ -1,24 +1,32 @@
 from dataclasses import dataclass
-from typing import List, Optional, Text, Tuple, Dict
+from typing import List, Optional
 
 from launch.utilities import is_a
 from launch_ros.actions.node import Node
-from launch_ros.descriptions import Parameter, ParameterFile
+from launch_ros.descriptions import ParameterFile
 
 from .substitution import (
-    SubstitutionExpr,
     TextOrSubstitutionExpr,
-    ParameterValueOrSubstitutionExpr,
-    SubstitutionExpr,
-    serialize_substitution,
     serialize_text_or_substitution,
 )
 from .parameter import (
     ParameterFileDump,
+    ParameterValueOrSubstitutionExpr,
     serialize_parameter_value,
     serialize_parameters_file,
 )
-from ..utils import param_to_kv
+
+
+@dataclass
+class RemapEntryDump:
+    orig: TextOrSubstitutionExpr
+    new: TextOrSubstitutionExpr
+
+
+@dataclass
+class ParameterEntryDump:
+    name: TextOrSubstitutionExpr
+    value: ParameterValueOrSubstitutionExpr
 
 
 @dataclass
@@ -27,11 +35,11 @@ class NodeDump:
     package: TextOrSubstitutionExpr
     name: Optional[TextOrSubstitutionExpr]
     namespace: Optional[TextOrSubstitutionExpr]
-    params: List[Tuple[SubstitutionExpr, ParameterValueOrSubstitutionExpr]]
+    params: List[ParameterEntryDump]
     params_files: List[ParameterFileDump]
-    remaps: List[Tuple[Text, Text]]
-    ros_args: Optional[List[SubstitutionExpr]]
-    args: Optional[List[SubstitutionExpr]]
+    remaps: List[RemapEntryDump]
+    ros_args: Optional[List[TextOrSubstitutionExpr]]
+    args: Optional[List[TextOrSubstitutionExpr]]
 
 
 def serialize_node(node: Node) -> NodeDump:
@@ -49,14 +57,16 @@ def serialize_node(node: Node) -> NodeDump:
     ros_args = None
     if node._Node__ros_arguments is not None:
         ros_args = [
-            serialize_substitution(subst) for subst in node._Node__ros_arguments
+            serialize_text_or_substitution(subst) for subst in node._Node__ros_arguments
         ]
 
     args = None
     if node._Node__arguments is not None:
-        args = [serialize_substitution(subst) for subst in node._Node__arguments]
+        args = [
+            serialize_text_or_substitution(subst) for subst in node._Node__arguments
+        ]
 
-    # # Extract parameters
+    # Extract parameters
     params = list()
     params_files = list()
 
@@ -67,11 +77,15 @@ def serialize_node(node: Node) -> NodeDump:
         else:
             assert is_a(entry, dict)
             for param_name, value in entry.items():
-                param_name = serialize_substitution(param_name)
+                param_name = serialize_text_or_substitution(param_name)
                 param_value = serialize_parameter_value(value)
-                params.append((param_name, param_value))
+                params.append(ParameterEntryDump(name=param_name, value=param_value))
 
-    remaps = node._Node__remappings
+    remaps = list()
+    for orig, new in node._Node__remappings:
+        orig = serialize_text_or_substitution(orig)
+        new = serialize_text_or_substitution(new)
+        remaps.append(RemapEntryDump(orig=orig, new=new))
 
     # Store a node record
     dump = NodeDump(

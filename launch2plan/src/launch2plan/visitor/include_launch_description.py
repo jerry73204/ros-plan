@@ -8,10 +8,11 @@ from launch.utilities import normalize_to_list_of_substitutions
 from launch.utilities import perform_substitutions
 
 from ..dump import serialize_launch_description
+from .session import Session
 
 
 def visit_include_launch_description(
-    include: IncludeLaunchDescription, context: LaunchContext
+    include: IncludeLaunchDescription, context: LaunchContext, session: Session
 ) -> List[LaunchDescriptionEntity]:
     """Execute the action."""
     launch_description = include.launch_description_source.get_launch_description(
@@ -61,7 +62,10 @@ def visit_include_launch_description(
         set_launch_configuration_actions.append(SetLaunchConfiguration(name, value))
 
     # Serialize the content of the launch description
-    serialize_launch_description(launch_description, include.launch_description_source)
+    launch_desc_dump = serialize_launch_description(
+        launch_description, include.launch_description_source
+    )
+    session.launch_desc_list.append(launch_desc_dump)
 
     # Set launch arguments as launch configurations and then include the launch description.
     return [*set_launch_configuration_actions, launch_description]

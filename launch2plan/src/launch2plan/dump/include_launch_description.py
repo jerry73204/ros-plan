@@ -1,26 +1,34 @@
 from dataclasses import dataclass
+from typing import Text, List
 
-from launch import LaunchDescription
-from launch.utilities import is_a
-from launch.actions.declare_launch_argument import DeclareLaunchArgument
-from launch.actions.set_launch_configuration import SetLaunchConfiguration
-from launch.actions.opaque_function import OpaqueFunction
-from launch.actions.group_action import GroupAction
 from launch.actions.include_launch_description import IncludeLaunchDescription
-from launch_ros.actions.composable_node_container import ComposableNodeContainer
-from launch_ros.actions.node import Node
-from launch_ros.actions.push_ros_namespace import PushRosNamespace
-from launch_ros.actions.load_composable_nodes import LoadComposableNodes
+
+from .substitution import TextOrSubstitutionExpr, serialize_text_or_substitution
+
+
+@dataclass
+class ArgAssignDump:
+    name: TextOrSubstitutionExpr
+    value: TextOrSubstitutionExpr
 
 
 @dataclass
 class IncludeLaunchDescriptionDump:
-    pass
+    file_path: Text
+    args: List[ArgAssignDump]
 
 
 def serialize_include_launch_description(
     include: IncludeLaunchDescription,
-    dump: "LaunchDescriptionDump",
 ) -> IncludeLaunchDescriptionDump:
-    # TODO
-    pass
+    source = include.launch_description_source
+    file_path = source.location
+
+    args = list()
+
+    for name, value in include.launch_arguments:
+        name = serialize_text_or_substitution(name)
+        value = serialize_text_or_substitution(value)
+        args.append(ArgAssignDump(name=name, value=value))
+
+    return IncludeLaunchDescriptionDump(file_path=file_path, args=args)

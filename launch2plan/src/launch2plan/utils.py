@@ -1,16 +1,23 @@
 import decimal
 from typing import Text, Optional, Tuple, Optional
+from enum import Enum
+import dataclasses
 
 from rcl_interfaces.msg import Parameter
 from ruamel.yaml import YAML
 from ruamel.yaml.compat import StringIO
+from ruamel.yaml.comments import TaggedScalar
 
-MY_YAML = YAML(typ='safe')
-MY_YAML.default_flow_style = True
-MY_YAML.width = 65536
+from .dump.substitution import SubstitutionToken
+
+
+MY_YAML = YAML(typ="safe")
+# MY_YAML.default_flow_style = True
+# MY_YAML.width = 65536
 
 DECIMAL_CONTEXT = decimal.Context()
 DECIMAL_CONTEXT.prec = 20
+
 
 def float_to_str(f):
     """
@@ -19,27 +26,30 @@ def float_to_str(f):
     """
     global DECIMAL_CONTEXT
     d = DECIMAL_CONTEXT.create_decimal(repr(f))
-    return format(d, 'f')
+    return format(d, "f")
+
 
 def log_level_code_to_text(code: int) -> Optional[Text]:
-    match code :
+    match code:
         case 0:
             return None
         case 10:
-            return 'DEBUG'
+            return "DEBUG"
         case 20:
-            return 'INFO'
+            return "INFO"
         case 30:
-            return 'WARN'
+            return "WARN"
         case 40:
-            return 'ERROR'
+            return "ERROR"
         case 50:
-            return 'FATAL'
+            return "FATAL"
         case _:
             raise ValueError(f"unknown log level code {code}")
 
+
 def text_to_kv(expr: Text):
     return tuple(expr.split(":=", 1))
+
 
 def param_to_kv(param: Parameter) -> Tuple[Text, Text]:
     pvalue = param.value
@@ -70,7 +80,11 @@ def param_to_kv(param: Parameter) -> Tuple[Text, Text]:
             # command. It uses an alternative way to work around.
 
             # value = dump_yaml(list(pvalue.double_array_value))
-            value = '[' + ', '.join(float_to_str(f) for f in pvalue.double_array_value) + ']'
+            value = (
+                "["
+                + ", ".join(float_to_str(f) for f in pvalue.double_array_value)
+                + "]"
+            )
         case 9:
             value = dump_yaml(list(pvalue.string_array_value))
         case _:
@@ -78,14 +92,20 @@ def param_to_kv(param: Parameter) -> Tuple[Text, Text]:
 
     return param.name, value
 
+
 def dump_yaml(value) -> Text:
     global MY_YAML
 
-    def strip_nl(s):
-        result, rest = s.split('\n', 1)
-        assert rest in ['', '...\n'], f"the multiline YAML {s} is not expected"
-        return result
+    def asdict_factory(data):
+        def convert_value(obj):
+            if isinstance(obj, Enum):
+                return obj.value
+            else:
+                return obj
+
+        return dict((k, convert_value(v)) for k, v in data)
 
     stream = StringIO()
-    MY_YAML.dump(data=value, stream=stream, transform=strip_nl)
+    value_dict = dataclasses.asdict(value, dict_factory=asdict_factory)
+    MY_YAML.dump(data=value_dict, stream=stream)
     return stream.getvalue()

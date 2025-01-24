@@ -23,16 +23,17 @@ from .lifecycle_node import visit_lifecycle_node
 from .node import visit_node
 from .composable_node_container import visit_composable_node_container
 from .include_launch_description import visit_include_launch_description
+from .session import Session
 
 
 def visit_action(
-    action: Action, context: LaunchContext
+    action: Action, context: LaunchContext, session: Session
 ) -> Optional[List[LaunchDescriptionEntity]]:
     condition = action.condition
 
     if condition is None or condition.evaluate(context):
         try:
-            return visit_action_by_class(action, context)
+            return visit_action_by_class(action, context, session)
         finally:
 
             event = ExecutionComplete(action=action)
@@ -46,7 +47,7 @@ def visit_action(
 
 
 def visit_action_by_class(
-    action: Action, context: LaunchContext
+    action: Action, context: LaunchContext, session: Session
 ) -> Optional[List[LaunchDescriptionEntity]]:
     if is_a(action, LoadComposableNodes):
         return visit_load_composable_nodes(action, context)
@@ -61,7 +62,7 @@ def visit_action_by_class(
         return visit_node(action, context)
 
     elif is_a(action, IncludeLaunchDescription):
-        return visit_include_launch_description(action, context)
+        return visit_include_launch_description(action, context, session)
 
     else:
         return action.execute(context)
