@@ -1,20 +1,15 @@
 use crate::{
-    error::InvalidParameterDeclaration,
-    expr::{Value, ValueType},
+    error::InvalidArgumentDeclaration,
+    expr::{ValueOrExpr, ValueType},
 };
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "SerializedArgEntry", into = "SerializedArgEntry")]
 pub struct ArgEntry {
-    pub slot: ArgCfg,
     pub help: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub enum ArgCfg {
-    Required { ty: ValueType },
-    Optional { default: Value },
+    pub ty: ValueType,
+    pub default: Option<ValueOrExpr>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,48 +18,44 @@ struct SerializedArgEntry {
     pub help: Option<String>,
     #[serde(rename = "type")]
     pub ty: Option<ValueType>,
-    pub default: Option<Value>,
+    pub default: Option<ValueOrExpr>,
 }
 
 impl TryFrom<SerializedArgEntry> for ArgEntry {
-    type Error = InvalidParameterDeclaration;
+    type Error = InvalidArgumentDeclaration;
 
     fn try_from(entry: SerializedArgEntry) -> Result<Self, Self::Error> {
         let SerializedArgEntry {
-            ty: expect,
+            ty: expect_ty,
             default,
             help,
         } = entry;
 
-        let slot = match (expect, default) {
+        let (ty, default) = match (expect_ty, default) {
             (None, None) => unreachable!(),
-            (None, Some(default)) => ArgCfg::Optional { default },
-            (Some(ty), None) => ArgCfg::Required { ty },
-            (Some(_), Some(_)) => {
-                return Err(InvalidParameterDeclaration::InvalidArgumentDefinition)
+            (None, Some(default)) => (default.ty(), Some(default)),
+            (Some(ty), None) => (ty, None),
+            (Some(expect_ty), Some(default)) => {
+                if expect_ty != default.ty() {
+                    return Err(InvalidArgumentDeclaration::ValueTypeMismatch);
+                }
+                (expect_ty, Some(default))
             }
         };
-        let entry = ArgEntry { slot, help };
 
+        let entry = ArgEntry { help, ty, default };
         Ok(entry)
     }
 }
 
 impl From<ArgEntry> for SerializedArgEntry {
     fn from(entry: ArgEntry) -> Self {
-        let ArgEntry { slot, help } = entry;
+        let ArgEntry { help, ty, default } = entry;
 
-        match slot {
-            ArgCfg::Required { ty } => Self {
-                ty: Some(ty),
-                default: None,
-                help,
-            },
-            ArgCfg::Optional { default } => Self {
-                ty: None,
-                default: Some(default),
-                help,
-            },
+        SerializedArgEntry {
+            help,
+            ty: Some(ty),
+            default,
         }
     }
 }

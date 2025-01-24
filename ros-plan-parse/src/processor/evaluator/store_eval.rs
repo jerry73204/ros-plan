@@ -81,32 +81,43 @@ pub fn store_eval_node_map(
 //     Ok(())
 // }
 
-pub fn store_eval_root_arg_table(
-    arg_table: &mut IndexMap<ParamName, ArgContext>,
-) -> Result<(), Error> {
-    for (name, arg) in arg_table {
-        assert!(
-            arg.assign.is_none(),
-            "arguments in the root scope must not be assigned"
-        );
-        let value = match (&arg.override_, &arg.default) {
-            (Some(override_), _) => override_
-                .as_value()
-                .expect("the argument in the root scope must be assigned with constant values"),
-            (None, Some(default)) => default,
-            (None, None) => return Err(Error::RequiredArgumentNotAssigned { name: name.clone() }),
-        };
-        arg.result = Some(value.clone());
-    }
-    Ok(())
-}
+// pub fn store_eval_root_arg_table(
+//     lua: &Lua,
+//     arg_table: &mut IndexMap<ParamName, ArgContext>,
+// ) -> Result<(), Error> {
+//     for (name, arg) in arg_table {
+//         assert!(
+//             arg.assign.is_none(),
+//             "arguments in the root scope must not be assigned"
+//         );
 
-pub fn store_eval_arg_table(
+//         if let Some(assign) = &arg.assign {
+//         } else if let Some(default) = &arg.default {
+//         } else {
+//             return Err(Error::RequiredArgumentNotAssigned { name: name.clone() });
+//         }
+//     }
+//     Ok(())
+// }
+
+pub fn store_eval_arg_assignment(
     lua: &Lua,
     arg_table: &mut IndexMap<ParamName, ArgContext>,
 ) -> Result<(), Error> {
-    for (name, arg) in arg_table {
-        store_eval_arg_context(lua, name, arg)?;
+    for (_name, arg) in arg_table {
+        let ArgContext { ty, assign, .. } = arg;
+
+        if let Some(assign) = assign {
+            assign.store_eval(lua)?;
+
+            let value = assign.result.as_ref().unwrap();
+            if *ty != value.ty() {
+                return Err(Error::TypeMismatch {
+                    expect: *ty,
+                    found: value.ty(),
+                });
+            }
+        }
     }
     Ok(())
 }
@@ -128,7 +139,7 @@ pub fn store_eval_subplan_table(
                         });
                     };
                 };
-                store_eval_arg_table(lua, &mut scope.arg_map)?;
+                store_eval_arg_assignment(lua, &mut scope.arg_map)?;
             }
             Scope::Group(scope) => {
                 if let Some(when) = &mut scope.when {
@@ -143,40 +154,5 @@ pub fn store_eval_subplan_table(
         }
     }
 
-    Ok(())
-}
-
-pub fn store_eval_arg_context(
-    lua: &Lua,
-    name: &ParamName,
-    arg_ctx: &mut ArgContext,
-) -> Result<(), Error> {
-    let ArgContext {
-        ty,
-        default,
-        assign,
-        override_,
-        result,
-        ..
-    } = arg_ctx;
-
-    let value = if let Some(override_) = override_ {
-        override_.eval(lua)?
-    } else if let Some(assign) = assign {
-        assign.eval(lua)?
-    } else if let Some(default) = default {
-        default.clone()
-    } else {
-        return Err(Error::RequiredArgumentNotAssigned { name: name.clone() });
-    };
-
-    if value.ty() != *ty {
-        return Err(Error::TypeMismatch {
-            expect: *ty,
-            found: value.ty(),
-        });
-    }
-
-    *result = Some(value.clone());
     Ok(())
 }

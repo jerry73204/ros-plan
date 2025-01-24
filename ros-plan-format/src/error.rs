@@ -127,3 +127,27 @@ pub struct InvalidKeyPrefixError {
     pub checked: KeyOwned,
     pub prefix: KeyOwned,
 }
+
+#[derive(Debug, thiserror::Error)]
+pub enum DeserializationError {
+    #[error("expect an expression wrapped within a pair of $ or $$$")]
+    ExpectExpr,
+
+    #[error("expect a string or an expression wrapped within a pair of $ or $$$")]
+    ExpectTextOrExpr,
+
+    #[error("expect a !type tag")]
+    ExpectTypeTag,
+
+    #[error("invalid !type tag")]
+    InvalidTypeTag,
+
+    #[error("expect a value with !type tag: {error}")]
+    ExpectValueWithType { error: serde_yaml::Error },
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("unable to parse expression: {reason}")]
+pub struct ParseExpressionError {
+    pub reason: String,
+}

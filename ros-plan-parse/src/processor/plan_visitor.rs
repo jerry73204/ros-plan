@@ -20,7 +20,7 @@ use crate::{
 };
 use indexmap::IndexMap;
 use ros_plan_format::{
-    argument::{ArgCfg, ArgEntry},
+    argument::ArgEntry,
     expr::ValueOrExpr,
     key::{Key, KeyOwned},
     link::LinkCfg,
@@ -482,7 +482,7 @@ fn check_arg_assignment(
 
     // Check if there are unassigned required args
     for name in &spec_names - &assigned_names {
-        if let ArgCfg::Required { .. } = &spec[name].slot {
+        if spec[name].default.is_none() {
             return Err(Error::RequiredArgumentNotAssigned {
                 name: name.to_owned(),
             });
@@ -499,11 +499,7 @@ fn check_arg_assignment(
         match &assign[name] {
             ValueOrExpr::Value(value) => {
                 let assigned_ty = value.ty();
-
-                let expect_ty = match spec[name].slot {
-                    ArgCfg::Required { ty } => ty,
-                    ArgCfg::Optional { ref default } => default.ty(),
-                };
+                let expect_ty = spec[name].ty;
 
                 if assigned_ty != expect_ty {
                     return Err(Error::TypeMismatch {

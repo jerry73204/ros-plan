@@ -13,9 +13,7 @@ use lua::{new_lua, ValueToLua};
 use mlua::prelude::*;
 use ros_plan_format::{expr::Value, parameter::ParamName};
 use std::collections::VecDeque;
-use store_eval::{
-    store_eval_node_map, store_eval_root_arg_table, store_eval_subplan_table, StoreEval,
-};
+use store_eval::{store_eval_node_map, store_eval_subplan_table, StoreEval};
 
 #[derive(Debug, Default)]
 pub struct Evaluator {
@@ -28,25 +26,26 @@ impl Evaluator {
         resource: &mut Resource,
         args: IndexMap<ParamName, Value>,
     ) -> Result<(), Error> {
-        let root = resource
-            .root
-            .as_ref()
-            .expect("the resource tree must be constructed before evaluation");
-
-        // Assign arguments provided from caller
         {
-            let mut root_scope = root
-                .as_plan_file_mut()
-                .expect("the root scope must be a plan file variant");
-            let arg_map = &mut root_scope.arg_map;
-            override_arg_table(arg_map, args)?;
-            store_eval_root_arg_table(arg_map)?;
-        }
+            let root = resource
+                .root
+                .as_ref()
+                .expect("the resource tree must be constructed before evaluation");
 
-        // Traverse all nodes in the tree
-        self.queue.push_back(Job::PlanFile {
-            current: root.clone(),
-        });
+            // Assign arguments provided from caller
+            {
+                let mut root_scope = root
+                    .as_plan_file_mut()
+                    .expect("the root scope must be a plan file variant");
+                let arg_map = &mut root_scope.arg_map;
+                assign_arg_table(arg_map, args)?;
+            }
+
+            // Traverse all nodes in the tree
+            self.queue.push_back(Job::PlanFile {
+                current: root.clone(),
+            });
+        }
 
         while let Some(job) = self.queue.pop_front() {
             match job {
@@ -70,7 +69,7 @@ impl Evaluator {
                 .expect("expect a plan file variant");
 
             // Populate arguments into the global scope
-            load_arg_table(&lua, &scope_guard.arg_map)?;
+            load_arg_table(&lua, &mut scope_guard.arg_map)?;
 
             // Populate local variables into the global scope
             load_var_table(&lua, &mut scope_guard.var_map)?;
@@ -146,12 +145,37 @@ enum Job {
     Group { current: ScopeTreeRef, lua: Lua },
 }
 
-fn load_arg_table(lua: &Lua, arg_table: &IndexMap<ParamName, ArgContext>) -> Result<(), Error> {
+fn load_arg_table(lua: &Lua, arg_table: &mut IndexMap<ParamName, ArgContext>) -> Result<(), Error> {
     let globals = lua.globals();
     globals.set_readonly(false);
 
     for (name, arg) in arg_table {
-        let value = arg.result.as_ref().unwrap();
+        let ArgContext {
+            ty,
+            default,
+            assign,
+            ..
+        } = arg;
+
+        let value = if let Some(assign) = assign {
+            assign
+                .result
+                .as_ref()
+                .expect("the assign field must be evaluated beforehand")
+        } else if let Some(default) = default {
+            default.store_eval(lua)?;
+            default.result.as_ref().unwrap()
+        } else {
+            return Err(Error::RequiredArgumentNotAssigned { name: name.clone() });
+        };
+
+        if value.ty() != *ty {
+            return Err(Error::TypeMismatch {
+                expect: *ty,
+                found: value.ty(),
+            });
+        }
+
         lua.globals().set(name.as_ref(), ValueToLua(value))?;
     }
 
@@ -183,19 +207,22 @@ fn load_var_table(
     Ok(())
 }
 
-fn override_arg_table(
+fn assign_arg_table(
     arg_table: &mut IndexMap<ParamName, ArgContext>,
-    override_arg: IndexMap<ParamName, Value>,
+    assign_arg: IndexMap<ParamName, Value>,
 ) -> Result<(), Error> {
     for (_, entry) in arg_table.iter_mut() {
-        entry.override_ = None;
+        entry.assign = None;
     }
 
-    for (name, override_) in override_arg {
+    for (name, value) in assign_arg {
         let Some(arg_ctx) = arg_table.get_mut(&name) else {
             return Err(Error::ArgumentNotFound { name });
         };
-        arg_ctx.override_ = Some(override_.into());
+
+        let mut ctx = ExprContext::new(value.clone().into());
+        ctx.result = Some(value);
+        arg_ctx.assign = Some(ctx);
     }
 
     Ok(())

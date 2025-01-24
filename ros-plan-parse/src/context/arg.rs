@@ -1,36 +1,28 @@
 use ros_plan_format::{
-    argument::{ArgCfg, ArgEntry},
-    expr::{Value, ValueOrExpr, ValueType},
+    argument::ArgEntry,
+    expr::{ValueOrExpr, ValueType},
 };
 use serde::{Deserialize, Serialize};
+
+use super::expr::ExprContext;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArgContext {
     pub ty: ValueType,
     pub help: Option<String>,
-    pub default: Option<Value>,
-    pub assign: Option<ValueOrExpr>,
-    #[serde(rename = "override")]
-    pub override_: Option<ValueOrExpr>,
-    #[serde(skip)]
-    pub result: Option<Value>,
+    pub default: Option<ExprContext>,
+    pub assign: Option<ExprContext>,
 }
 
 impl ArgContext {
     pub fn new(spec: ArgEntry, assign: Option<ValueOrExpr>) -> Self {
-        let ArgEntry { slot, help } = spec;
-        let (ty, default_in_spec) = match slot {
-            ArgCfg::Required { ty } => (ty, None),
-            ArgCfg::Optional { default } => (default.ty(), Some(default)),
-        };
+        let ArgEntry { help, ty, default } = spec;
 
         Self {
             ty,
             help,
-            default: default_in_spec,
-            assign,
-            override_: None,
-            result: None,
+            default: default.map(ExprContext::new),
+            assign: assign.map(ExprContext::new),
         }
     }
 }

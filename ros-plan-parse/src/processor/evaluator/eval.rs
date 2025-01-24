@@ -18,7 +18,18 @@ impl Eval for ValueOrExpr {
     fn eval(&self, lua: &Lua) -> Result<Value, Error> {
         let value = match self {
             ValueOrExpr::Value(value) => value.clone(),
-            ValueOrExpr::Expr { eval: expr } => expr.eval(lua)?,
+            ValueOrExpr::Expr { ty, expr } => {
+                let value = expr.eval(lua)?;
+
+                if *ty != value.ty() {
+                    return Err(Error::TypeMismatch {
+                        expect: *ty,
+                        found: value.ty(),
+                    });
+                }
+
+                value
+            }
         };
         Ok(value)
     }
