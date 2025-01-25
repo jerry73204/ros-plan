@@ -2,7 +2,11 @@ use std::collections::BTreeMap;
 
 use super::eval::Eval;
 use crate::{
-    context::{arg::ArgContext, expr::ExprContext, node::NodeContext},
+    context::{
+        arg::ArgContext,
+        expr::{ExprContext, TextOrExprContext},
+        node::NodeContext,
+    },
     error::Error,
     scope::{NodeShared, Scope, ScopeTreeRef},
 };
@@ -32,8 +36,36 @@ impl StoreEval for ExprContext {
     }
 }
 
+impl StoreEval for TextOrExprContext {
+    fn store_eval(&mut self, lua: &Lua) -> Result<(), Error> {
+        let TextOrExprContext {
+            ref default,
+            ref override_,
+            result,
+        } = self;
+
+        let value = if let Some(override_) = override_ {
+            override_.clone()
+        } else {
+            default.eval(lua)?
+        };
+        *result = Some(value);
+        Ok(())
+    }
+}
+
 impl StoreEval for NodeContext {
     fn store_eval(&mut self, lua: &Lua) -> Result<(), Error> {
+        if let Some(pkg) = &mut self.pkg {
+            pkg.store_eval(lua)?;
+        }
+        if let Some(exec) = &mut self.exec {
+            exec.store_eval(lua)?;
+        }
+        if let Some(plugin) = &mut self.plugin {
+            plugin.store_eval(lua)?;
+        }
+
         for param in self.param.values_mut() {
             param.store_eval(lua)?;
         }

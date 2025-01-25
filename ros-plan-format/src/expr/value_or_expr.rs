@@ -1,5 +1,5 @@
-use super::{Expr, TextOrExpr, Value, ValueType};
-use crate::error::DeserializationError;
+use super::{Expr, KeyOrExpr, TextOrExpr, Value, ValueType};
+use crate::{error::DeserializationError, key::Key};
 use serde::{Deserialize, Serialize};
 use serde_yaml::value::{Tag, TaggedValue};
 use std::fmt::{self, Debug, Display};
@@ -54,6 +54,10 @@ impl ValueOrExpr {
 
     pub fn as_str(&self) -> Option<&str> {
         self.as_value()?.as_str()
+    }
+
+    pub fn as_key(&self) -> Option<&Key> {
+        self.as_value()?.as_key()
     }
 
     pub fn as_bytes(&self) -> Option<&[u8]> {
@@ -113,6 +117,22 @@ impl TryFrom<TaggedValue> for ValueOrExpr {
             match text_or_expr {
                 TextOrExpr::Text(text) => Value::String(text).into(),
                 TextOrExpr::Expr(expr) => {
+                    let ty = ValueType::from_yaml_tag(&tag)?;
+                    ValueOrExpr::Expr { ty, expr }
+                }
+            }
+        } else if tag == Tag::new("key") {
+            let serde_yaml::Value::String(text) = inner_value else {
+                todo!();
+            };
+
+            let key_or_expr: KeyOrExpr = text
+                .parse()
+                .map_err(|_err| DeserializationError::ExpectTextOrExpr)?;
+
+            match key_or_expr {
+                KeyOrExpr::Key(key) => Value::Key(key).into(),
+                KeyOrExpr::Expr(expr) => {
                     let ty = ValueType::from_yaml_tag(&tag)?;
                     ValueOrExpr::Expr { ty, expr }
                 }

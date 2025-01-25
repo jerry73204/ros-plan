@@ -32,6 +32,10 @@ pub enum ValueType {
     #[strum(serialize = "str")]
     String,
 
+    #[serde(rename = "key")]
+    #[strum(serialize = "key")]
+    Key,
+
     #[serde(rename = "bool_list")]
     #[strum(serialize = "bool_list")]
     BoolList,

@@ -1,12 +1,29 @@
-use ros_plan_format::expr::{Value, ValueOrExpr, ValueType};
+use ros_plan_format::expr::{TextOrExpr, Value, ValueOrExpr, ValueType};
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TextOrExprContext {
+    pub default: TextOrExpr,
+    #[serde(rename = "override")]
+    pub override_: Option<String>,
+    pub result: Option<String>,
+}
+
+impl TextOrExprContext {
+    pub fn new(default: TextOrExpr) -> Self {
+        Self {
+            default,
+            override_: None,
+            result: None,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExprContext {
     pub default: ValueOrExpr,
     #[serde(rename = "override")]
     pub override_: Option<Value>,
-    #[serde(skip)]
     pub result: Option<Value>,
 }
 

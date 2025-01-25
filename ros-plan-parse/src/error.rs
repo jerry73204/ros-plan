@@ -49,6 +49,9 @@ pub enum Error {
     #[error("expect `{expect}` type, but found `{found}` type")]
     TypeMismatch { expect: ValueType, found: ValueType },
 
+    #[error("`{key}` is not a valid key")]
+    InvalidKey { key: String },
+
     #[error("argument `{name}` is assigned but is not found")]
     ArgumentNotFound { name: ParamName },
 

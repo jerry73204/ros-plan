@@ -22,12 +22,6 @@ impl AsRef<str> for Expr {
     }
 }
 
-// impl Debug for Expr {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         Debug::fmt(&self.0, f)
-//     }
-// }
-
 impl Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let code = &self.0;

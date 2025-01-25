@@ -1,26 +1,34 @@
 use super::lua::ValueFromLua;
 use crate::error::Error;
 use mlua::prelude::*;
-use ros_plan_format::expr::{Expr, Value, ValueOrExpr};
+use ros_plan_format::{
+    expr::{Expr, KeyOrExpr, TextOrExpr, Value, ValueOrExpr},
+    key::KeyOwned,
+};
 
 pub trait Eval {
-    fn eval(&self, lua: &Lua) -> Result<Value, Error>;
+    type Output;
+
+    fn eval(&self, lua: &Lua) -> Result<Self::Output, Error>;
 }
 
 impl Eval for Expr {
-    fn eval(&self, lua: &Lua) -> Result<Value, Error> {
-        let ValueFromLua(value): ValueFromLua = lua.load(self.as_str()).eval()?;
+    type Output = ValueFromLua;
+
+    fn eval(&self, lua: &Lua) -> Result<Self::Output, Error> {
+        let value: ValueFromLua = lua.load(self.as_str()).eval()?;
         Ok(value)
     }
 }
 
 impl Eval for ValueOrExpr {
-    fn eval(&self, lua: &Lua) -> Result<Value, Error> {
+    type Output = Value;
+
+    fn eval(&self, lua: &Lua) -> Result<Self::Output, Error> {
         let value = match self {
             ValueOrExpr::Value(value) => value.clone(),
             ValueOrExpr::Expr { ty, expr } => {
-                let value = expr.eval(lua)?;
-
+                let value = expr.eval(lua)?.into_ros_value(*ty)?;
                 if *ty != value.ty() {
                     return Err(Error::TypeMismatch {
                         expect: *ty,
@@ -29,6 +37,45 @@ impl Eval for ValueOrExpr {
                 }
 
                 value
+            }
+        };
+        Ok(value)
+    }
+}
+
+impl Eval for TextOrExpr {
+    type Output = String;
+
+    fn eval(&self, lua: &Lua) -> Result<Self::Output, Error> {
+        let value = match self {
+            TextOrExpr::Text(text) => text.clone(),
+            TextOrExpr::Expr(expr) => {
+                let value = expr.eval(lua)?;
+                let ValueFromLua::String(text) = value else {
+                    return Err(LuaError::external("unable to convert to a string").into());
+                };
+                text
+            }
+        };
+        Ok(value)
+    }
+}
+
+impl Eval for KeyOrExpr {
+    type Output = KeyOwned;
+
+    fn eval(&self, lua: &Lua) -> Result<Self::Output, Error> {
+        let value = match self {
+            KeyOrExpr::Key(key) => key.clone(),
+            KeyOrExpr::Expr(expr) => {
+                let value = expr.eval(lua)?;
+                let ValueFromLua::String(text) = value else {
+                    return Err(LuaError::external("unable to convert to string").into());
+                };
+                let Ok(key) = text.parse() else {
+                    return Err(LuaError::external("unable to convert to a key").into());
+                };
+                key
             }
         };
         Ok(value)

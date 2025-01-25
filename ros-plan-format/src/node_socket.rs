@@ -1,5 +1,5 @@
 use crate::{
-    ident::IdentOwned, interface_type::InterfaceTypeOwned, key::KeyOwned,
+    expr::KeyOrExpr, ident::IdentOwned, interface_type::InterfaceTypeOwned,
     qos_requirement::QosRequirement,
 };
 use indexmap::IndexMap;
@@ -23,10 +23,13 @@ impl Default for NodeSocketTable {
 pub enum NodeSocketCfg {
     #[serde(rename = "pub")]
     Publication(NodePublicationCfg),
+
     #[serde(rename = "sub")]
     Subscription(NodeSubscriptionCfg),
+
     #[serde(rename = "srv")]
     Server(NodeServerCfg),
+
     #[serde(rename = "cli")]
     Client(NodeClientCfg),
 }
@@ -61,7 +64,7 @@ pub struct NodePublicationCfg {
     #[serde(rename = "type")]
     pub ty: Option<InterfaceTypeOwned>,
     pub qos: Option<QosRequirement>,
-    pub from: Option<KeyOwned>,
+    pub from: Option<KeyOrExpr>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,7 +73,7 @@ pub struct NodeSubscriptionCfg {
     #[serde(rename = "type")]
     pub ty: Option<InterfaceTypeOwned>,
     pub qos: Option<QosRequirement>,
-    pub from: Option<KeyOwned>,
+    pub from: Option<KeyOrExpr>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,7 +81,7 @@ pub struct NodeSubscriptionCfg {
 pub struct NodeServerCfg {
     #[serde(rename = "type")]
     pub ty: Option<InterfaceTypeOwned>,
-    pub from: Option<KeyOwned>,
+    pub from: Option<KeyOrExpr>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,5 +89,5 @@ pub struct NodeServerCfg {
 pub struct NodeClientCfg {
     #[serde(rename = "type")]
     pub ty: Option<InterfaceTypeOwned>,
-    pub from: Option<KeyOwned>,
+    pub from: Option<KeyOrExpr>,
 }

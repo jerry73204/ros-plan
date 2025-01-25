@@ -1,5 +1,8 @@
 use crate::{
-    expr::ValueOrExpr, ident::IdentOwned, node_socket::NodeSocketTable, parameter::ParamName,
+    expr::{TextOrExpr, ValueOrExpr},
+    ident::IdentOwned,
+    node_socket::NodeSocketTable,
+    parameter::ParamName,
 };
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -20,9 +23,9 @@ impl Default for NodeTable {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NodeCfg {
-    pub pkg: Option<String>,
-    pub exec: Option<String>,
-    pub plugin: Option<String>,
+    pub pkg: Option<TextOrExpr>,
+    pub exec: Option<TextOrExpr>,
+    pub plugin: Option<TextOrExpr>,
 
     #[serde(default)]
     pub param: IndexMap<ParamName, ValueOrExpr>,

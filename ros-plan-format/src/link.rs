@@ -19,6 +19,7 @@ impl Default for LinkTable {
 pub enum LinkCfg {
     #[serde(rename = "pubsub")]
     PubSub(PubSubLinkCfg),
+
     #[serde(rename = "service")]
     Service(ServiceLinkCfg),
 }

@@ -1,4 +1,5 @@
 use super::{Base64String, ValueType};
+use crate::key::{Key, KeyOwned};
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug, Display};
 
@@ -15,6 +16,9 @@ pub enum Value {
 
     #[serde(rename = "str")]
     String(String),
+
+    #[serde(rename = "key")]
+    Key(KeyOwned),
 
     #[serde(rename = "bool_list")]
     BoolList(Vec<bool>),
@@ -39,6 +43,7 @@ impl Display for Value {
             Value::I64(val) => Debug::fmt(val, f),
             Value::F64(val) => Debug::fmt(val, f),
             Value::String(val) => Debug::fmt(val, f),
+            Value::Key(val) => Debug::fmt(val, f),
             Value::BoolList(vec) => Debug::fmt(vec, f),
             Value::I64List(vec) => Debug::fmt(vec, f),
             Value::F64List(vec) => Debug::fmt(vec, f),
@@ -102,6 +107,12 @@ impl From<bool> for Value {
     }
 }
 
+impl From<KeyOwned> for Value {
+    fn from(v: KeyOwned) -> Self {
+        Self::Key(v)
+    }
+}
+
 impl Value {
     pub fn ty(&self) -> ValueType {
         match self {
@@ -109,6 +120,7 @@ impl Value {
             Value::I64(_) => ValueType::I64,
             Value::F64(_) => ValueType::F64,
             Value::String(_) => ValueType::String,
+            Value::Key(_) => ValueType::Key,
             Value::BoolList(_) => ValueType::BoolList,
             Value::Binary { .. } => ValueType::Binary,
             Value::I64List(_) => ValueType::I64List,
@@ -143,6 +155,14 @@ impl Value {
 
     pub fn as_str(&self) -> Option<&str> {
         if let Self::String(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_key(&self) -> Option<&Key> {
+        if let Self::Key(v) = self {
             Some(v)
         } else {
             None
@@ -189,75 +209,109 @@ impl Value {
         }
     }
 
-    /// Returns `true` if the value is [`Bool`].
-    ///
-    /// [`Bool`]: Value::Bool
     #[must_use]
     pub fn is_bool(&self) -> bool {
         matches!(self, Self::Bool(..))
     }
 
-    /// Returns `true` if the value is [`Integer`].
-    ///
-    /// [`Integer`]: Value::Integer
     #[must_use]
-    pub fn is_integer(&self) -> bool {
+    pub fn is_i64(&self) -> bool {
         matches!(self, Self::I64(..))
     }
 
-    /// Returns `true` if the value is [`Double`].
-    ///
-    /// [`Double`]: Value::Double
     #[must_use]
-    pub fn is_double(&self) -> bool {
+    pub fn is_f64(&self) -> bool {
         matches!(self, Self::F64(..))
     }
 
-    /// Returns `true` if the value is [`String`].
-    ///
-    /// [`String`]: Value::String
     #[must_use]
     pub fn is_string(&self) -> bool {
         matches!(self, Self::String(..))
     }
 
-    /// Returns `true` if the value is [`BoolArray`].
-    ///
-    /// [`BoolArray`]: Value::BoolArray
     #[must_use]
-    pub fn is_bool_array(&self) -> bool {
+    pub fn is_key(&self) -> bool {
+        matches!(self, Self::Key(..))
+    }
+
+    #[must_use]
+    pub fn is_bool_list(&self) -> bool {
         matches!(self, Self::BoolList(..))
     }
 
-    /// Returns `true` if the value is [`IntegerArray`].
-    ///
-    /// [`IntegerArray`]: Value::IntegerArray
     #[must_use]
-    pub fn is_integer_array(&self) -> bool {
+    pub fn is_i64_list(&self) -> bool {
         matches!(self, Self::I64List(..))
     }
 
-    /// Returns `true` if the value is [`DoubleArray`].
-    ///
-    /// [`DoubleArray`]: Value::DoubleArray
     #[must_use]
-    pub fn is_double_array(&self) -> bool {
+    pub fn is_f64_list(&self) -> bool {
         matches!(self, Self::F64List(..))
     }
 
-    /// Returns `true` if the value is [`StringArray`].
-    ///
-    /// [`StringArray`]: Value::StringArray
     #[must_use]
-    pub fn is_string_array(&self) -> bool {
+    pub fn is_string_list(&self) -> bool {
         matches!(self, Self::StringList(..))
     }
 
-    /// Returns `true` if the value is [`ByteArray`].
-    ///
-    /// [`ByteArray`]: Value::ByteArray
     #[must_use]
-    pub fn is_byte_array(&self) -> bool {
+    pub fn is_bytes(&self) -> bool {
         matches!(self, Self::Binary { .. })
+    }
+
+    pub fn try_into_string(self) -> Result<String, Self> {
+        if let Self::String(v) = self {
+            Ok(v)
+        } else {
+            Err(self)
+        }
+    }
+
+    pub fn try_into_key(self) -> Result<KeyOwned, Self> {
+        if let Self::Key(v) = self {
+            Ok(v)
+        } else {
+            Err(self)
+        }
+    }
+
+    pub fn try_into_bool_vec(self) -> Result<Vec<bool>, Self> {
+        if let Self::BoolList(v) = self {
+            Ok(v)
+        } else {
+            Err(self)
+        }
+    }
+
+    pub fn try_into_i64_vec(self) -> Result<Vec<i64>, Self> {
+        if let Self::I64List(v) = self {
+            Ok(v)
+        } else {
+            Err(self)
+        }
+    }
+
+    pub fn try_into_f64_vec(self) -> Result<Vec<f64>, Self> {
+        if let Self::F64List(v) = self {
+            Ok(v)
+        } else {
+            Err(self)
+        }
+    }
+
+    pub fn try_into_string_vec(self) -> Result<Vec<String>, Self> {
+        if let Self::StringList(v) = self {
+            Ok(v)
+        } else {
+            Err(self)
+        }
+    }
+
+    pub fn try_into_bytes(self) -> Result<Vec<u8>, Self> {
+        if let Self::Binary(v) = self {
+            Ok(v.0)
+        } else {
+            Err(self)
+        }
     }
 }

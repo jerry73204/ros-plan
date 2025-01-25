@@ -1,7 +1,7 @@
 use crate::{
     context::{
         arg::ArgContext,
-        expr::ExprContext,
+        expr::{ExprContext, TextOrExprContext},
         link::{LinkContext, PubsubLinkContext, ServiceLinkContext},
         node::NodeContext,
         node_socket::{
@@ -536,8 +536,10 @@ fn to_node_context(resource: &mut Resource, node_key: KeyOwned, node_cfg: NodeCf
         .collect();
 
     NodeContext {
-        config: node_cfg,
         key: node_key,
+        pkg: node_cfg.pkg.map(TextOrExprContext::new),
+        exec: node_cfg.exec.map(TextOrExprContext::new),
+        plugin: node_cfg.plugin.map(TextOrExprContext::new),
         param,
         socket,
     }
