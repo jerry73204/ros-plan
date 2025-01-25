@@ -112,7 +112,7 @@ impl<T> Owned<T> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Shared<T> {
     id: usize,
     tab_weak: WeakRwLock<StableVec<ArcRwLock<T>>>,
@@ -138,6 +138,15 @@ impl<T> Shared<T> {
 
     pub fn id(&self) -> usize {
         self.id
+    }
+}
+
+impl<T> Clone for Shared<T> {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id.clone(),
+            tab_weak: self.tab_weak.clone(),
+        }
     }
 }
 

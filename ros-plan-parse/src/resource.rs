@@ -8,7 +8,10 @@ use crate::{
         evaluator::Evaluator, link_resolver::LinkResolver, plan_visitor::PlanVisitor,
         shared_ref_initializer::SharedRefInitializer, socket_resolver::SocketResolver,
     },
-    scope::{NodeOwned, NodeSocketOwned, ScopeTreeRef},
+    scope::{
+        GroupScope, NodeOwned, NodeSocketOwned, PlanFileScope, PlanFileScopeOwned, ScopeRef,
+        ScopeRefExt, ScopeShared,
+    },
     utils::shared_table::SharedTable,
 };
 use indexmap::IndexMap;
@@ -22,7 +25,8 @@ use std::path::Path;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Resource {
-    pub(crate) root: Option<ScopeTreeRef>,
+    pub(crate) include_tab: SharedTable<PlanFileScope>,
+    pub(crate) group_tab: SharedTable<GroupScope>,
     pub(crate) node_tab: SharedTable<NodeContext>,
     pub(crate) link_tab: SharedTable<LinkContext>,
     pub(crate) plan_socket_tab: SharedTable<PlanSocketContext>,
@@ -30,6 +34,10 @@ pub struct Resource {
 }
 
 impl Resource {
+    pub fn root(&self) -> Option<PlanFileScopeOwned> {
+        self.include_tab.get(0)
+    }
+
     /// Construct the resource tree from the provided file.
     pub fn from_plan_file<P>(path: P) -> Result<Resource, Error>
     where
@@ -72,7 +80,7 @@ impl Resource {
     }
 
     /// Locate a scope specified by an absolute key.
-    pub fn find_scope(&self, key: &Key) -> Option<ScopeTreeRef> {
+    pub fn find_scope(&self, key: &Key) -> Option<ScopeShared> {
         let suffix = match key.strip_prefix("/".parse().unwrap()) {
             StripKeyPrefix::ImproperPrefix => {
                 // Case: key not starting with "/"
@@ -80,7 +88,7 @@ impl Resource {
             }
             StripKeyPrefix::EmptySuffix => {
                 // Case: key == "/"
-                return Some(self.root.clone().unwrap());
+                return Some(self.root().unwrap().downgrade().into());
             }
             StripKeyPrefix::Suffix(suffix) => {
                 // Case: key starting with "/"
@@ -89,7 +97,9 @@ impl Resource {
         };
 
         // Walk down to descent child nodes
-        self.root.as_ref().unwrap().find_subscope_unbounded(suffix)
+        let root = self.root().unwrap();
+        let guard = root.read();
+        guard.get_subscope_recursive_unbounded(suffix)
     }
 
     /// Locate a node specified by an absolute key.
@@ -99,8 +109,9 @@ impl Resource {
         };
         let scope = self.find_scope(scope_key)?;
         let node = {
-            let guard = scope.read();
-            let shared = guard.value.node_map().get(node_name)?;
+            let owned = scope.upgrade().unwrap();
+            let guard = owned.read();
+            let shared = guard.node_map().get(node_name)?;
             shared.upgrade().unwrap()
         };
         Some(node)

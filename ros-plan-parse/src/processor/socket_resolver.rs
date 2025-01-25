@@ -5,7 +5,7 @@ use crate::{
     },
     error::Error,
     resource::Resource,
-    scope::{Scope, ScopeTreeRef},
+    scope::{PlanFileScopeShared, ScopeRefExt, ScopeShared},
     utils::{
         resolve_node_client, resolve_node_publication, resolve_node_server,
         resolve_node_subscription,
@@ -40,7 +40,7 @@ impl SocketResolver {
     pub fn traverse(&mut self, context: &mut Resource) -> Result<(), Error> {
         self.queue.push_back(
             VisitNodeJob {
-                current: context.root.clone().unwrap(),
+                current: context.root().unwrap().downgrade().into(),
                 current_prefix: KeyOwned::new_root().clone(),
             }
             .into(),
@@ -66,17 +66,18 @@ impl SocketResolver {
             current_prefix,
         } = job;
 
-        let guard = current.read();
+        let owned = current.upgrade().unwrap();
+        let guard = owned.read();
         {
             // Visit children
-            for (suffix, child) in &guard.children {
+            for (suffix, subscope) in guard.subscope_iter() {
                 let Ok(child_prefix) = &current_prefix / suffix else {
                     unreachable!()
                 };
 
                 self.queue.push_back(
                     VisitNodeJob {
-                        current: child.clone(),
+                        current: subscope.clone(),
                         current_prefix: child_prefix,
                     }
                     .into(),
@@ -84,11 +85,10 @@ impl SocketResolver {
             }
         }
 
-        if let Scope::PlanFile { .. } = &guard.value {
+        if let Ok(plan_shared) = current.try_into_include() {
             self.queue.push_back(
                 ResolveSocketJob {
-                    current: current.clone(),
-                    // current_prefix,
+                    current: plan_shared.clone(),
                 }
                 .into(),
             );
@@ -108,30 +108,14 @@ impl SocketResolver {
         } = job;
 
         // Take out the socket_map from the plan context
-        let mut socket_map = {
-            let mut guard = current.write();
-            let Scope::PlanFile(plan_ctx) = &mut guard.value else {
-                unreachable!("a plan context is expected");
-            };
-            std::mem::take(&mut plan_ctx.socket_map)
-        };
+        let owned = current.upgrade().unwrap();
+        let guard = owned.read();
 
         // Resolve URIs in the socket_map
-        socket_map
-            .values_mut()
-            .try_for_each(|shared| -> Result<_, Error> {
-                let owned = shared.upgrade().unwrap();
-                let mut guard = owned.write();
-                resolve_socket_topics(resource, current.clone(), &mut guard)
-            })?;
-
-        // Update plan context
-        {
-            let mut guard = current.write();
-            let Scope::PlanFile(plan_ctx) = &mut guard.value else {
-                unreachable!("a plan context is expected");
-            };
-            plan_ctx.socket_map = socket_map;
+        for socket_shared in guard.socket_map.values() {
+            let socket_owned = socket_shared.upgrade().unwrap();
+            let mut socket_guard = socket_owned.write();
+            resolve_socket_topics(resource, current.clone(), &mut socket_guard)?;
         }
 
         Ok(())
@@ -140,7 +124,7 @@ impl SocketResolver {
 
 fn resolve_socket_topics(
     resource: &mut Resource,
-    current: ScopeTreeRef,
+    current: PlanFileScopeShared,
     socket_ctx: &mut PlanSocketContext,
 ) -> Result<(), Error> {
     match socket_ctx {
@@ -162,7 +146,7 @@ fn resolve_socket_topics(
 
 fn resolve_pub_socket_topics(
     resource: &mut Resource,
-    current: ScopeTreeRef,
+    current: PlanFileScopeShared,
     pub_: &mut PlanPublicationContext,
 ) -> Result<(), Error> {
     let src: Vec<_> = pub_
@@ -170,7 +154,8 @@ fn resolve_pub_socket_topics(
         .src
         .iter()
         .map(|socket_key| {
-            let Some(sockets) = resolve_node_publication(resource, current.clone(), socket_key)
+            let Some(sockets) =
+                resolve_node_publication(resource, current.clone().into(), socket_key)
             else {
                 bail!(
                     socket_key,
@@ -188,7 +173,7 @@ fn resolve_pub_socket_topics(
 
 fn resolve_sub_socket_topics(
     resource: &mut Resource,
-    current: ScopeTreeRef,
+    current: PlanFileScopeShared,
     sub: &mut PlanSubscriptionContext,
 ) -> Result<(), Error> {
     let dst: Vec<_> = sub
@@ -196,7 +181,8 @@ fn resolve_sub_socket_topics(
         .dst
         .iter()
         .map(|socket_key| {
-            let Some(sockets) = resolve_node_subscription(resource, current.clone(), socket_key)
+            let Some(sockets) =
+                resolve_node_subscription(resource, current.clone().into(), socket_key)
             else {
                 bail!(
                     socket_key,
@@ -214,11 +200,11 @@ fn resolve_sub_socket_topics(
 
 fn resolve_srv_socket_topics(
     resource: &mut Resource,
-    current: ScopeTreeRef,
+    current: PlanFileScopeShared,
     srv: &mut PlanServerContext,
 ) -> Result<(), Error> {
     let socket_key = &srv.config.listen;
-    let Some(socket) = resolve_node_server(resource, current.clone(), socket_key) else {
+    let Some(socket) = resolve_node_server(resource, current.clone().into(), socket_key) else {
         bail!(socket_key, "the key does not resolve to a server socket");
     };
 
@@ -228,7 +214,7 @@ fn resolve_srv_socket_topics(
 
 fn resolve_qry_socket_topics(
     resource: &mut Resource,
-    current: ScopeTreeRef,
+    current: PlanFileScopeShared,
     qry: &mut PlanClientContext,
 ) -> Result<(), Error> {
     let connect: Vec<_> = qry
@@ -236,7 +222,8 @@ fn resolve_qry_socket_topics(
         .connect
         .iter()
         .map(|socket_key| {
-            let Some(sockets) = resolve_node_client(resource, current.clone(), socket_key) else {
+            let Some(sockets) = resolve_node_client(resource, current.clone().into(), socket_key)
+            else {
                 bail!(socket_key, "the key does not resolve to a client socket");
             };
             Ok(sockets)
@@ -268,13 +255,13 @@ impl From<ResolveSocketJob> for Job {
 
 #[derive(Debug)]
 pub struct VisitNodeJob {
-    current: ScopeTreeRef,
+    current: ScopeShared,
     current_prefix: KeyOwned,
 }
 
 #[derive(Debug)]
 pub struct ResolveSocketJob {
-    current: ScopeTreeRef,
+    current: PlanFileScopeShared,
     // current_prefix: KeyOwned,
 }
 

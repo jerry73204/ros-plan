@@ -2,18 +2,21 @@ mod eval;
 mod lua;
 mod store_eval;
 
+use crate::scope::ScopeRef;
 use crate::{
     context::{arg::ArgContext, expr::ExprContext},
     error::Error,
     resource::Resource,
-    scope::{ScopeKind, ScopeTreeRef},
+    scope::{GroupScopeOwned, GroupScopeShared, PlanFileScopeOwned, PlanFileScopeShared},
 };
 use indexmap::IndexMap;
 use lua::{new_lua, ValueToLua};
 use mlua::prelude::*;
 use ros_plan_format::{expr::Value, parameter::ParamName};
 use std::collections::VecDeque;
-use store_eval::{store_eval_node_map, store_eval_subplan_table, StoreEval};
+use store_eval::{
+    store_eval_group_table, store_eval_include_table, store_eval_node_map, StoreEval,
+};
 
 #[derive(Debug, Default)]
 pub struct Evaluator {
@@ -28,45 +31,37 @@ impl Evaluator {
     ) -> Result<(), Error> {
         {
             let root = resource
-                .root
-                .as_ref()
+                .root()
                 .expect("the resource tree must be constructed before evaluation");
 
             // Assign arguments provided from caller
             {
-                let mut root_scope = root
-                    .as_plan_file_mut()
-                    .expect("the root scope must be a plan file variant");
-                let arg_map = &mut root_scope.arg_map;
-                assign_arg_table(arg_map, args)?;
+                let mut guard = root.write();
+                assign_arg_table(&mut guard.arg_map, args)?;
             }
 
             // Traverse all nodes in the tree
             self.queue.push_back(Job::PlanFile {
-                current: root.clone(),
+                current: root.downgrade().into(),
             });
         }
 
         while let Some(job) = self.queue.pop_front() {
             match job {
-                Job::PlanFile { current } => self.eval_plan_file(&current)?,
-                Job::Group { current, lua } => self.eval_group(&lua, current)?,
+                Job::PlanFile { current } => self.eval_plan_file(&current.upgrade().unwrap())?,
+                Job::Group { current, lua } => self.eval_group(&lua, current.upgrade().unwrap())?,
             }
         }
 
         Ok(())
     }
 
-    fn eval_plan_file(&mut self, current: &ScopeTreeRef) -> Result<(), Error> {
+    fn eval_plan_file(&mut self, current: &PlanFileScopeOwned) -> Result<(), Error> {
         // Create a new Lua context
         let lua = new_lua()?;
 
         {
-            let mut current_guard = current.write();
-            let scope_guard = current_guard
-                .value
-                .as_plan_file_mut()
-                .expect("expect a plan file variant");
+            let mut scope_guard = current.write();
 
             // Populate arguments into the global scope
             load_arg_table(&lua, &mut scope_guard.arg_map)?;
@@ -88,22 +83,22 @@ impl Evaluator {
 
             // Evaluate assigned arguments and `when` conditions on
             // subscopes.
-            store_eval_subplan_table(&lua, &current_guard.children)?;
+            store_eval_include_table(&lua, &scope_guard.include_map)?;
+            store_eval_group_table(&lua, &scope_guard.group_map)?;
         }
 
         // Schedule jobs to visit child scopes
-        self.schedule_subplan_jobs(&lua, current)?;
+        {
+            let scope_guard = current.read();
+            self.schedule_subplan_jobs(&lua, &*scope_guard)?;
+        }
 
         Ok(())
     }
 
-    fn eval_group(&mut self, lua: &Lua, current: ScopeTreeRef) -> Result<(), Error> {
+    fn eval_group(&mut self, lua: &Lua, current: GroupScopeOwned) -> Result<(), Error> {
         {
-            let mut current_guard = current.write();
-            let scope_guard = current_guard
-                .value
-                .as_group_mut()
-                .expect("expect a plan file variant");
+            let mut scope_guard = current.write();
 
             // Evaluate the node table
             store_eval_node_map(lua, &mut scope_guard.node_map)?;
@@ -113,25 +108,34 @@ impl Evaluator {
 
             // Evaluate assigned arguments and `when` condition on
             // subscopes
-            store_eval_subplan_table(lua, &current_guard.children)?;
+            store_eval_include_table(lua, &scope_guard.include_map)?;
+            store_eval_group_table(lua, &scope_guard.group_map)?;
         }
 
         // Schedule jobs to visit child scopes
-        self.schedule_subplan_jobs(lua, &current)?;
+        {
+            let scope_guard = current.read();
+            self.schedule_subplan_jobs(&lua, &*scope_guard)?;
+        }
+
         Ok(())
     }
 
-    fn schedule_subplan_jobs(&mut self, lua: &Lua, current: &ScopeTreeRef) -> Result<(), Error> {
-        let guard = current.read();
-        for child in guard.children.values() {
-            let job = match child.kind() {
-                ScopeKind::PlanFile => Job::PlanFile {
-                    current: child.clone(),
-                },
-                ScopeKind::Group => Job::Group {
-                    current: child.clone(),
-                    lua: lua.clone(),
-                },
+    fn schedule_subplan_jobs<S>(&mut self, lua: &Lua, guard: &S) -> Result<(), Error>
+    where
+        S: ScopeRef,
+    {
+        for child in guard.group_map().values() {
+            let job = Job::Group {
+                current: child.clone(),
+                lua: lua.clone(),
+            };
+            self.queue.push_back(job);
+        }
+
+        for child in guard.include_map().values() {
+            let job = Job::PlanFile {
+                current: child.clone(),
             };
             self.queue.push_back(job);
         }
@@ -141,8 +145,8 @@ impl Evaluator {
 
 #[derive(Debug)]
 enum Job {
-    PlanFile { current: ScopeTreeRef },
-    Group { current: ScopeTreeRef, lua: Lua },
+    PlanFile { current: PlanFileScopeShared },
+    Group { current: GroupScopeShared, lua: Lua },
 }
 
 fn load_arg_table(lua: &Lua, arg_table: &mut IndexMap<ParamName, ArgContext>) -> Result<(), Error> {

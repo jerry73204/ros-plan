@@ -2,7 +2,7 @@ use crate::{
     context::link::{LinkContext, PubsubLinkContext, ServiceLinkContext},
     error::Error,
     resource::Resource,
-    scope::{LinkOwned, Scope, ScopeTreeRef},
+    scope::{LinkShared, ScopeRef, ScopeRefExt, ScopeShared},
     utils::{
         resolve_node_client, resolve_node_publication, resolve_node_server,
         resolve_node_subscription,
@@ -10,7 +10,7 @@ use crate::{
 };
 use itertools::Itertools;
 use ros_plan_format::key::KeyOwned;
-use std::{collections::VecDeque, mem};
+use std::collections::VecDeque;
 
 macro_rules! bail {
     ($key:expr, $reason:expr) => {
@@ -38,7 +38,7 @@ impl LinkResolver {
         // Schedule the job to visit the root
         self.queue.push_back(
             VisitNodeJob {
-                current: context.root.clone().unwrap(),
+                current: context.root().unwrap().downgrade().into(),
                 current_prefix: KeyOwned::new_root(),
             }
             .into(),
@@ -61,21 +61,22 @@ impl LinkResolver {
 
     fn visit_node(&mut self, job: VisitNodeJob) -> Result<(), Error> {
         let VisitNodeJob {
-            current,
+            current: shared,
             current_prefix,
         } = job;
 
-        let guard = current.read();
+        let owned = shared.upgrade().unwrap();
+        let guard = owned.read();
 
         // Schedule jobs to visit child nodes.
-        for (suffix, child) in &guard.children {
+        for (suffix, subscope) in guard.subscope_iter() {
             let Ok(child_prefix) = &current_prefix / suffix else {
                 unreachable!()
             };
 
             self.queue.push_back(
                 VisitNodeJob {
-                    current: child.clone(),
+                    current: subscope.into(),
                     current_prefix: child_prefix,
                 }
                 .into(),
@@ -83,72 +84,44 @@ impl LinkResolver {
         }
 
         // Schedule a job to resolve links if the node has a plan or a
-        // hereplan context.
-        match guard.value {
-            Scope::PlanFile { .. } => {
-                self.queue.push_back(
-                    ResolveLinkJob {
-                        current: current.clone(),
-                        current_prefix,
-                    }
-                    .into(),
-                );
-            }
-            Scope::Group(_) => {
-                self.queue.push_back(
-                    ResolveLinkJob {
-                        current: current.clone(),
-                        current_prefix,
-                    }
-                    .into(),
-                );
-            }
-        };
+        // hereplan context
+        for (suffix, subscope) in guard.subscope_iter() {
+            let Ok(child_prefix) = &current_prefix / suffix else {
+                unreachable!()
+            };
+
+            self.queue.push_back(
+                ResolveLinkJob {
+                    current: subscope.into(),
+                    current_prefix: child_prefix,
+                }
+                .into(),
+            );
+        }
 
         Ok(())
     }
 
     fn resolve_link(&mut self, context: &mut Resource, job: ResolveLinkJob) -> Result<(), Error> {
         let ResolveLinkJob {
-            current,
+            current: scope_shared,
             current_prefix: _,
         } = job;
 
+        let scope_owned = scope_shared.upgrade().unwrap();
+        let scope_guard = scope_owned.read();
+
         // Take the link_map out of the node context.
-        let mut link_map = {
-            let mut guard = current.write();
-            match &mut guard.value {
-                Scope::PlanFile(ctx) => mem::take(&mut ctx.link_map),
-                Scope::Group(ctx) => mem::take(&mut ctx.link_map),
-            }
-        };
+        let link_map = scope_guard.link_map();
 
         // Resolve links
-        link_map
-            .values_mut()
-            .try_for_each(|shared| -> Result<_, Error> {
-                let owned = shared.upgrade().unwrap();
-                {
-                    let mut guard = owned.write();
-                    resolve_sockets_in_link(context, current.clone(), &mut guard)?;
-                }
-                associate_link_on_node_sockets(owned);
-                Ok(())
-            })?;
-
-        // Push the resolved links back to the node context
-        {
-            let mut guard = current.write();
-            let trie_ctx = &mut guard.value;
-
-            match trie_ctx {
-                Scope::PlanFile(ctx) => {
-                    ctx.link_map = link_map;
-                }
-                Scope::Group(ctx) => {
-                    ctx.link_map = link_map;
-                }
+        for link_shared in link_map.values() {
+            let link_owned = link_shared.upgrade().unwrap();
+            {
+                let mut guard = link_owned.write();
+                resolve_sockets_in_link(context, &scope_shared, &mut guard)?;
             }
+            associate_link_on_node_sockets(link_shared);
         }
 
         Ok(())
@@ -157,7 +130,7 @@ impl LinkResolver {
 
 fn resolve_sockets_in_link(
     context: &Resource,
-    current: ScopeTreeRef,
+    current: &ScopeShared,
     link: &mut LinkContext,
 ) -> Result<(), Error> {
     match link {
@@ -169,7 +142,7 @@ fn resolve_sockets_in_link(
 
 fn resolve_sockets_in_pubsub_link(
     context: &Resource,
-    current: ScopeTreeRef,
+    current: &ScopeShared,
     link: &mut PubsubLinkContext,
 ) -> Result<(), Error> {
     {
@@ -218,7 +191,7 @@ fn resolve_sockets_in_pubsub_link(
 
 fn resolve_sockets_in_service_link(
     context: &Resource,
-    current: ScopeTreeRef,
+    current: &ScopeShared,
     link: &mut ServiceLinkContext,
 ) -> Result<(), Error> {
     let listen = {
@@ -248,11 +221,11 @@ fn resolve_sockets_in_service_link(
     Ok(())
 }
 
-fn associate_link_on_node_sockets(link_owned: LinkOwned) {
-    let link_shared = link_owned.downgrade();
+fn associate_link_on_node_sockets(link_shared: &LinkShared) {
+    let link_owned = link_shared.upgrade().unwrap();
+    let link_guard = link_owned.read();
 
-    let guard = link_owned.read();
-    match &*guard {
+    match &*link_guard {
         LinkContext::PubSub(pubsub) => {
             for socket_shared in pubsub.src.as_ref().unwrap() {
                 let socket_owned = socket_shared.upgrade().unwrap();
@@ -307,12 +280,12 @@ impl From<VisitNodeJob> for Job {
 
 #[derive(Debug)]
 struct VisitNodeJob {
-    current: ScopeTreeRef,
+    current: ScopeShared,
     current_prefix: KeyOwned,
 }
 
 #[derive(Debug)]
 struct ResolveLinkJob {
-    current: ScopeTreeRef,
+    current: ScopeShared,
     current_prefix: KeyOwned,
 }

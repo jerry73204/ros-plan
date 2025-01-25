@@ -15,7 +15,7 @@ use crate::{
     },
     error::Error,
     resource::Resource,
-    scope::{GroupScope, PlanFileScope, Scope, ScopeTree, ScopeTreeRef},
+    scope::{GroupScope, PlanFileScope, PlanFileScopeShared, ScopeMutExt, ScopeShared},
     utils::{find_plan_file_from_pkg, read_yaml_file, shared_table::SharedTable},
 };
 use indexmap::IndexMap;
@@ -32,7 +32,7 @@ use ros_plan_format::{
     subplan::{GroupCfg, SubplanCfg, SubplanTable},
 };
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{BTreeMap, HashSet, VecDeque},
     path::{Path, PathBuf},
 };
 
@@ -44,11 +44,12 @@ pub struct PlanVisitor {
 impl PlanVisitor {
     pub fn traverse(&mut self, path: &Path) -> Result<Resource, Error> {
         let mut context = Resource {
-            root: None,
             node_tab: SharedTable::default(),
             link_tab: SharedTable::default(),
             plan_socket_tab: SharedTable::default(),
             node_socket_tab: SharedTable::default(),
+            include_tab: SharedTable::default(),
+            group_tab: SharedTable::default(),
         };
 
         self.insert_root_plan(&mut context, path, IndexMap::new())?;
@@ -92,14 +93,13 @@ impl PlanVisitor {
         )?;
 
         // Insert the plan context to the root node.
-        let root = ScopeTreeRef::new(ScopeTree::new(plan_ctx.into()));
-        context.root = Some(root.clone());
+        let root_shared = context.include_tab.insert(plan_ctx);
 
         // Schedule subplan insertion jobs
         for (subplan_suffix, subplan) in subplan_tab.0 {
             self.schedule_subplan_insertion(
-                root.clone(),
-                root.clone(),
+                root_shared.clone(),
+                root_shared.clone().into(),
                 Key::root(),
                 &subplan_suffix,
                 subplan,
@@ -143,15 +143,22 @@ impl PlanVisitor {
             when,
             assign_args,
         )?;
+        let plan_shared = resource.include_tab.insert(plan_ctx);
 
         // Create the child node for the plan
-        let plan_child = current.insert_immediate_subscope(child_suffix, plan_ctx.into())?;
+        {
+            let owned = current.upgrade().unwrap();
+            let mut guard = owned.write();
+            guard
+                .scope_entry(child_suffix)?
+                .insert_include(plan_shared.clone());
+        }
 
         // Schedule subplan insertion jobs
         for (subplan_suffix, subplan) in subplan_tab.0 {
             self.schedule_subplan_insertion(
-                plan_child.clone(),
-                plan_child.clone(),
+                plan_shared.clone(),
+                plan_shared.clone().into(),
                 &child_prefix,
                 &subplan_suffix,
                 subplan,
@@ -175,17 +182,23 @@ impl PlanVisitor {
         };
 
         // Create the context
-        let (group_scope, subplan_tab) = to_group_scope(context, &child_prefix, child_group);
+        let (group_scope, subplan_tab) = to_group_scope(context, &child_prefix, child_group)?;
+        let group_shared = context.group_tab.insert(group_scope);
 
         // Schedule subplan insertion jobs
         {
-            let group_child =
-                current.insert_immediate_subscope(child_suffix, group_scope.into())?;
+            {
+                let owned = current.upgrade().unwrap();
+                let mut guard = owned.write();
+                guard
+                    .scope_entry(child_suffix)?
+                    .insert_group(group_shared.clone());
+            }
 
             for (subplan_suffix, subplan) in subplan_tab.0 {
                 self.schedule_subplan_insertion(
                     plan_parent.clone(),
-                    group_child.clone(),
+                    group_shared.clone().into(),
                     &child_prefix,
                     &subplan_suffix,
                     subplan,
@@ -197,8 +210,8 @@ impl PlanVisitor {
 
     fn schedule_subplan_insertion(
         &mut self,
-        plan_parent: ScopeTreeRef,
-        current: ScopeTreeRef,
+        plan_parent: PlanFileScopeShared,
+        current: ScopeShared,
         current_prefix: &Key,
         child_suffix: &Key,
         child_subplan: SubplanCfg,
@@ -211,10 +224,8 @@ impl PlanVisitor {
                 let subplan_path = {
                     let subplan_path = &subplan.path;
                     let subplan_path = if subplan_path.is_relative() {
-                        let guard = plan_parent.read();
-                        let Scope::PlanFile(plan_ctx) = &guard.value else {
-                            unreachable!("the plan context must be initialized");
-                        };
+                        let plan_owned = plan_parent.upgrade().unwrap();
+                        let plan_ctx = plan_owned.read();
                         let Some(parent_dir) = plan_ctx.path.parent() else {
                             unreachable!("the plan file must have a parent directory");
                         };
@@ -291,8 +302,8 @@ impl From<InsertGroupJob> for Job {
 
 #[derive(Debug)]
 struct InsertGroupJob {
-    plan_parent: ScopeTreeRef,
-    current: ScopeTreeRef,
+    plan_parent: PlanFileScopeShared,
+    current: ScopeShared,
     current_prefix: KeyOwned,
     child_suffix: KeyOwned,
     child_group: GroupCfg,
@@ -301,7 +312,7 @@ struct InsertGroupJob {
 #[derive(Debug)]
 struct InsertPlanFileJob {
     // plan_parent: TrieRef,
-    current: ScopeTreeRef,
+    current: ScopeShared,
     current_prefix: KeyOwned,
     child_suffix: KeyOwned,
     child_plan_path: PathBuf,
@@ -324,18 +335,6 @@ fn to_plan_scope(
         }
     }
 
-    let node_map: IndexMap<_, _> = plan_cfg
-        .node
-        .0
-        .into_iter()
-        .map(|(ident, cfg)| {
-            let node_key = scope_key / &ident;
-            let ctx = to_node_context(resource, node_key, cfg);
-            let shared = resource.node_tab.insert(ctx);
-            (ident, shared)
-        })
-        .collect();
-
     let socket_map: IndexMap<_, _> = plan_cfg
         .socket
         .0
@@ -344,18 +343,6 @@ fn to_plan_scope(
             let socket_key = scope_key / &ident;
             let ctx = to_socket_context(socket_key, cfg);
             let shared = resource.plan_socket_tab.insert(ctx);
-            (ident, shared)
-        })
-        .collect();
-
-    let link_map: IndexMap<_, _> = plan_cfg
-        .link
-        .0
-        .into_iter()
-        .map(|(ident, cfg)| {
-            let link_key = scope_key / &ident;
-            let ctx = to_link_context(link_key, cfg);
-            let shared = resource.link_tab.insert(ctx);
             (ident, shared)
         })
         .collect();
@@ -376,15 +363,32 @@ fn to_plan_scope(
         .map(|(name, var_entry)| (name, ExprContext::new(var_entry)))
         .collect();
 
-    let plan_ctx = PlanFileScope {
+    let mut plan_ctx = PlanFileScope {
         path,
         arg_map,
         var_map,
         socket_map,
-        node_map,
-        link_map,
         when: when.map(ExprContext::new),
+        node_map: IndexMap::new(),
+        link_map: IndexMap::new(),
+        include_map: IndexMap::new(),
+        group_map: IndexMap::new(),
+        key_map: BTreeMap::new(),
     };
+
+    for (ident, cfg) in plan_cfg.node.0.into_iter() {
+        let node_key = scope_key / &ident;
+        let ctx = to_node_context(resource, node_key, cfg);
+        let shared = resource.node_tab.insert(ctx);
+        plan_ctx.entity_entry(ident)?.insert_node(shared);
+    }
+
+    for (ident, cfg) in plan_cfg.link.0.into_iter() {
+        let link_key = scope_key / &ident;
+        let ctx = to_link_context(link_key, cfg);
+        let shared = resource.link_tab.insert(ctx);
+        plan_ctx.entity_entry(ident)?.insert_link(shared);
+    }
 
     Ok((plan_ctx, plan_cfg.subplan))
 }
@@ -393,36 +397,31 @@ fn to_group_scope(
     resource: &mut Resource,
     scope_key: &Key,
     group: GroupCfg,
-) -> (GroupScope, SubplanTable) {
-    let local_node_map: IndexMap<_, _> = group
-        .node
-        .0
-        .into_iter()
-        .map(|(ident, cfg)| {
-            let node_key = scope_key / &ident;
-            let ctx = to_node_context(resource, node_key, cfg);
-            let shared = resource.node_tab.insert(ctx);
-            (ident, shared)
-        })
-        .collect();
-    let local_link_map: IndexMap<_, _> = group
-        .link
-        .0
-        .into_iter()
-        .map(|(ident, cfg)| {
-            let link_key = scope_key / &ident;
-            let ctx = to_link_context(link_key, cfg);
-            let shared = resource.link_tab.insert(ctx);
-            (ident, shared)
-        })
-        .collect();
-
-    let ctx = GroupScope {
+) -> Result<(GroupScope, SubplanTable), Error> {
+    let mut group_ctx = GroupScope {
         when: group.when.map(ExprContext::new),
-        node_map: local_node_map,
-        link_map: local_link_map,
+        node_map: IndexMap::new(),
+        link_map: IndexMap::new(),
+        include_map: IndexMap::new(),
+        group_map: IndexMap::new(),
+        key_map: BTreeMap::new(),
     };
-    (ctx, group.subplan)
+
+    for (ident, cfg) in group.node.0.into_iter() {
+        let node_key = scope_key / &ident;
+        let ctx = to_node_context(resource, node_key, cfg);
+        let shared = resource.node_tab.insert(ctx);
+        group_ctx.entity_entry(ident)?.insert_node(shared);
+    }
+
+    for (ident, cfg) in group.link.0.into_iter() {
+        let link_key = scope_key / &ident;
+        let ctx = to_link_context(link_key, cfg);
+        let shared = resource.link_tab.insert(ctx);
+        group_ctx.entity_entry(ident)?.insert_link(shared);
+    }
+
+    Ok((group_ctx, group.subplan))
 }
 
 fn to_socket_context(key: KeyOwned, socket_ctx: PlanSocketCfg) -> PlanSocketContext {

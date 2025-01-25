@@ -12,8 +12,8 @@ use crate::{
     },
     error::Error,
     scope::{
-        GroupScope, LinkShared, NodeShared, NodeSocketShared, PlanFileScope, PlanSocketShared,
-        Scope, ScopeTreeRef,
+        GroupScope, GroupScopeShared, LinkShared, NodeShared, NodeSocketShared, PlanFileScope,
+        PlanFileScopeShared, PlanSocketShared, ScopeShared,
     },
     Resource,
 };
@@ -22,7 +22,7 @@ use ros_plan_format::{link::LinkIdent, node::NodeIdent, plan_socket::PlanSocketI
 use std::collections::VecDeque;
 
 pub struct SharedRefInitializer {
-    queue: VecDeque<ScopeTreeRef>,
+    queue: VecDeque<ScopeShared>,
 }
 
 impl SharedRefInitializer {
@@ -49,8 +49,8 @@ impl SharedRefInitializer {
         }
 
         {
-            let root = resource.root.clone().unwrap();
-            self.queue.push_back(root);
+            let root = resource.root().unwrap();
+            self.queue.push_back(root.downgrade().into());
 
             while let Some(curr) = self.queue.pop_front() {
                 self.visit_scope(resource, curr)?;
@@ -59,11 +59,11 @@ impl SharedRefInitializer {
         Ok(())
     }
 
-    fn visit_scope(&mut self, resource: &Resource, current: ScopeTreeRef) -> Result<(), Error> {
-        let mut guard = current.write();
-        match &mut guard.value {
-            Scope::PlanFile(scope) => update_plan_file_scope(resource, scope)?,
-            Scope::Group(scope) => update_group_scope(resource, scope)?,
+    fn visit_scope(&mut self, resource: &Resource, current: ScopeShared) -> Result<(), Error> {
+        // let mut guard = owned.write();
+        match &current {
+            ScopeShared::Include(scope) => update_plan_file_scope(resource, scope)?,
+            ScopeShared::Group(scope) => update_group_scope(resource, scope)?,
         }
         Ok(())
     }
@@ -77,23 +77,31 @@ impl Default for SharedRefInitializer {
     }
 }
 
-fn update_plan_file_scope(resource: &Resource, scope: &mut PlanFileScope) -> Result<(), Error> {
+fn update_plan_file_scope(resource: &Resource, shared: &PlanFileScopeShared) -> Result<(), Error> {
+    let owned = shared.upgrade().unwrap();
+    let mut scope = owned.write();
+
     let PlanFileScope {
         socket_map,
         node_map,
         link_map,
         ..
-    } = scope;
+    } = &mut *scope;
+
     update_node_map(resource, node_map)?;
     update_link_map(resource, link_map)?;
     update_socket_map(resource, socket_map)?;
     Ok(())
 }
 
-fn update_group_scope(resource: &Resource, scope: &mut GroupScope) -> Result<(), Error> {
+fn update_group_scope(resource: &Resource, shared: &GroupScopeShared) -> Result<(), Error> {
+    let owned = shared.upgrade().unwrap();
+    let mut scope = owned.write();
+
     let GroupScope {
         node_map, link_map, ..
-    } = scope;
+    } = &mut *scope;
+
     update_node_map(resource, node_map)?;
     update_link_map(resource, link_map)?;
     Ok(())

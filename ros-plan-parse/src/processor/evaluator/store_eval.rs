@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use super::eval::Eval;
 use crate::{
     context::{
@@ -8,7 +6,7 @@ use crate::{
         node::NodeContext,
     },
     error::Error,
-    scope::{NodeShared, Scope, ScopeTreeRef},
+    scope::{GroupScopeShared, NodeShared, PlanFileScopeShared},
 };
 use indexmap::IndexMap;
 use mlua::prelude::*;
@@ -154,36 +152,45 @@ pub fn store_eval_arg_assignment(
     Ok(())
 }
 
-pub fn store_eval_subplan_table(
+pub fn store_eval_include_table(
     lua: &Lua,
-    children: &BTreeMap<KeyOwned, ScopeTreeRef>,
+    children: &IndexMap<KeyOwned, PlanFileScopeShared>,
 ) -> Result<(), Error> {
-    for child in children.values() {
-        let mut child = child.write();
-        match &mut child.value {
-            Scope::PlanFile(scope) => {
-                if let Some(when) = &mut scope.when {
-                    when.store_eval(lua)?;
+    for shared in children.values() {
+        let owned = shared.upgrade().unwrap();
+        let mut scope = owned.write();
 
-                    if !when.result.as_ref().unwrap().is_bool() {
-                        return Err(Error::EvaluationError {
-                            error: "cannot evaluate to a boolean value".to_string(),
-                        });
-                    };
-                };
-                store_eval_arg_assignment(lua, &mut scope.arg_map)?;
-            }
-            Scope::Group(scope) => {
-                if let Some(when) = &mut scope.when {
-                    when.store_eval(lua)?;
-                    if !when.result.as_ref().unwrap().is_bool() {
-                        return Err(Error::EvaluationError {
-                            error: "cannot evaluate to a boolean value".to_string(),
-                        });
-                    };
-                };
-            }
-        }
+        if let Some(when) = &mut scope.when {
+            when.store_eval(lua)?;
+
+            if !when.result.as_ref().unwrap().is_bool() {
+                return Err(Error::EvaluationError {
+                    error: "cannot evaluate to a boolean value".to_string(),
+                });
+            };
+        };
+        store_eval_arg_assignment(lua, &mut scope.arg_map)?;
+    }
+
+    Ok(())
+}
+
+pub fn store_eval_group_table(
+    lua: &Lua,
+    children: &IndexMap<KeyOwned, GroupScopeShared>,
+) -> Result<(), Error> {
+    for shared in children.values() {
+        let owned = shared.upgrade().unwrap();
+        let mut scope = owned.write();
+
+        if let Some(when) = &mut scope.when {
+            when.store_eval(lua)?;
+            if !when.result.as_ref().unwrap().is_bool() {
+                return Err(Error::EvaluationError {
+                    error: "cannot evaluate to a boolean value".to_string(),
+                });
+            };
+        };
     }
 
     Ok(())

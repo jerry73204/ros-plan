@@ -4,7 +4,7 @@ pub mod shared_table;
 use crate::{
     error::Error,
     resource::Resource,
-    scope::{NodeSocketOwned, NodeSocketShared, PlanSocketOwned, ScopeTreeRef},
+    scope::{NodeSocketOwned, NodeSocketShared, PlanSocketOwned, ScopeRefExt, ScopeShared},
 };
 use ros_plan_format::key::Key;
 use serde::Deserialize;
@@ -154,17 +154,20 @@ impl From<PlanSocketOwned> for FindSocket {
 
 pub fn find_plan_or_node_socket(
     resource: &Resource,
-    current: ScopeTreeRef,
+    current: ScopeShared,
     socket_key: &Key,
 ) -> Option<FindSocket> {
     let output: FindSocket = if socket_key.is_absolute() {
         resource.find_node_socket(socket_key)?.into()
     } else if socket_key.is_relative() {
-        if let Some(socket) = current.find_node_socket_within_scope(socket_key) {
-            socket.into()
+        let owned = current.upgrade().unwrap();
+        let guard = owned.read();
+
+        if let Some(socket) = guard.get_node_socket_recursive_bounded(socket_key) {
+            socket.upgrade().unwrap().into()
         } else {
-            let socket = current.find_subplan_socket_within_scope(socket_key)?;
-            socket.into()
+            let socket = guard.get_plan_socket_recursive_bounded(socket_key)?;
+            socket.upgrade().unwrap().into()
         }
     } else {
         return None;
@@ -174,7 +177,7 @@ pub fn find_plan_or_node_socket(
 
 pub fn resolve_node_publication(
     resource: &Resource,
-    current: ScopeTreeRef,
+    current: ScopeShared,
     socket_key: &Key,
 ) -> Option<Vec<NodeSocketShared>> {
     let find_socket = find_plan_or_node_socket(resource, current, socket_key)?;
@@ -196,7 +199,7 @@ pub fn resolve_node_publication(
 
 pub fn resolve_node_subscription(
     resource: &Resource,
-    current: ScopeTreeRef,
+    current: ScopeShared,
     socket_key: &Key,
 ) -> Option<Vec<NodeSocketShared>> {
     let find_socket = find_plan_or_node_socket(resource, current, socket_key)?;
@@ -218,7 +221,7 @@ pub fn resolve_node_subscription(
 
 pub fn resolve_node_server(
     resource: &Resource,
-    current: ScopeTreeRef,
+    current: ScopeShared,
     socket_key: &Key,
 ) -> Option<NodeSocketShared> {
     let find_socket = find_plan_or_node_socket(resource, current, socket_key)?;
@@ -240,7 +243,7 @@ pub fn resolve_node_server(
 
 pub fn resolve_node_client(
     resource: &Resource,
-    current: ScopeTreeRef,
+    current: ScopeShared,
     socket_key: &Key,
 ) -> Option<Vec<NodeSocketShared>> {
     let find_socket = find_plan_or_node_socket(resource, current, socket_key)?;
