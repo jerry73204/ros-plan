@@ -41,7 +41,7 @@ impl Evaluator {
 
             // Traverse all nodes in the tree
             self.queue.push_back(Job::PlanFile {
-                current: root.downgrade().into(),
+                current: root.downgrade(),
             });
         }
 
@@ -114,7 +114,7 @@ impl Evaluator {
         // Schedule jobs to visit child scopes
         {
             let scope_guard = current.read();
-            self.schedule_subplan_jobs(&lua, &*scope_guard)?;
+            self.schedule_subplan_jobs(lua, &*scope_guard)?;
         }
 
         Ok(())

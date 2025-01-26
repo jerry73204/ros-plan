@@ -95,9 +95,9 @@ impl FromLua for ValueFromLua {
                             LuaValue::Number(_) => ValueType::F64,
                             LuaValue::String(_) => ValueType::String,
                             LuaNil => {
-                                return Err(LuaError::external(format!(
-                                    "unable to guess element type of an empty array"
-                                )));
+                                return Err(LuaError::external(
+                                    "unable to guess element type of an empty array".to_string(),
+                                ));
                             }
                             _ => {
                                 return Err(LuaError::external(format!(

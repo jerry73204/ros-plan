@@ -137,22 +137,20 @@ impl TryFrom<TaggedValue> for ValueOrExpr {
                     ValueOrExpr::Expr { ty, expr }
                 }
             }
+        } else if let serde_yaml::Value::String(text) = inner_value {
+            let ty = ValueType::from_yaml_tag(&tag)?;
+            let expr: Expr = text
+                .parse()
+                .map_err(|_err| DeserializationError::ExpectExpr)?;
+            ValueOrExpr::Expr { ty, expr }
         } else {
-            if let serde_yaml::Value::String(text) = inner_value {
-                let ty = ValueType::from_yaml_tag(&tag)?;
-                let expr: Expr = text
-                    .parse()
-                    .map_err(|_err| DeserializationError::ExpectExpr)?;
-                ValueOrExpr::Expr { ty, expr }
-            } else {
-                let outer_value = serde_yaml::Value::Tagged(Box::new(TaggedValue {
-                    tag,
-                    value: inner_value,
-                }));
-                let value: Value = serde_yaml::from_value(outer_value)
-                    .map_err(|error| DeserializationError::ExpectValueWithType { error })?;
-                value.into()
-            }
+            let outer_value = serde_yaml::Value::Tagged(Box::new(TaggedValue {
+                tag,
+                value: inner_value,
+            }));
+            let value: Value = serde_yaml::from_value(outer_value)
+                .map_err(|error| DeserializationError::ExpectValueWithType { error })?;
+            value.into()
         };
 
         Ok(value_or_expr)

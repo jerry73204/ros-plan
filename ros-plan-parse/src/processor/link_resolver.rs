@@ -76,7 +76,7 @@ impl LinkResolver {
 
             self.queue.push_back(
                 VisitNodeJob {
-                    current: subscope.into(),
+                    current: subscope,
                     current_prefix: child_prefix,
                 }
                 .into(),
@@ -92,7 +92,7 @@ impl LinkResolver {
 
             self.queue.push_back(
                 ResolveLinkJob {
-                    current: subscope.into(),
+                    current: subscope,
                     current_prefix: child_prefix,
                 }
                 .into(),

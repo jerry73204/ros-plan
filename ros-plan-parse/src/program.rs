@@ -98,7 +98,7 @@ impl Program {
         // Walk down to descent child nodes
         let root = self.root().unwrap();
         let guard = root.read();
-        guard.get_subscope_recursive_unbounded(suffix)
+        guard.global_selector().find_subscope(suffix)
     }
 
     /// Locate a node specified by an absolute key.

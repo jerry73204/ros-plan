@@ -19,6 +19,7 @@ use indexmap::IndexMap;
 use ros_plan_format::{link::LinkIdent, node::NodeIdent, plan_socket::PlanSocketIdent};
 use std::collections::VecDeque;
 
+#[derive(Debug, Default)]
 pub struct SharedRefInitializer {
     queue: VecDeque<ScopeShared>,
 }
@@ -64,14 +65,6 @@ impl SharedRefInitializer {
             ScopeShared::Group(scope) => update_group_scope(resource, scope)?,
         }
         Ok(())
-    }
-}
-
-impl Default for SharedRefInitializer {
-    fn default() -> Self {
-        Self {
-            queue: VecDeque::new(),
-        }
     }
 }
 

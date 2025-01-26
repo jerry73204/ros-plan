@@ -167,10 +167,10 @@ pub fn find_plan_or_node_socket(
         let owned = current.upgrade().unwrap();
         let guard = owned.read();
 
-        if let Some(socket) = guard.get_node_socket_recursive_bounded(socket_key) {
+        if let Some(socket) = guard.local_selector().find_node_socket(socket_key) {
             socket.upgrade().unwrap().into()
         } else {
-            let socket = guard.get_plan_socket_recursive_bounded(socket_key)?;
+            let socket = guard.local_selector().find_plan_socket(socket_key)?;
             socket.upgrade().unwrap().into()
         }
     } else {

@@ -1,9 +1,8 @@
-use super::{EntityShared, GroupScopeShared, PlanScopeShared, ScopeShared};
+use super::{
+    EntityShared, GlobalSelector, GroupScopeShared, LocalSelector, PlanScopeShared, ScopeShared,
+};
 use crate::{
-    context::{
-        link::LinkShared, node::NodeShared, node_socket::NodeSocketShared,
-        plan_socket::PlanSocketShared,
-    },
+    context::{link::LinkShared, node::NodeShared},
     error::Error,
 };
 use indexmap::IndexMap;
@@ -78,6 +77,20 @@ pub trait ScopeRefExt: ScopeRef {
         Some(entity)
     }
 
+    fn local_selector(&self) -> LocalSelector<'_, Self>
+    where
+        Self: Sized,
+    {
+        LocalSelector::new(self)
+    }
+
+    fn global_selector(&self) -> GlobalSelector<'_, Self>
+    where
+        Self: Sized,
+    {
+        GlobalSelector::new(self)
+    }
+
     fn get_subscope<'a>(&self, key: &'a Key) -> Option<(ScopeShared, Option<&'a Key>)> {
         let (prefix_key, kind) = self.key_upper_bound(Bound::Included(key))?;
 
@@ -94,90 +107,6 @@ pub trait ScopeRefExt: ScopeRef {
         };
 
         Some((subscope, suffix_key))
-    }
-
-    fn get_subscope_recursive_unbounded(&self, key: &Key) -> Option<ScopeShared> {
-        // The first step can start from a plan or a group node.
-        let (mut curr, mut suffix) = self.get_subscope(key)?;
-
-        // In later steps, it can only start from a group node.
-        while let Some(curr_suffix) = suffix.take() {
-            let (child, next_suffix) = match curr {
-                ScopeShared::Group(shared) => {
-                    let owned = shared.upgrade().unwrap();
-                    let guard = owned.read();
-                    guard.get_subscope(curr_suffix)?
-                }
-                ScopeShared::Include(shared) => {
-                    let owned = shared.upgrade().unwrap();
-                    let guard = owned.read();
-                    guard.get_subscope(curr_suffix)?
-                }
-            };
-
-            curr = child;
-            suffix = next_suffix;
-        }
-
-        Some(curr)
-    }
-
-    fn get_subscope_recursive_bounded(&self, key: &Key) -> Option<ScopeShared> {
-        // The first step can start from a plan or a group node.
-        let (mut curr, mut suffix) = self.get_subscope(key)?;
-
-        // In later steps, it can only start from a group node.
-        while let Some(curr_suffix) = suffix.take() {
-            let ScopeShared::Group(shared) = curr else {
-                return None;
-            };
-            let owned = shared.upgrade().unwrap();
-            let guard = owned.read();
-
-            let (child, next_suffix) = guard.get_subscope(curr_suffix)?;
-            curr = child;
-            suffix = next_suffix;
-        }
-
-        Some(curr)
-    }
-
-    fn get_node_recursive_bounded(&self, key: &Key) -> Option<NodeShared> {
-        let (scope_key, node_ident) = key.split_parent();
-        let node_ident = node_ident?;
-
-        match scope_key {
-            Some(scope_key) => {
-                let shared = self.get_subscope_recursive_bounded(scope_key)?;
-                let owned = shared.upgrade().unwrap();
-                let guard = owned.read();
-                guard.node_map().get(node_ident).cloned()
-            }
-            None => self.node_map().get(node_ident).cloned(),
-        }
-    }
-
-    fn get_node_socket_recursive_bounded(&self, key: &Key) -> Option<NodeSocketShared> {
-        let (node_key, socket_ident) = key.split_parent();
-        let node_key = node_key?;
-        let socket_ident = socket_ident?;
-
-        let shared = self.get_node_recursive_bounded(node_key)?;
-        let owned = shared.upgrade().unwrap();
-        let guard = owned.read();
-        guard.socket.get(socket_ident).cloned()
-    }
-
-    fn get_plan_socket_recursive_bounded(&self, key: &Key) -> Option<PlanSocketShared> {
-        let (scope_key, socket_ident) = key.split_parent();
-        let scope_key = scope_key?;
-        let socket_ident = socket_ident?;
-
-        let shared = self.get_subscope_recursive_bounded(scope_key)?;
-        let owned = shared.upgrade().unwrap();
-        let guard = owned.read();
-        let include = guard.as_include()?;
-        include.socket_map.get(socket_ident).cloned()
     }
 }
 
@@ -215,7 +144,7 @@ pub trait ScopeMutExt: ScopeMut {
     {
         let key = ident.as_key();
 
-        if let Some((sup_key, _)) = self.key_upper_bound(Bound::Included(&key)) {
+        if let Some((sup_key, _)) = self.key_upper_bound(Bound::Included(key)) {
             if key.starts_with(sup_key) {
                 return Err(Error::ConflictingKeys {
                     offender: sup_key.to_owned(),
@@ -224,8 +153,8 @@ pub trait ScopeMutExt: ScopeMut {
             }
         }
 
-        if let Some((inf_key, _)) = self.key_lower_bound(Bound::Excluded(&key)) {
-            if inf_key.starts_with(&key) {
+        if let Some((inf_key, _)) = self.key_lower_bound(Bound::Excluded(key)) {
+            if inf_key.starts_with(key) {
                 return Err(Error::ConflictingKeys {
                     offender: inf_key.to_owned(),
                     inserted: key.to_owned(),
