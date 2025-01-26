@@ -4,7 +4,8 @@ mod config;
 use clap::Parser;
 use cli::{Cli, ExpandArgs, LoadArgs, StartArgs};
 use indexmap::IndexMap;
-use ros_plan_parse::Resource;
+use ros_plan_compiler::Program;
+use ros_plan_format::Plan;
 
 fn main() -> eyre::Result<()> {
     let cli = Cli::parse();
@@ -18,12 +19,16 @@ fn main() -> eyre::Result<()> {
     Ok(())
 }
 
-fn start(_args: StartArgs) -> eyre::Result<()> {
-    todo!();
+fn start(args: StartArgs) -> eyre::Result<()> {
+    let toml_text = std::fs::read_to_string(&args.plan_file)?;
+    let plan: Plan = toml::from_str(&toml_text)?;
+    let yaml_text = serde_yaml::to_string(&plan)?;
+    print!("{yaml_text}");
+    Ok(())
 }
 
 fn expand(args: ExpandArgs) -> eyre::Result<()> {
-    let mut resource = Resource::from_plan_file(&args.plan_file)?;
+    let mut resource = Program::from_plan_file(&args.plan_file)?;
     resource.eval(IndexMap::new())?;
 
     let text = serde_yaml::to_string(&resource)?;
@@ -37,7 +42,7 @@ fn expand(args: ExpandArgs) -> eyre::Result<()> {
 }
 
 fn load(args: LoadArgs) -> eyre::Result<()> {
-    let mut resource: Resource = {
+    let mut resource: Program = {
         let text = std::fs::read_to_string(&args.dump_file)?;
         serde_yaml::from_str(&text)?
     };
