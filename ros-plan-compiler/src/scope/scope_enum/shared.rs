@@ -1,4 +1,4 @@
-use super::ScopeOwned;
+use super::{ScopeOwned, ScopeReadGuard, ScopeWriteGuard};
 use crate::scope::{GroupScopeShared, PlanScopeShared};
 
 #[derive(Debug, Clone)]
@@ -8,11 +8,36 @@ pub enum ScopeShared {
 }
 
 impl ScopeShared {
+    pub fn id(&self) -> usize {
+        match self {
+            ScopeShared::Group(shared) => shared.id(),
+            ScopeShared::Include(shared) => shared.id(),
+        }
+    }
+
     pub fn upgrade(&self) -> Option<ScopeOwned> {
         Some(match self {
             ScopeShared::Group(shared) => shared.upgrade()?.into(),
             ScopeShared::Include(shared) => shared.upgrade()?.into(),
         })
+    }
+
+    pub fn with_read<R, F>(&self, f: F) -> R
+    where
+        F: FnOnce(ScopeReadGuard) -> R,
+    {
+        let owned = self.upgrade().unwrap();
+        let guard = owned.read();
+        f(guard)
+    }
+
+    pub fn with_write<R, F>(&self, f: F) -> R
+    where
+        F: FnOnce(ScopeWriteGuard) -> R,
+    {
+        let owned = self.upgrade().unwrap();
+        let guard = owned.write();
+        f(guard)
     }
 
     pub fn as_group(&self) -> Option<&GroupScopeShared> {
@@ -60,6 +85,15 @@ impl ScopeShared {
             Ok(v)
         } else {
             Err(self)
+        }
+    }
+
+    #[must_use]
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (ScopeShared::Group(lhs), ScopeShared::Group(rhs)) => lhs.ptr_eq(rhs),
+            (ScopeShared::Include(lhs), ScopeShared::Include(rhs)) => lhs.ptr_eq(rhs),
+            _ => false,
         }
     }
 }

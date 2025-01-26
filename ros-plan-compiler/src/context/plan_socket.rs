@@ -12,51 +12,54 @@ pub type PlanSocketShared = Shared<PlanSocketCtx>;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PlanSocketCtx {
     #[serde(rename = "pub")]
-    Publication(PlanPubCtx),
+    Pub(PlanPubCtx),
+
     #[serde(rename = "sub")]
-    Subscription(PlanSubCtx),
+    Sub(PlanSubCtx),
+
     #[serde(rename = "srv")]
-    Server(PlanSrvCtx),
+    Srv(PlanSrvCtx),
+
     #[serde(rename = "cli")]
-    Client(PlanCliCtx),
+    Cli(PlanCliCtx),
 }
 
 impl PlanSocketCtx {
     pub fn key(&self) -> &Key {
         match self {
-            PlanSocketCtx::Publication(socket) => &socket.key,
-            PlanSocketCtx::Subscription(socket) => &socket.key,
-            PlanSocketCtx::Server(socket) => &socket.key,
-            PlanSocketCtx::Client(socket) => &socket.key,
+            PlanSocketCtx::Pub(socket) => &socket.key,
+            PlanSocketCtx::Sub(socket) => &socket.key,
+            PlanSocketCtx::Srv(socket) => &socket.key,
+            PlanSocketCtx::Cli(socket) => &socket.key,
         }
     }
 
-    pub fn as_publication(&self) -> Option<&PlanPubCtx> {
-        if let Self::Publication(v) = self {
+    pub fn as_pub(&self) -> Option<&PlanPubCtx> {
+        if let Self::Pub(v) = self {
             Some(v)
         } else {
             None
         }
     }
 
-    pub fn as_subscription(&self) -> Option<&PlanSubCtx> {
-        if let Self::Subscription(v) = self {
+    pub fn as_sub(&self) -> Option<&PlanSubCtx> {
+        if let Self::Sub(v) = self {
             Some(v)
         } else {
             None
         }
     }
 
-    pub fn as_server(&self) -> Option<&PlanSrvCtx> {
-        if let Self::Server(v) = self {
+    pub fn as_srv(&self) -> Option<&PlanSrvCtx> {
+        if let Self::Srv(v) = self {
             Some(v)
         } else {
             None
         }
     }
 
-    pub fn as_client(&self) -> Option<&PlanCliCtx> {
-        if let Self::Client(v) = self {
+    pub fn as_cli(&self) -> Option<&PlanCliCtx> {
+        if let Self::Cli(v) = self {
             Some(v)
         } else {
             None
@@ -66,25 +69,25 @@ impl PlanSocketCtx {
 
 impl From<PlanCliCtx> for PlanSocketCtx {
     fn from(v: PlanCliCtx) -> Self {
-        Self::Client(v)
+        Self::Cli(v)
     }
 }
 
 impl From<PlanSrvCtx> for PlanSocketCtx {
     fn from(v: PlanSrvCtx) -> Self {
-        Self::Server(v)
+        Self::Srv(v)
     }
 }
 
 impl From<PlanSubCtx> for PlanSocketCtx {
     fn from(v: PlanSubCtx) -> Self {
-        Self::Subscription(v)
+        Self::Sub(v)
     }
 }
 
 impl From<PlanPubCtx> for PlanSocketCtx {
     fn from(v: PlanPubCtx) -> Self {
-        Self::Publication(v)
+        Self::Pub(v)
     }
 }
 

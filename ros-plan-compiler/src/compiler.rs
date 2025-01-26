@@ -38,13 +38,13 @@ impl Compiler {
         // Perform plan socket resolution
         {
             let mut resolver = SocketResolver::default();
-            resolver.traverse(&mut resource)?;
+            resolver.resolve(&mut resource)?;
         }
 
         // Perform plan socket resolution
         {
             let mut resolver = LinkResolver::default();
-            resolver.traverse(&mut resource)?;
+            resolver.resolve(&mut resource)?;
         }
 
         Ok(resource)
@@ -57,7 +57,7 @@ impl Compiler {
         args: IndexMap<ParamName, Value>,
     ) -> Result<(), Error> {
         let mut evaluator = Evaluator::default();
-        evaluator.eval_resource(program, args)?;
+        evaluator.eval(program, args)?;
         Ok(())
     }
 }

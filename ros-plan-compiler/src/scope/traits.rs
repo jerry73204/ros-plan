@@ -1,9 +1,8 @@
-use super::{
-    EntityShared, GlobalSelector, GroupScopeShared, LocalSelector, PlanScopeShared, ScopeShared,
-};
+use super::{EntityShared, GroupScopeShared, PlanScopeShared, ScopeShared};
 use crate::{
     context::{link::LinkShared, node::NodeShared},
     error::Error,
+    selector::RelativeSelector,
 };
 use indexmap::IndexMap;
 use ros_plan_format::{
@@ -77,18 +76,11 @@ pub trait ScopeRefExt: ScopeRef {
         Some(entity)
     }
 
-    fn local_selector(&self) -> LocalSelector<'_, Self>
+    fn relative_selector(&self) -> RelativeSelector<'_, Self>
     where
         Self: Sized,
     {
-        LocalSelector::new(self)
-    }
-
-    fn global_selector(&self) -> GlobalSelector<'_, Self>
-    where
-        Self: Sized,
-    {
-        GlobalSelector::new(self)
+        RelativeSelector::new(self)
     }
 
     fn get_subscope<'a>(&self, key: &'a Key) -> Option<(ScopeShared, Option<&'a Key>)> {

@@ -146,6 +146,33 @@ impl<T> Shared<T> {
     pub fn id(&self) -> usize {
         self.id
     }
+
+    pub fn with_read<R, F>(&self, f: F) -> R
+    where
+        F: FnOnce(RwLockReadGuard<T>) -> R,
+    {
+        self.tab_weak.with_read(|tab_guard| {
+            let entry_guard = tab_guard[self.id].read();
+            f(entry_guard)
+        })
+    }
+
+    pub fn with_write<R, F>(&self, f: F) -> R
+    where
+        F: FnOnce(RwLockWriteGuard<T>) -> R,
+    {
+        self.tab_weak.with_read(|tab_guard| {
+            let entry_guard = tab_guard[self.id].write();
+            f(entry_guard)
+        })
+    }
+
+    #[must_use]
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        let ptr_eq = std::ptr::eq(self.tab_weak.as_ptr(), other.tab_weak.as_ptr());
+        let id_eq = self.id == other.id;
+        ptr_eq && id_eq
+    }
 }
 
 impl<T> Clone for Shared<T> {

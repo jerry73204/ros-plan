@@ -4,7 +4,7 @@ mod non_private_key;
 mod relative_key;
 
 pub use key_owned::KeyOwned;
-pub use key_type::{Key, StripKeyPrefix};
+pub use key_type::{Key, KeyKind, StripKeyPrefix};
 pub use non_private_key::NonPrivateKeyOwned;
 pub use relative_key::RelativeKeyOwned;
 

@@ -6,7 +6,7 @@ use crate::{
     context::{arg::ArgCtx, expr::ExprCtx},
     error::Error,
     program::Program,
-    scope::{GroupScopeOwned, GroupScopeShared, PlanScopeOwned, PlanScopeShared, ScopeRef},
+    scope::{GroupScopeShared, PlanScopeShared, ScopeRef},
 };
 use indexmap::IndexMap;
 use lua::{new_lua, ValueToLua};
@@ -23,56 +23,50 @@ pub struct Evaluator {
 }
 
 impl Evaluator {
-    pub fn eval_resource(
+    pub fn eval(
         &mut self,
-        resource: &mut Program,
+        program: &mut Program,
         args: IndexMap<ParamName, Value>,
     ) -> Result<(), Error> {
         {
-            let root = resource
-                .root()
-                .expect("the resource tree must be constructed before evaluation");
+            let root = program.root();
 
             // Assign arguments provided from caller
-            {
-                let mut guard = root.write();
+            root.with_write(|mut guard| -> Result<_, Error> {
                 assign_arg_table(&mut guard.arg_map, args)?;
-            }
+                Ok(())
+            })?;
 
             // Traverse all nodes in the tree
-            self.queue.push_back(Job::PlanFile {
-                current: root.downgrade(),
-            });
+            self.queue.push_back(Job::PlanFile { current: root });
         }
 
         while let Some(job) = self.queue.pop_front() {
             match job {
-                Job::PlanFile { current } => self.eval_plan_file(&current.upgrade().unwrap())?,
-                Job::Group { current, lua } => self.eval_group(&lua, current.upgrade().unwrap())?,
+                Job::PlanFile { current } => self.eval_plan_file(&current)?,
+                Job::Group { current, lua } => self.eval_group(&lua, &current)?,
             }
         }
 
         Ok(())
     }
 
-    fn eval_plan_file(&mut self, current: &PlanScopeOwned) -> Result<(), Error> {
+    fn eval_plan_file(&mut self, current: &PlanScopeShared) -> Result<(), Error> {
         // Create a new Lua context
         let lua = new_lua()?;
 
-        {
-            let mut scope_guard = current.write();
-
+        current.with_write(|mut guard| -> Result<_, Error> {
             // Populate arguments into the global scope
-            load_arg_table(&lua, &mut scope_guard.arg_map)?;
+            load_arg_table(&lua, &mut guard.arg_map)?;
 
             // Populate local variables into the global scope
-            load_var_table(&lua, &mut scope_guard.var_map)?;
+            load_var_table(&lua, &mut guard.var_map)?;
 
             // Lock global variables.
             lua.globals().set_readonly(true);
 
             // Evaluate the node table
-            store_eval_node_map(&lua, &mut scope_guard.node_map)?;
+            store_eval_node_map(&lua, &mut guard.node_map)?;
 
             // Evaluate the link table
             // store_eval_link_map(&lua, &mut scope_guard.link_map)?;
@@ -82,40 +76,42 @@ impl Evaluator {
 
             // Evaluate assigned arguments and `when` conditions on
             // subscopes.
-            store_eval_include_table(&lua, &scope_guard.include_map)?;
-            store_eval_group_table(&lua, &scope_guard.group_map)?;
-        }
+            store_eval_include_table(&lua, &guard.include_map)?;
+            store_eval_group_table(&lua, &guard.group_map)?;
+
+            Ok(())
+        })?;
 
         // Schedule jobs to visit child scopes
-        {
-            let scope_guard = current.read();
-            self.schedule_subplan_jobs(&lua, &*scope_guard)?;
-        }
+        current.with_read(|guard| -> Result<_, Error> {
+            self.schedule_subplan_jobs(&lua, &*guard)?;
+            Ok(())
+        })?;
 
         Ok(())
     }
 
-    fn eval_group(&mut self, lua: &Lua, current: GroupScopeOwned) -> Result<(), Error> {
-        {
-            let mut scope_guard = current.write();
-
+    fn eval_group(&mut self, lua: &Lua, current: &GroupScopeShared) -> Result<(), Error> {
+        current.with_write(|mut guard| -> Result<(), Error> {
             // Evaluate the node table
-            store_eval_node_map(lua, &mut scope_guard.node_map)?;
+            store_eval_node_map(lua, &mut guard.node_map)?;
 
             // Evaluate the link table
             // store_eval_link_map(lua, &mut scope_guard.link_map)?;
 
             // Evaluate assigned arguments and `when` condition on
             // subscopes
-            store_eval_include_table(lua, &scope_guard.include_map)?;
-            store_eval_group_table(lua, &scope_guard.group_map)?;
-        }
+            store_eval_include_table(lua, &guard.include_map)?;
+            store_eval_group_table(lua, &guard.group_map)?;
+
+            Ok(())
+        })?;
 
         // Schedule jobs to visit child scopes
-        {
-            let scope_guard = current.read();
+        current.with_read(|scope_guard| -> Result<(), Error> {
             self.schedule_subplan_jobs(lua, &*scope_guard)?;
-        }
+            Ok(())
+        })?;
 
         Ok(())
     }

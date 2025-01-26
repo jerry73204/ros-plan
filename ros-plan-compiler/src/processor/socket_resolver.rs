@@ -3,10 +3,6 @@ use crate::{
     error::Error,
     program::Program,
     scope::{PlanScopeShared, ScopeRefExt, ScopeShared},
-    utils::{
-        resolve_node_client, resolve_node_publication, resolve_node_server,
-        resolve_node_subscription,
-    },
 };
 use itertools::Itertools;
 use ros_plan_format::key::KeyOwned;
@@ -34,10 +30,10 @@ pub struct SocketResolver {
 }
 
 impl SocketResolver {
-    pub fn traverse(&mut self, context: &mut Program) -> Result<(), Error> {
+    pub fn resolve(&mut self, program: &mut Program) -> Result<(), Error> {
         self.queue.push_back(
             VisitNodeJob {
-                current: context.root().unwrap().downgrade().into(),
+                current: program.root().into(),
                 current_prefix: KeyOwned::new_root().clone(),
             }
             .into(),
@@ -49,7 +45,7 @@ impl SocketResolver {
                     self.visit_node(job)?;
                 }
                 Job::ResolveSocket(job) => {
-                    self.resolve_sockets_in_plan(context, job)?;
+                    self.resolve_sockets_in_plan(program, job)?;
                 }
             }
         }
@@ -63,9 +59,7 @@ impl SocketResolver {
             current_prefix,
         } = job;
 
-        let owned = current.upgrade().unwrap();
-        let guard = owned.read();
-        {
+        current.with_read(|guard| {
             // Visit children
             for (suffix, subscope) in guard.subscope_iter() {
                 let Ok(child_prefix) = &current_prefix / suffix else {
@@ -80,7 +74,7 @@ impl SocketResolver {
                     .into(),
                 );
             }
-        }
+        });
 
         if let Ok(plan_shared) = current.try_into_include() {
             self.queue.push_back(
@@ -96,136 +90,128 @@ impl SocketResolver {
 
     fn resolve_sockets_in_plan(
         &self,
-        resource: &mut Program,
+        program: &mut Program,
         job: ResolveSocketJob,
     ) -> Result<(), Error> {
-        let ResolveSocketJob {
-            current,
-            // current_prefix: _,
-        } = job;
+        let ResolveSocketJob { current } = job;
 
-        // Take out the socket_map from the plan context
-        let owned = current.upgrade().unwrap();
-        let guard = owned.read();
+        current.with_read(|guard| {
+            // Resolve URIs in the socket_map
+            for socket_shared in guard.socket_map.values() {
+                socket_shared.with_write(|mut socket_guard| -> Result<_, Error> {
+                    let visitor = Visitor::new(program, &current);
+                    visitor.visit_socket(&mut socket_guard)?;
+                    Ok(())
+                })?;
+            }
+            Ok(())
+        })
+    }
+}
 
-        // Resolve URIs in the socket_map
-        for socket_shared in guard.socket_map.values() {
-            let socket_owned = socket_shared.upgrade().unwrap();
-            let mut socket_guard = socket_owned.write();
-            resolve_socket_topics(resource, current.clone(), &mut socket_guard)?;
+struct Visitor<'a> {
+    program: &'a mut Program,
+    current: &'a PlanScopeShared,
+}
+
+impl<'a> Visitor<'a> {
+    pub fn new(program: &'a mut Program, current: &'a PlanScopeShared) -> Self {
+        Self { program, current }
+    }
+
+    pub fn visit_socket(&self, socket_ctx: &mut PlanSocketCtx) -> Result<(), Error> {
+        match socket_ctx {
+            PlanSocketCtx::Pub(pub_ctx) => self.visit_pub_socket(pub_ctx)?,
+            PlanSocketCtx::Sub(sub_ctx) => self.visit_sub_socket(sub_ctx)?,
+            PlanSocketCtx::Srv(srv_ctx) => self.visit_srv_socket(srv_ctx)?,
+            PlanSocketCtx::Cli(cli_ctx) => self.visit_cli_socket(cli_ctx)?,
         }
-
         Ok(())
     }
-}
 
-fn resolve_socket_topics(
-    resource: &mut Program,
-    current: PlanScopeShared,
-    socket_ctx: &mut PlanSocketCtx,
-) -> Result<(), Error> {
-    match socket_ctx {
-        PlanSocketCtx::Publication(pub_ctx) => {
-            resolve_pub_socket_topics(resource, current, pub_ctx)?
-        }
-        PlanSocketCtx::Subscription(sub_ctx) => {
-            resolve_sub_socket_topics(resource, current, sub_ctx)?
-        }
-        PlanSocketCtx::Server(srv_ctx) => resolve_srv_socket_topics(resource, current, srv_ctx)?,
-        PlanSocketCtx::Client(qry_ctx) => resolve_qry_socket_topics(resource, current, qry_ctx)?,
+    pub fn visit_pub_socket(&self, pub_: &mut PlanPubCtx) -> Result<(), Error> {
+        let src: Result<Vec<_>, _> = pub_
+            .config
+            .src
+            .iter()
+            .map(|socket_key| {
+                self.program
+                    .selector(&self.current.clone().into())
+                    .find_node_pub(socket_key)
+                    .ok_or(socket_key)
+            })
+            .flatten_ok()
+            .collect();
+        let src = match src {
+            Ok(src) => src,
+            Err(bad_key) => {
+                bail!(bad_key, "the key does not resolve to a publication socket");
+            }
+        };
+        set_or_panic!(pub_.src, src);
+        Ok(())
     }
-    Ok(())
-}
 
-fn resolve_pub_socket_topics(
-    resource: &mut Program,
-    current: PlanScopeShared,
-    pub_: &mut PlanPubCtx,
-) -> Result<(), Error> {
-    let src: Vec<_> = pub_
-        .config
-        .src
-        .iter()
-        .map(|socket_key| {
-            let Some(sockets) =
-                resolve_node_publication(resource, current.clone().into(), socket_key)
-            else {
-                bail!(
-                    socket_key,
-                    "the key does not resolve to a publication socket"
-                );
-            };
-            Ok(sockets)
-        })
-        .flatten_ok()
-        .try_collect()?;
+    pub fn visit_sub_socket(&self, sub: &mut PlanSubCtx) -> Result<(), Error> {
+        let dst: Result<Vec<_>, _> = sub
+            .config
+            .dst
+            .iter()
+            .map(|socket_key| {
+                self.program
+                    .selector(&self.current.clone().into())
+                    .find_node_pub(socket_key)
+                    .ok_or(socket_key)
+            })
+            .flatten_ok()
+            .collect();
+        let dst = match dst {
+            Ok(dst) => dst,
+            Err(bad_key) => {
+                bail!(bad_key, "the key does not resolve to a publication socket");
+            }
+        };
+        set_or_panic!(sub.dst, dst);
+        Ok(())
+    }
 
-    set_or_panic!(pub_.src, src);
-    Ok(())
-}
+    pub fn visit_srv_socket(&self, srv: &mut PlanSrvCtx) -> Result<(), Error> {
+        let socket_key = &srv.config.listen;
+        let listen = self
+            .program
+            .selector(&self.current.clone().into())
+            .find_node_srv(socket_key);
+        let Some(listen) = listen else {
+            bail!(socket_key, "the key does not resolve to a server socket");
+        };
 
-fn resolve_sub_socket_topics(
-    resource: &mut Program,
-    current: PlanScopeShared,
-    sub: &mut PlanSubCtx,
-) -> Result<(), Error> {
-    let dst: Vec<_> = sub
-        .config
-        .dst
-        .iter()
-        .map(|socket_key| {
-            let Some(sockets) =
-                resolve_node_subscription(resource, current.clone().into(), socket_key)
-            else {
-                bail!(
-                    socket_key,
-                    "the key does not resolve to a subscription socket"
-                );
-            };
-            Ok(sockets)
-        })
-        .flatten_ok()
-        .try_collect()?;
+        set_or_panic!(srv.listen, listen);
+        Ok(())
+    }
 
-    set_or_panic!(sub.dst, dst);
-    Ok(())
-}
+    pub fn visit_cli_socket(&self, cli: &mut PlanCliCtx) -> Result<(), Error> {
+        let connect: Result<Vec<_>, _> = cli
+            .config
+            .connect
+            .iter()
+            .map(|socket_key| {
+                self.program
+                    .selector(&self.current.clone().into())
+                    .find_node_cli(socket_key)
+                    .ok_or(socket_key)
+            })
+            .flatten_ok()
+            .try_collect();
+        let connect = match connect {
+            Ok(dst) => dst,
+            Err(bad_key) => {
+                bail!(bad_key, "the key does not resolve to a publication socket");
+            }
+        };
 
-fn resolve_srv_socket_topics(
-    resource: &mut Program,
-    current: PlanScopeShared,
-    srv: &mut PlanSrvCtx,
-) -> Result<(), Error> {
-    let socket_key = &srv.config.listen;
-    let Some(socket) = resolve_node_server(resource, current.clone().into(), socket_key) else {
-        bail!(socket_key, "the key does not resolve to a server socket");
-    };
-
-    set_or_panic!(srv.listen, socket);
-    Ok(())
-}
-
-fn resolve_qry_socket_topics(
-    resource: &mut Program,
-    current: PlanScopeShared,
-    qry: &mut PlanCliCtx,
-) -> Result<(), Error> {
-    let connect: Vec<_> = qry
-        .config
-        .connect
-        .iter()
-        .map(|socket_key| {
-            let Some(sockets) = resolve_node_client(resource, current.clone().into(), socket_key)
-            else {
-                bail!(socket_key, "the key does not resolve to a client socket");
-            };
-            Ok(sockets)
-        })
-        .flatten_ok()
-        .try_collect()?;
-
-    set_or_panic!(qry.connect, connect);
-    Ok(())
+        set_or_panic!(cli.connect, connect);
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -255,23 +241,4 @@ pub struct VisitNodeJob {
 #[derive(Debug)]
 pub struct ResolveSocketJob {
     current: PlanScopeShared,
-    // current_prefix: KeyOwned,
 }
-
-// #[derive(Debug)]
-// enum ResolveNode {
-//     Node(NodeOwned),
-//     Socket(SocketOwned),
-// }
-
-// impl From<SocketOwned> for ResolveNode {
-//     fn from(v: SocketOwned) -> Self {
-//         Self::Socket(v)
-//     }
-// }
-
-// impl From<NodeOwned> for ResolveNode {
-//     fn from(v: NodeOwned) -> Self {
-//         Self::Node(v)
-//     }
-// }

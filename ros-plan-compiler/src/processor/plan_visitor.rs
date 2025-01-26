@@ -100,7 +100,7 @@ impl PlanVisitor {
         Ok(())
     }
 
-    fn insert_plan(&mut self, resource: &mut Program, job: InsertPlanFileJob) -> Result<(), Error> {
+    fn insert_plan(&mut self, program: &mut Program, job: InsertPlanFileJob) -> Result<(), Error> {
         let InsertPlanFileJob {
             // plan_parent: _,
             current,
@@ -123,23 +123,22 @@ impl PlanVisitor {
 
         // Create the context for the inserted plan
         let (plan_ctx, subplan) = to_plan_scope(
-            resource,
+            program,
             child_plan_path.clone(),
             &child_prefix,
             plan,
             when,
             assign_args,
         )?;
-        let plan_shared = resource.include_tab.insert(plan_ctx);
+        let plan_shared = program.include_tab.insert(plan_ctx);
 
         // Create the child node for the plan
-        {
-            let owned = current.upgrade().unwrap();
-            let mut guard = owned.write();
+        current.with_write(|mut guard| -> Result<_, Error> {
             guard
                 .scope_entry(child_suffix)?
                 .insert_include(plan_shared.clone());
-        }
+            Ok(())
+        })?;
 
         // Schedule subplan insertion jobs
         self.schedule_scope_insertion(
@@ -172,11 +171,12 @@ impl PlanVisitor {
         // Schedule subplan insertion jobs
 
         {
-            let owned = current.upgrade().unwrap();
-            let mut guard = owned.write();
-            guard
-                .scope_entry(child_suffix)?
-                .insert_group(group_shared.clone());
+            current.with_write(|mut guard| -> Result<_, Error> {
+                guard
+                    .scope_entry(child_suffix)?
+                    .insert_group(group_shared.clone());
+                Ok(())
+            })?;
         }
 
         self.schedule_scope_insertion(
@@ -236,12 +236,12 @@ impl PlanVisitor {
             (Some(path), None, None) => {
                 let subplan_path = path;
                 let subplan_path = if subplan_path.is_relative() {
-                    let plan_owned = plan_parent.upgrade().unwrap();
-                    let plan_ctx = plan_owned.read();
-                    let Some(parent_dir) = plan_ctx.path.parent() else {
-                        unreachable!("the plan file must have a parent directory");
-                    };
-                    parent_dir.join(subplan_path)
+                    plan_parent.with_read(|plan_ctx| {
+                        let Some(parent_dir) = plan_ctx.path.parent() else {
+                            unreachable!("the plan file must have a parent directory");
+                        };
+                        parent_dir.join(subplan_path)
+                    })
                 } else {
                     subplan_path.to_owned()
                 };
@@ -336,7 +336,7 @@ struct SubplanTable {
 }
 
 fn to_plan_scope(
-    resource: &mut Program,
+    program: &mut Program,
     path: PathBuf,
     scope_key: &Key,
     plan_cfg: Plan,
@@ -356,7 +356,7 @@ fn to_plan_scope(
         .map(|(ident, cfg)| {
             let socket_key = scope_key / &ident;
             let ctx = to_socket_context(socket_key, cfg);
-            let shared = resource.plan_socket_tab.insert(ctx);
+            let shared = program.plan_socket_tab.insert(ctx);
             (ident, shared)
         })
         .collect();
@@ -392,15 +392,15 @@ fn to_plan_scope(
 
     for (ident, cfg) in plan_cfg.node.into_iter() {
         let node_key = scope_key / &ident;
-        let ctx = to_node_context(resource, node_key, cfg);
-        let shared = resource.node_tab.insert(ctx);
+        let ctx = to_node_context(program, node_key, cfg);
+        let shared = program.node_tab.insert(ctx);
         plan_ctx.entity_entry(ident)?.insert_node(shared);
     }
 
     for (ident, cfg) in plan_cfg.link.into_iter() {
         let link_key = scope_key / &ident;
         let ctx = to_link_context(link_key, cfg);
-        let shared = resource.link_tab.insert(ctx);
+        let shared = program.link_tab.insert(ctx);
         plan_ctx.entity_entry(ident)?.insert_link(shared);
     }
 
@@ -413,7 +413,7 @@ fn to_plan_scope(
 }
 
 fn to_group_scope(
-    resource: &mut Program,
+    program: &mut Program,
     scope_key: &Key,
     group: GroupCfg,
 ) -> Result<(GroupScope, SubplanTable), Error> {
@@ -428,15 +428,15 @@ fn to_group_scope(
 
     for (ident, cfg) in group.node.into_iter() {
         let node_key = scope_key / &ident;
-        let ctx = to_node_context(resource, node_key, cfg);
-        let shared = resource.node_tab.insert(ctx);
+        let ctx = to_node_context(program, node_key, cfg);
+        let shared = program.node_tab.insert(ctx);
         group_ctx.entity_entry(ident)?.insert_node(shared);
     }
 
     for (ident, cfg) in group.link.into_iter() {
         let link_key = scope_key / &ident;
         let ctx = to_link_context(link_key, cfg);
-        let shared = resource.link_tab.insert(ctx);
+        let shared = program.link_tab.insert(ctx);
         group_ctx.entity_entry(ident)?.insert_link(shared);
     }
 
@@ -540,7 +540,7 @@ fn check_arg_assignment(
     Ok(())
 }
 
-fn to_node_context(resource: &mut Program, node_key: KeyOwned, node_cfg: NodeCfg) -> NodeCtx {
+fn to_node_context(program: &mut Program, node_key: KeyOwned, node_cfg: NodeCfg) -> NodeCtx {
     let param = node_cfg
         .param
         .iter()
@@ -552,7 +552,7 @@ fn to_node_context(resource: &mut Program, node_key: KeyOwned, node_cfg: NodeCfg
         .map(|(name, socket_cfg)| {
             let socket_key = &node_key / name;
             let ctx = to_node_socket_context(socket_key, socket_cfg.clone());
-            let shared = resource.node_socket_tab.insert(ctx);
+            let shared = program.node_socket_tab.insert(ctx);
             (name.clone(), shared)
         })
         .collect();

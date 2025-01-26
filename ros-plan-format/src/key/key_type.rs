@@ -51,6 +51,42 @@ impl Key {
         &self.0
     }
 
+    pub fn to_kind(&self) -> KeyKind<'_> {
+        match self.strip_prefix(Key::root()) {
+            StripKeyPrefix::ImproperPrefix => (),
+            StripKeyPrefix::EmptySuffix => {
+                return KeyKind::Absolute {
+                    root: Key::root(),
+                    suffix: None,
+                }
+            }
+            StripKeyPrefix::Suffix(suffix) => {
+                return KeyKind::Absolute {
+                    root: Key::root(),
+                    suffix: Some(suffix),
+                }
+            }
+        }
+
+        match self.strip_prefix(Key::private_root()) {
+            StripKeyPrefix::ImproperPrefix => (),
+            StripKeyPrefix::EmptySuffix => {
+                return KeyKind::Private {
+                    private_root: Key::private_root(),
+                    suffix: None,
+                }
+            }
+            StripKeyPrefix::Suffix(suffix) => {
+                return KeyKind::Private {
+                    private_root: Key::private_root(),
+                    suffix: Some(suffix),
+                }
+            }
+        }
+
+        KeyKind::Relative { key: self }
+    }
+
     pub fn split_root(&self) -> (Option<&Key>, Option<&Key>) {
         let self_str = self.as_str();
 
@@ -115,7 +151,11 @@ impl Key {
     }
 
     pub fn components(&self) -> impl Iterator<Item = &Ident> + Debug + Clone + '_ {
-        let (_, suffix) = self.split_root();
+        let suffix = match self.to_kind() {
+            KeyKind::Relative { key } => Some(key),
+            KeyKind::Absolute { suffix, .. } => suffix,
+            KeyKind::Private { suffix, .. } => suffix,
+        };
         suffix
             .into_iter()
             .flat_map(|suffix| suffix.as_str().split('/'))
@@ -221,4 +261,18 @@ pub enum StripKeyPrefix<'a> {
     ImproperPrefix,
     EmptySuffix,
     Suffix(&'a Key),
+}
+
+pub enum KeyKind<'a> {
+    Relative {
+        key: &'a Key,
+    },
+    Absolute {
+        root: &'a Key,
+        suffix: Option<&'a Key>,
+    },
+    Private {
+        private_root: &'a Key,
+        suffix: Option<&'a Key>,
+    },
 }

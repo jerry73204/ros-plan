@@ -3,8 +3,7 @@ use crate::{
     error::ParseYamlError,
     key::{Key, KeyOwned},
 };
-use base64::prelude::BASE64_STANDARD;
-use base64::prelude::*;
+use base64::prelude::{BASE64_STANDARD, *};
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug, Display};
 

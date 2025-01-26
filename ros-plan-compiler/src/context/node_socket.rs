@@ -1,3 +1,4 @@
+use super::link::LinkShared;
 use crate::utils::shared_table::{Owned, Shared};
 use ros_plan_format::{
     key::{Key, KeyOwned},
@@ -5,151 +6,140 @@ use ros_plan_format::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::link::LinkShared;
-
 pub type NodeSocketOwned = Owned<NodeSocketCtx>;
 pub type NodeSocketShared = Shared<NodeSocketCtx>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NodeSocketCtx {
     #[serde(rename = "pub")]
-    Publication(NodePubCtx),
+    Pub(NodePubCtx),
+
     #[serde(rename = "sub")]
-    Subscription(NodeSubCtx),
+    Sub(NodeSubCtx),
+
     #[serde(rename = "srv")]
-    Server(NodeSrvCtx),
+    Srv(NodeSrvCtx),
+
     #[serde(rename = "cli")]
-    Client(NodeCliCtx),
+    Cli(NodeCliCtx),
 }
 
 impl NodeSocketCtx {
     pub fn key(&self) -> &Key {
         match self {
-            NodeSocketCtx::Publication(socket) => &socket.key,
-            NodeSocketCtx::Subscription(socket) => &socket.key,
-            NodeSocketCtx::Server(socket) => &socket.key,
-            NodeSocketCtx::Client(socket) => &socket.key,
+            NodeSocketCtx::Pub(socket) => &socket.key,
+            NodeSocketCtx::Sub(socket) => &socket.key,
+            NodeSocketCtx::Srv(socket) => &socket.key,
+            NodeSocketCtx::Cli(socket) => &socket.key,
         }
     }
 
-    pub fn as_publication(&self) -> Option<&NodePubCtx> {
-        if let Self::Publication(v) = self {
+    pub fn as_pub(&self) -> Option<&NodePubCtx> {
+        if let Self::Pub(v) = self {
             Some(v)
         } else {
             None
         }
     }
 
-    pub fn as_publication_mut(&mut self) -> Option<&mut NodePubCtx> {
-        if let Self::Publication(v) = self {
+    pub fn as_pub_mut(&mut self) -> Option<&mut NodePubCtx> {
+        if let Self::Pub(v) = self {
             Some(v)
         } else {
             None
         }
     }
 
-    pub fn as_subscription(&self) -> Option<&NodeSubCtx> {
-        if let Self::Subscription(v) = self {
+    pub fn as_sub(&self) -> Option<&NodeSubCtx> {
+        if let Self::Sub(v) = self {
             Some(v)
         } else {
             None
         }
     }
 
-    pub fn as_subscription_mut(&mut self) -> Option<&mut NodeSubCtx> {
-        if let Self::Subscription(v) = self {
+    pub fn as_sub_mut(&mut self) -> Option<&mut NodeSubCtx> {
+        if let Self::Sub(v) = self {
             Some(v)
         } else {
             None
         }
     }
 
-    pub fn as_server(&self) -> Option<&NodeSrvCtx> {
-        if let Self::Server(v) = self {
+    pub fn as_srv(&self) -> Option<&NodeSrvCtx> {
+        if let Self::Srv(v) = self {
             Some(v)
         } else {
             None
         }
     }
 
-    pub fn as_server_mut(&mut self) -> Option<&mut NodeSrvCtx> {
-        if let Self::Server(v) = self {
+    pub fn as_srv_mut(&mut self) -> Option<&mut NodeSrvCtx> {
+        if let Self::Srv(v) = self {
             Some(v)
         } else {
             None
         }
     }
 
-    pub fn as_client(&self) -> Option<&NodeCliCtx> {
-        if let Self::Client(v) = self {
+    pub fn as_cli(&self) -> Option<&NodeCliCtx> {
+        if let Self::Cli(v) = self {
             Some(v)
         } else {
             None
         }
     }
 
-    pub fn as_client_mut(&mut self) -> Option<&mut NodeCliCtx> {
-        if let Self::Client(v) = self {
+    pub fn as_cli_mut(&mut self) -> Option<&mut NodeCliCtx> {
+        if let Self::Cli(v) = self {
             Some(v)
         } else {
             None
         }
     }
 
-    /// Returns `true` if the node socket context is [`Publication`].
-    ///
-    /// [`Publication`]: NodeSocketContext::Publication
     #[must_use]
-    pub fn is_publication(&self) -> bool {
-        matches!(self, Self::Publication(..))
+    pub fn is_pub(&self) -> bool {
+        matches!(self, Self::Pub(..))
     }
 
-    /// Returns `true` if the node socket context is [`Subscription`].
-    ///
-    /// [`Subscription`]: NodeSocketContext::Subscription
     #[must_use]
-    pub fn is_subscription(&self) -> bool {
-        matches!(self, Self::Subscription(..))
+    pub fn is_sub(&self) -> bool {
+        matches!(self, Self::Sub(..))
     }
 
-    /// Returns `true` if the node socket context is [`Server`].
-    ///
-    /// [`Server`]: NodeSocketContext::Server
     #[must_use]
-    pub fn is_server(&self) -> bool {
-        matches!(self, Self::Server(..))
+    pub fn is_srv(&self) -> bool {
+        matches!(self, Self::Srv(..))
     }
 
-    /// Returns `true` if the node socket context is [`Client`].
-    ///
-    /// [`Client`]: NodeSocketContext::Client
     #[must_use]
-    pub fn is_client(&self) -> bool {
-        matches!(self, Self::Client(..))
+    pub fn is_cli(&self) -> bool {
+        matches!(self, Self::Cli(..))
     }
 }
 
 impl From<NodeCliCtx> for NodeSocketCtx {
     fn from(v: NodeCliCtx) -> Self {
-        Self::Client(v)
+        Self::Cli(v)
     }
 }
 
 impl From<NodeSrvCtx> for NodeSocketCtx {
     fn from(v: NodeSrvCtx) -> Self {
-        Self::Server(v)
+        Self::Srv(v)
     }
 }
 
 impl From<NodeSubCtx> for NodeSocketCtx {
     fn from(v: NodeSubCtx) -> Self {
-        Self::Subscription(v)
+        Self::Sub(v)
     }
 }
 
 impl From<NodePubCtx> for NodeSocketCtx {
     fn from(v: NodePubCtx) -> Self {
-        Self::Publication(v)
+        Self::Pub(v)
     }
 }
 

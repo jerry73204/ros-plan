@@ -1,16 +1,13 @@
 use crate::{
     context::{
-        link::LinkCtx,
-        node::{NodeCtx, NodeOwned},
-        node_socket::{NodeSocketCtx, NodeSocketOwned},
-        plan_socket::PlanSocketCtx,
+        link::LinkCtx, node::NodeCtx, node_socket::NodeSocketCtx, plan_socket::PlanSocketCtx,
     },
     error::Error,
     processor::shared_ref_initializer::SharedRefInitializer,
-    scope::{GroupScope, PlanScope, PlanScopeOwned, ScopeRef, ScopeRefExt, ScopeShared},
+    scope::{GroupScope, PlanScope, PlanScopeShared, ScopeShared},
+    selector::{AbsoluteSelector, Selector},
     utils::shared_table::SharedTable,
 };
-use ros_plan_format::key::{Key, StripKeyPrefix};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{self, Display},
@@ -60,60 +57,16 @@ impl Program {
         Ok(program)
     }
 
-    pub fn root(&self) -> Option<PlanScopeOwned> {
-        self.include_tab.get(0)
+    pub fn root(&self) -> PlanScopeShared {
+        self.include_tab.get(0).unwrap().downgrade()
     }
 
-    /// Locate a scope specified by an absolute key.
-    pub fn find_scope(&self, key: &Key) -> Option<ScopeShared> {
-        let suffix = match key.strip_prefix("/".parse().unwrap()) {
-            StripKeyPrefix::ImproperPrefix => {
-                // Case: key not starting with "/"
-                return None;
-            }
-            StripKeyPrefix::EmptySuffix => {
-                // Case: key == "/"
-                return Some(self.root().unwrap().downgrade().into());
-            }
-            StripKeyPrefix::Suffix(suffix) => {
-                // Case: key starting with "/"
-                suffix
-            }
-        };
-
-        // Walk down to descent child nodes
-        let root = self.root().unwrap();
-        let guard = root.read();
-        guard.global_selector().find_subscope(suffix)
+    pub fn absolute_selector(&self) -> AbsoluteSelector<'_> {
+        AbsoluteSelector::new(self)
     }
 
-    /// Locate a node specified by an absolute key.
-    pub fn find_node(&self, key: &Key) -> Option<NodeOwned> {
-        let (Some(scope_key), Some(node_name)) = key.split_parent() else {
-            return None;
-        };
-        let scope = self.find_scope(scope_key)?;
-        let node = {
-            let owned = scope.upgrade().unwrap();
-            let guard = owned.read();
-            let shared = guard.node_map().get(node_name)?;
-            shared.upgrade().unwrap()
-        };
-        Some(node)
-    }
-
-    /// Locate a socket on a node specified by an absolute key.
-    pub fn find_node_socket(&self, key: &Key) -> Option<NodeSocketOwned> {
-        let (Some(node_key), Some(socket_name)) = key.split_parent() else {
-            return None;
-        };
-        let node = self.find_node(node_key)?;
-        let socket = {
-            let guard = node.read();
-            let shared = guard.socket.get(socket_name)?;
-            shared.upgrade().unwrap()
-        };
-        Some(socket)
+    pub fn selector<'a, 'b>(&'a self, scope: &'b ScopeShared) -> Selector<'a, 'b> {
+        Selector::new(self, scope)
     }
 }
 

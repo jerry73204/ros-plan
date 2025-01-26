@@ -41,6 +41,10 @@ impl<T> ArcRwLock<T> {
     pub fn into_arc(self) -> Arc<RwLock<T>> {
         self.ref_
     }
+
+    pub fn as_ptr(&self) -> *const RwLock<T> {
+        Arc::as_ptr(&self.ref_)
+    }
 }
 
 impl<T> Clone for ArcRwLock<T> {
@@ -107,6 +111,28 @@ impl<T> WeakRwLock<T> {
         Some(ArcRwLock {
             ref_: self.ref_.upgrade()?,
         })
+    }
+
+    pub fn with_read<R, F>(&self, f: F) -> R
+    where
+        F: FnOnce(RwLockReadGuard<T>) -> R,
+    {
+        let arc = self.ref_.upgrade().unwrap();
+        let guard = arc.read();
+        f(guard)
+    }
+
+    pub fn with_write<R, F>(&self, f: F) -> R
+    where
+        F: FnOnce(RwLockWriteGuard<T>) -> R,
+    {
+        let arc = self.ref_.upgrade().unwrap();
+        let guard = arc.write();
+        f(guard)
+    }
+
+    pub fn as_ptr(&self) -> *const RwLock<T> {
+        self.ref_.as_ptr()
     }
 }
 
