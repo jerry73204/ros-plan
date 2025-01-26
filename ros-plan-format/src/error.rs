@@ -1,6 +1,9 @@
 use crate::key::KeyOwned;
 
 #[derive(Debug, thiserror::Error)]
+pub enum Error {}
+
+#[derive(Debug, thiserror::Error)]
 #[error("cannot create a identifier from `{string}`")]
 pub struct IdentifierCreationError {
     pub string: String,
@@ -10,8 +13,10 @@ pub struct IdentifierCreationError {
 pub enum ParseArgDefError {
     #[error("invalid argument name `{name}`")]
     InvalidName { name: String },
+
     #[error("invalid argument type `{ty}`")]
     InvalidType { ty: String },
+
     #[error("unable to parse argument definition `{expr}`")]
     MalformedDecl { expr: String },
 }
@@ -145,6 +150,10 @@ pub enum DeserializationError {
     #[error("expect a value with !type tag: {error}")]
     ExpectValueWithType { error: serde_yaml::Error },
 }
+
+#[derive(Debug, thiserror::Error)]
+#[error("unable to parse YAML value")]
+pub struct ParseYamlError;
 
 #[derive(Debug, thiserror::Error)]
 #[error("unable to parse expression: {reason}")]

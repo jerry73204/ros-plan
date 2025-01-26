@@ -1,5 +1,10 @@
 use super::{Base64String, ValueType};
-use crate::key::{Key, KeyOwned};
+use crate::{
+    error::ParseYamlError,
+    key::{Key, KeyOwned},
+};
+use base64::prelude::BASE64_STANDARD;
+use base64::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug, Display};
 
@@ -114,6 +119,95 @@ impl From<KeyOwned> for Value {
 }
 
 impl Value {
+    pub fn from_yaml_value(
+        ty_hint: Option<ValueType>,
+        yaml_value: serde_yaml::Value,
+    ) -> Result<Self, ParseYamlError> {
+        macro_rules! assert_type {
+            ($expect:ident) => {
+                if !matches!(ty_hint, None | Some(ValueType::$expect)) {
+                    todo!()
+                }
+            };
+        }
+
+        let value: Self = match yaml_value {
+            serde_yaml::Value::Bool(val) => {
+                assert_type!(Bool);
+                val.into()
+            }
+            serde_yaml::Value::Number(val) => {
+                if let Some(val) = val.as_i64() {
+                    assert_type!(I64);
+                    val.into()
+                } else {
+                    assert_type!(F64);
+                    let val = val.as_f64().unwrap();
+                    val.into()
+                }
+            }
+            serde_yaml::Value::String(text) => match ty_hint {
+                None | Some(ValueType::String) => Self::String(text),
+                Some(ValueType::Binary) => {
+                    let Ok(bytes) = BASE64_STANDARD.decode(&text) else {
+                        todo!()
+                    };
+                    Self::Binary(bytes.into())
+                }
+                _ => todo!(),
+            },
+            serde_yaml::Value::Sequence(vec) => {
+                if let Some(first) = vec.first() {
+                    match first {
+                        serde_yaml::Value::Bool(_) => {
+                            let vec: Option<Vec<bool>> =
+                                vec.into_iter().map(|val| val.as_bool()).collect();
+                            let Some(vec) = vec else { todo!() };
+                            Self::BoolList(vec)
+                        }
+                        serde_yaml::Value::Number(first) => {
+                            if first.is_i64() {
+                                let vec: Option<Vec<i64>> =
+                                    vec.into_iter().map(|val| val.as_i64()).collect();
+                                let Some(vec) = vec else { todo!() };
+                                Self::I64List(vec)
+                            } else {
+                                assert!(first.is_f64());
+                                let vec: Option<Vec<f64>> =
+                                    vec.into_iter().map(|val| val.as_f64()).collect();
+                                let Some(vec) = vec else { todo!() };
+                                Self::F64List(vec)
+                            }
+                        }
+                        serde_yaml::Value::String(_) => {
+                            let vec: Option<Vec<String>> = vec
+                                .into_iter()
+                                .map(|val| Some(val.as_str()?.to_string()))
+                                .collect();
+                            let Some(vec) = vec else { todo!() };
+                            Self::StringList(vec)
+                        }
+                        _ => todo!(),
+                    }
+                } else {
+                    let Some(ty) = ty_hint else {
+                        todo!();
+                    };
+
+                    match ty {
+                        ValueType::BoolList => Self::BoolList(vec![]),
+                        ValueType::I64List => Self::I64List(vec![]),
+                        ValueType::F64List => Self::F64List(vec![]),
+                        ValueType::StringList => Self::StringList(vec![]),
+                        _ => todo!(),
+                    }
+                }
+            }
+            _ => todo!(),
+        };
+        Ok(value)
+    }
+
     pub fn ty(&self) -> ValueType {
         match self {
             Value::Bool(_) => ValueType::Bool,

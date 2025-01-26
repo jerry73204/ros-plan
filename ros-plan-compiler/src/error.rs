@@ -3,8 +3,11 @@ use std::{io, path::PathBuf};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("unable to open plan file `{path}`: {error}")]
-    OpenPlanFileError { path: PathBuf, error: io::Error },
+    #[error("unable to read file `{path}`: {error}")]
+    ReadFileError { path: PathBuf, error: io::Error },
+
+    #[error("unable to write file `{path}`: {error}")]
+    WriteFileError { path: PathBuf, error: io::Error },
 
     #[error("unable to parse plan file `{path}`: {error}")]
     ParsePlanFileError {

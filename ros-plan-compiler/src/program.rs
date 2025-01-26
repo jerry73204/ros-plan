@@ -6,21 +6,17 @@ use crate::{
         plan_socket::PlanSocketCtx,
     },
     error::Error,
-    processor::{
-        evaluator::Evaluator, link_resolver::LinkResolver, plan_visitor::PlanVisitor,
-        shared_ref_initializer::SharedRefInitializer, socket_resolver::SocketResolver,
-    },
+    processor::shared_ref_initializer::SharedRefInitializer,
     scope::{GroupScope, PlanScope, PlanScopeOwned, ScopeRef, ScopeRefExt, ScopeShared},
     utils::shared_table::SharedTable,
 };
-use indexmap::IndexMap;
-use ros_plan_format::{
-    expr::Value,
-    key::{Key, StripKeyPrefix},
-    parameter::ParamName,
-};
+use ros_plan_format::key::{Key, StripKeyPrefix};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::{
+    fmt::{self, Display},
+    path::Path,
+    str::FromStr,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Program {
@@ -33,49 +29,39 @@ pub struct Program {
 }
 
 impl Program {
-    pub fn root(&self) -> Option<PlanScopeOwned> {
-        self.include_tab.get(0)
+    pub fn save<P>(&self, path: P) -> Result<(), Error>
+    where
+        P: AsRef<Path>,
+    {
+        let text = self.to_string();
+        let path = path.as_ref();
+        std::fs::write(path, text).map_err(|error| Error::WriteFileError {
+            path: path.to_owned(),
+            error,
+        })?;
+        Ok(())
     }
 
-    /// Construct the resource tree from the provided file.
-    pub fn from_plan_file<P>(path: P) -> Result<Program, Error>
+    pub fn load<P>(path: P) -> Result<Program, Error>
     where
         P: AsRef<Path>,
     {
         let path = path.as_ref();
+        let yaml_text = std::fs::read_to_string(path).map_err(|error| Error::ReadFileError {
+            path: path.to_owned(),
+            error,
+        })?;
+        let program: Self = yaml_text.parse()?;
 
-        // Perform plan/group expansion
-        let mut resource = {
-            let mut visitor = PlanVisitor::default();
-            visitor.traverse(path)?
-        };
-
-        // Perform plan socket resolution
-        {
-            let mut resolver = SocketResolver::default();
-            resolver.traverse(&mut resource)?;
-        }
-
-        // Perform plan socket resolution
-        {
-            let mut resolver = LinkResolver::default();
-            resolver.traverse(&mut resource)?;
-        }
-
-        Ok(resource)
-    }
-
-    /// Evaluate embedded scripts.
-    pub fn eval(&mut self, args: IndexMap<ParamName, Value>) -> Result<(), Error> {
-        let mut evaluator = Evaluator::default();
-        evaluator.eval_resource(self, args)?;
-        Ok(())
-    }
-
-    pub fn initialize_internal_references(&mut self) -> Result<(), Error> {
+        // Initialize internal references.
         let mut updater = SharedRefInitializer::default();
-        updater.initialize(self)?;
-        Ok(())
+        updater.initialize(&program)?;
+
+        Ok(program)
+    }
+
+    pub fn root(&self) -> Option<PlanScopeOwned> {
+        self.include_tab.get(0)
     }
 
     /// Locate a scope specified by an absolute key.
@@ -128,5 +114,21 @@ impl Program {
             shared.upgrade().unwrap()
         };
         Some(socket)
+    }
+}
+
+impl Display for Program {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let yaml_text = serde_yaml::to_string(self).unwrap();
+        f.write_str(&yaml_text)
+    }
+}
+
+impl FromStr for Program {
+    type Err = Error;
+
+    fn from_str(yaml_text: &str) -> Result<Self, Self::Err> {
+        let program: Self = serde_yaml::from_str(yaml_text).unwrap();
+        Ok(program)
     }
 }

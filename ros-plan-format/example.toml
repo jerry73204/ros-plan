@@ -25,7 +25,7 @@ else
   return false
 end
 '''
-var9.eval = "pkg_dir('autoware_launch')"
+# var9.eval = "pkg_dir('autoware_launch')"
 
 [socket.pub.output]
 src = [
@@ -75,15 +75,14 @@ dst = [
 ]
 
 [include]
-sensor = { path = "sensor.toml", when.eval = "var3" }
+sensor = { path = "sensor.toml", when.eval = "var3", arg.x = 123 }
 # localization = { pkg = "autoware_launch", file = "wtf.toml" }
 
 [include.sensor2]
 path = "sensor.toml"
 when.eval = "false"
-arg.a = "3333"
-arg.b = true
-
+arg.x = 3333
+arg.y = 5.6
 
 [group.my_group]
   when = true

@@ -2,8 +2,9 @@
 resolver = "2"
 members = [
   "ros-plan-format",
-  "ros-plan-parse",
+  "ros-plan-compiler",
   "ros2plan",
+  "dump2plan",
 ]
 
 [workspace.dependencies]

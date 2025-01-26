@@ -1,7 +1,23 @@
 [arg]
+x.require = "i64"
+y.default = 3.14
 
 [node.ros.imu]
 pkg = "pkg1"
 exec = "exec1"
 param.param0 = "yaya"
 param.param1 = 123
+
+[node.ros.imu_corrector]
+pkg = "pkg3"
+exec = "exec3"
+
+[link.pubsub.imu_link]
+qos.preset = "default"
+type = "sensor_msgs/msg/Imu"
+src = [
+  { node = "imu", topic = "~/output" },
+]
+dst = [
+  { node = "imu_corrector", topic = "~/input" },
+]

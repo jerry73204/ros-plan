@@ -26,7 +26,7 @@ where
     P: AsRef<Path>,
 {
     let path = path.as_ref();
-    let text = fs::read_to_string(path).map_err(|error| Error::OpenPlanFileError {
+    let text = fs::read_to_string(path).map_err(|error| Error::ReadFileError {
         path: path.to_owned(),
         error,
     })?;

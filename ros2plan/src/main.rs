@@ -2,9 +2,9 @@ mod cli;
 mod config;
 
 use clap::Parser;
-use cli::{Cli, ExpandArgs, LoadArgs, StartArgs};
+use cli::{ArgAssign, Cli, CompileArgs, EvalArgs, StartArgs};
 use indexmap::IndexMap;
-use ros_plan_compiler::Program;
+use ros_plan_compiler::{Compiler, Program};
 use ros_plan_format::Plan;
 
 fn main() -> eyre::Result<()> {
@@ -12,27 +12,22 @@ fn main() -> eyre::Result<()> {
 
     match cli {
         Cli::Start(args) => start(args)?,
-        Cli::Expand(args) => expand(args)?,
-        Cli::Load(args) => load(args)?,
+        Cli::Compile(args) => compile(args)?,
+        Cli::Eval(args) => eval(args)?,
     }
 
     Ok(())
 }
 
 fn start(args: StartArgs) -> eyre::Result<()> {
-    let toml_text = std::fs::read_to_string(&args.plan_file)?;
-    let plan: Plan = toml::from_str(&toml_text)?;
-    let yaml_text = serde_yaml::to_string(&plan)?;
-    print!("{yaml_text}");
-    Ok(())
+    todo!()
 }
 
-fn expand(args: ExpandArgs) -> eyre::Result<()> {
-    let mut resource = Program::from_plan_file(&args.plan_file)?;
-    resource.eval(IndexMap::new())?;
+fn compile(args: CompileArgs) -> eyre::Result<()> {
+    let compiler = Compiler::new();
+    let program = compiler.compile(&args.plan_file)?;
 
-    let text = serde_yaml::to_string(&resource)?;
-
+    let text = program.to_string();
     if let Some(output_file) = args.output_file {
         std::fs::write(&output_file, text)?;
     } else {
@@ -41,16 +36,29 @@ fn expand(args: ExpandArgs) -> eyre::Result<()> {
     Ok(())
 }
 
-fn load(args: LoadArgs) -> eyre::Result<()> {
-    let mut resource: Program = {
-        let text = std::fs::read_to_string(&args.dump_file)?;
-        serde_yaml::from_str(&text)?
+fn eval(args: EvalArgs) -> eyre::Result<()> {
+    let EvalArgs {
+        program_file,
+        args,
+        output_file,
+    } = args;
+
+    let mut program = Program::load(&program_file)?;
+
+    let compiler = Compiler::new();
+    let args: IndexMap<_, _> = match args {
+        Some(args) => args
+            .into_iter()
+            .map(|ArgAssign { name, value }| (name, value))
+            .collect(),
+        None => IndexMap::new(),
     };
+    compiler.eval(&mut program, args)?;
 
-    resource.initialize_internal_references()?;
-
-    {
-        let text = serde_yaml::to_string(&resource)?;
+    let text = program.to_string();
+    if let Some(output_file) = output_file {
+        std::fs::write(&output_file, text)?;
+    } else {
         print!("{text}");
     }
 
