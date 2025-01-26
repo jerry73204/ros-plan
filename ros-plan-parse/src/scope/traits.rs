@@ -1,8 +1,11 @@
-use super::{
-    EntityShared, GroupScopeShared, LinkShared, NodeShared, NodeSocketShared, PlanFileScopeShared,
-    PlanSocketShared, ScopeShared,
+use super::{EntityShared, GroupScopeShared, PlanScopeShared, ScopeShared};
+use crate::{
+    context::{
+        link::LinkShared, node::NodeShared, node_socket::NodeSocketShared,
+        plan_socket::PlanSocketShared,
+    },
+    error::Error,
 };
-use crate::error::Error;
 use indexmap::IndexMap;
 use ros_plan_format::{
     ident::{Ident, IdentOwned},
@@ -25,7 +28,7 @@ pub enum KeyKind {
 pub trait ScopeRef {
     fn node_map(&self) -> &IndexMap<NodeIdent, NodeShared>;
     fn link_map(&self) -> &IndexMap<LinkIdent, LinkShared>;
-    fn include_map(&self) -> &IndexMap<KeyOwned, PlanFileScopeShared>;
+    fn include_map(&self) -> &IndexMap<KeyOwned, PlanScopeShared>;
     fn group_map(&self) -> &IndexMap<KeyOwned, GroupScopeShared>;
     fn key_map(&self) -> &BTreeMap<KeyOwned, KeyKind>;
 }
@@ -33,7 +36,7 @@ pub trait ScopeRef {
 pub trait ScopeMut: ScopeRef {
     fn node_map_mut(&mut self) -> &mut IndexMap<NodeIdent, NodeShared>;
     fn link_map_mut(&mut self) -> &mut IndexMap<LinkIdent, LinkShared>;
-    fn include_map_mut(&mut self) -> &mut IndexMap<KeyOwned, PlanFileScopeShared>;
+    fn include_map_mut(&mut self) -> &mut IndexMap<KeyOwned, PlanScopeShared>;
     fn group_map_mut(&mut self) -> &mut IndexMap<KeyOwned, GroupScopeShared>;
     fn key_map_mut(&mut self) -> &mut BTreeMap<KeyOwned, KeyKind>;
 }
@@ -255,7 +258,7 @@ where
     pub fn insert_link(self, link: LinkShared) {
         self.scope
             .key_map_mut()
-            .insert(self.ident.clone().into(), KeyKind::Node);
+            .insert(self.ident.clone().into(), KeyKind::Link);
         self.scope.link_map_mut().insert(self.ident, link);
     }
 }
@@ -269,17 +272,17 @@ impl<S> ScopeEntry<'_, S>
 where
     S: ScopeMut,
 {
-    pub fn insert_include(self, include: PlanFileScopeShared) {
+    pub fn insert_include(self, include: PlanScopeShared) {
         self.scope
             .key_map_mut()
-            .insert(self.key.clone(), KeyKind::Node);
+            .insert(self.key.clone(), KeyKind::Include);
         self.scope.include_map_mut().insert(self.key, include);
     }
 
     pub fn insert_group(self, group: GroupScopeShared) {
         self.scope
             .key_map_mut()
-            .insert(self.key.clone(), KeyKind::Node);
+            .insert(self.key.clone(), KeyKind::Group);
         self.scope.group_map_mut().insert(self.key, group);
     }
 }

@@ -1,10 +1,14 @@
+use crate::utils::shared_table::{Owned, Shared};
 use ros_plan_format::{
     key::{Key, KeyOwned},
     link::{PubSubLinkCfg, ServiceLinkCfg},
 };
 use serde::{Deserialize, Serialize};
 
-use crate::scope::NodeSocketShared;
+use super::node_socket::NodeSocketShared;
+
+pub type LinkOwned = Owned<LinkContext>;
+pub type LinkShared = Shared<LinkContext>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LinkContext {

@@ -1,19 +1,22 @@
-use super::{
-    traits::ScopeMut, GroupScopeShared, KeyKind, LinkShared, NodeShared, PlanFileScopeShared,
-    ScopeRef,
+use super::{plan_file::PlanScopeShared, traits::ScopeMut, KeyKind, ScopeRef};
+use crate::{
+    context::{expr::ExprContext, link::LinkShared, node::NodeShared},
+    utils::shared_table::{Owned, Shared},
 };
-use crate::context::expr::ExprContext;
 use indexmap::IndexMap;
 use ros_plan_format::{key::KeyOwned, link::LinkIdent, node::NodeIdent};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+
+pub type GroupScopeOwned = Owned<GroupScope>;
+pub type GroupScopeShared = Shared<GroupScope>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GroupScope {
     pub when: Option<ExprContext>,
     pub node_map: IndexMap<NodeIdent, NodeShared>,
     pub link_map: IndexMap<LinkIdent, LinkShared>,
-    pub include_map: IndexMap<KeyOwned, PlanFileScopeShared>,
+    pub include_map: IndexMap<KeyOwned, PlanScopeShared>,
     pub group_map: IndexMap<KeyOwned, GroupScopeShared>,
     pub key_map: BTreeMap<KeyOwned, KeyKind>,
 }
@@ -27,7 +30,7 @@ impl ScopeMut for GroupScope {
         &mut self.link_map
     }
 
-    fn include_map_mut(&mut self) -> &mut IndexMap<KeyOwned, PlanFileScopeShared> {
+    fn include_map_mut(&mut self) -> &mut IndexMap<KeyOwned, PlanScopeShared> {
         &mut self.include_map
     }
 
@@ -49,7 +52,7 @@ impl ScopeRef for GroupScope {
         &self.link_map
     }
 
-    fn include_map(&self) -> &IndexMap<KeyOwned, PlanFileScopeShared> {
+    fn include_map(&self) -> &IndexMap<KeyOwned, PlanScopeShared> {
         &self.include_map
     }
 

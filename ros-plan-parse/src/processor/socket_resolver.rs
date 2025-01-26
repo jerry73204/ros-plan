@@ -4,8 +4,8 @@ use crate::{
         PlanSubscriptionContext,
     },
     error::Error,
-    resource::Resource,
-    scope::{PlanFileScopeShared, ScopeRefExt, ScopeShared},
+    program::Program,
+    scope::{PlanScopeShared, ScopeRefExt, ScopeShared},
     utils::{
         resolve_node_client, resolve_node_publication, resolve_node_server,
         resolve_node_subscription,
@@ -37,7 +37,7 @@ pub struct SocketResolver {
 }
 
 impl SocketResolver {
-    pub fn traverse(&mut self, context: &mut Resource) -> Result<(), Error> {
+    pub fn traverse(&mut self, context: &mut Program) -> Result<(), Error> {
         self.queue.push_back(
             VisitNodeJob {
                 current: context.root().unwrap().downgrade().into(),
@@ -99,7 +99,7 @@ impl SocketResolver {
 
     fn resolve_sockets_in_plan(
         &self,
-        resource: &mut Resource,
+        resource: &mut Program,
         job: ResolveSocketJob,
     ) -> Result<(), Error> {
         let ResolveSocketJob {
@@ -123,8 +123,8 @@ impl SocketResolver {
 }
 
 fn resolve_socket_topics(
-    resource: &mut Resource,
-    current: PlanFileScopeShared,
+    resource: &mut Program,
+    current: PlanScopeShared,
     socket_ctx: &mut PlanSocketContext,
 ) -> Result<(), Error> {
     match socket_ctx {
@@ -145,8 +145,8 @@ fn resolve_socket_topics(
 }
 
 fn resolve_pub_socket_topics(
-    resource: &mut Resource,
-    current: PlanFileScopeShared,
+    resource: &mut Program,
+    current: PlanScopeShared,
     pub_: &mut PlanPublicationContext,
 ) -> Result<(), Error> {
     let src: Vec<_> = pub_
@@ -172,8 +172,8 @@ fn resolve_pub_socket_topics(
 }
 
 fn resolve_sub_socket_topics(
-    resource: &mut Resource,
-    current: PlanFileScopeShared,
+    resource: &mut Program,
+    current: PlanScopeShared,
     sub: &mut PlanSubscriptionContext,
 ) -> Result<(), Error> {
     let dst: Vec<_> = sub
@@ -199,8 +199,8 @@ fn resolve_sub_socket_topics(
 }
 
 fn resolve_srv_socket_topics(
-    resource: &mut Resource,
-    current: PlanFileScopeShared,
+    resource: &mut Program,
+    current: PlanScopeShared,
     srv: &mut PlanServerContext,
 ) -> Result<(), Error> {
     let socket_key = &srv.config.listen;
@@ -213,8 +213,8 @@ fn resolve_srv_socket_topics(
 }
 
 fn resolve_qry_socket_topics(
-    resource: &mut Resource,
-    current: PlanFileScopeShared,
+    resource: &mut Program,
+    current: PlanScopeShared,
     qry: &mut PlanClientContext,
 ) -> Result<(), Error> {
     let connect: Vec<_> = qry
@@ -261,7 +261,7 @@ pub struct VisitNodeJob {
 
 #[derive(Debug)]
 pub struct ResolveSocketJob {
-    current: PlanFileScopeShared,
+    current: PlanScopeShared,
     // current_prefix: KeyOwned,
 }
 

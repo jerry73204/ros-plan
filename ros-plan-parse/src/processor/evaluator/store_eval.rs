@@ -3,10 +3,10 @@ use crate::{
     context::{
         arg::ArgContext,
         expr::{ExprContext, TextOrExprContext},
-        node::NodeContext,
+        node::{NodeContext, NodeShared},
     },
     error::Error,
-    scope::{GroupScopeShared, NodeShared, PlanFileScopeShared},
+    scope::{GroupScopeShared, PlanScopeShared},
 };
 use indexmap::IndexMap;
 use mlua::prelude::*;
@@ -154,7 +154,7 @@ pub fn store_eval_arg_assignment(
 
 pub fn store_eval_include_table(
     lua: &Lua,
-    children: &IndexMap<KeyOwned, PlanFileScopeShared>,
+    children: &IndexMap<KeyOwned, PlanScopeShared>,
 ) -> Result<(), Error> {
     for shared in children.values() {
         let owned = shared.upgrade().unwrap();

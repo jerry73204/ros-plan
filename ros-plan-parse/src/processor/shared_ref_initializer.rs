@@ -1,21 +1,19 @@
 use crate::{
     context::{
-        link::{LinkContext, PubsubLinkContext, ServiceLinkContext},
+        link::{LinkContext, LinkShared, PubsubLinkContext, ServiceLinkContext},
+        node::NodeShared,
         node_socket::{
             NodeClientContext, NodePublicationContext, NodeServerContext, NodeSocketContext,
-            NodeSubscriptionContext,
+            NodeSocketShared, NodeSubscriptionContext,
         },
         plan_socket::{
             PlanClientContext, PlanPublicationContext, PlanServerContext, PlanSocketContext,
-            PlanSubscriptionContext,
+            PlanSocketShared, PlanSubscriptionContext,
         },
     },
     error::Error,
-    scope::{
-        GroupScope, GroupScopeShared, LinkShared, NodeShared, NodeSocketShared, PlanFileScope,
-        PlanFileScopeShared, PlanSocketShared, ScopeShared,
-    },
-    Resource,
+    scope::{GroupScope, GroupScopeShared, PlanScope, PlanScopeShared, ScopeShared},
+    Program,
 };
 use indexmap::IndexMap;
 use ros_plan_format::{link::LinkIdent, node::NodeIdent, plan_socket::PlanSocketIdent};
@@ -26,9 +24,9 @@ pub struct SharedRefInitializer {
 }
 
 impl SharedRefInitializer {
-    pub fn initialize(&mut self, resource: &Resource) -> Result<(), Error> {
+    pub fn initialize(&mut self, resource: &Program) -> Result<(), Error> {
         {
-            let Resource {
+            let Program {
                 link_tab,
                 plan_socket_tab,
                 node_socket_tab,
@@ -59,7 +57,7 @@ impl SharedRefInitializer {
         Ok(())
     }
 
-    fn visit_scope(&mut self, resource: &Resource, current: ScopeShared) -> Result<(), Error> {
+    fn visit_scope(&mut self, resource: &Program, current: ScopeShared) -> Result<(), Error> {
         // let mut guard = owned.write();
         match &current {
             ScopeShared::Include(scope) => update_plan_file_scope(resource, scope)?,
@@ -77,11 +75,11 @@ impl Default for SharedRefInitializer {
     }
 }
 
-fn update_plan_file_scope(resource: &Resource, shared: &PlanFileScopeShared) -> Result<(), Error> {
+fn update_plan_file_scope(resource: &Program, shared: &PlanScopeShared) -> Result<(), Error> {
     let owned = shared.upgrade().unwrap();
     let mut scope = owned.write();
 
-    let PlanFileScope {
+    let PlanScope {
         socket_map,
         node_map,
         link_map,
@@ -94,7 +92,7 @@ fn update_plan_file_scope(resource: &Resource, shared: &PlanFileScopeShared) -> 
     Ok(())
 }
 
-fn update_group_scope(resource: &Resource, shared: &GroupScopeShared) -> Result<(), Error> {
+fn update_group_scope(resource: &Program, shared: &GroupScopeShared) -> Result<(), Error> {
     let owned = shared.upgrade().unwrap();
     let mut scope = owned.write();
 
@@ -108,7 +106,7 @@ fn update_group_scope(resource: &Resource, shared: &GroupScopeShared) -> Result<
 }
 
 fn update_node_map(
-    resource: &Resource,
+    resource: &Program,
     node_map: &mut IndexMap<NodeIdent, NodeShared>,
 ) -> Result<(), Error> {
     for shared in node_map.values_mut() {
@@ -121,7 +119,7 @@ fn update_node_map(
 }
 
 fn update_link_map(
-    resource: &Resource,
+    resource: &Program,
     link_map: &mut IndexMap<LinkIdent, LinkShared>,
 ) -> Result<(), Error> {
     for shared in link_map.values_mut() {
@@ -134,7 +132,7 @@ fn update_link_map(
 }
 
 fn update_socket_map(
-    resource: &Resource,
+    resource: &Program,
     socket_map: &mut IndexMap<PlanSocketIdent, PlanSocketShared>,
 ) -> Result<(), Error> {
     for shared in socket_map.values_mut() {
@@ -146,7 +144,7 @@ fn update_socket_map(
     Ok(())
 }
 
-fn update_link_context(resource: &Resource, link: &mut LinkContext) -> Result<(), Error> {
+fn update_link_context(resource: &Program, link: &mut LinkContext) -> Result<(), Error> {
     match link {
         LinkContext::PubSub(link) => update_pubsub_link_context(resource, link)?,
         LinkContext::Service(link) => update_service_link_context(resource, link)?,
@@ -155,7 +153,7 @@ fn update_link_context(resource: &Resource, link: &mut LinkContext) -> Result<()
 }
 
 fn update_pubsub_link_context(
-    resource: &Resource,
+    resource: &Program,
     link: &mut PubsubLinkContext,
 ) -> Result<(), Error> {
     let PubsubLinkContext { src, dst, .. } = link;
@@ -172,7 +170,7 @@ fn update_pubsub_link_context(
 }
 
 fn update_service_link_context(
-    resource: &Resource,
+    resource: &Program,
     link: &mut ServiceLinkContext,
 ) -> Result<(), Error> {
     let ServiceLinkContext {
@@ -190,7 +188,7 @@ fn update_service_link_context(
 }
 
 fn update_plan_socket_context(
-    resource: &Resource,
+    resource: &Program,
     socket: &mut PlanSocketContext,
 ) -> Result<(), Error> {
     match socket {
@@ -203,7 +201,7 @@ fn update_plan_socket_context(
 }
 
 fn update_plan_pub_context(
-    resource: &Resource,
+    resource: &Program,
     socket: &mut PlanPublicationContext,
 ) -> Result<(), Error> {
     let PlanPublicationContext { src, .. } = socket;
@@ -216,7 +214,7 @@ fn update_plan_pub_context(
 }
 
 fn update_plan_sub_context(
-    resource: &Resource,
+    resource: &Program,
     socket: &mut PlanSubscriptionContext,
 ) -> Result<(), Error> {
     let PlanSubscriptionContext { dst, .. } = socket;
@@ -229,7 +227,7 @@ fn update_plan_sub_context(
 }
 
 fn update_plan_server_context(
-    resource: &Resource,
+    resource: &Program,
     socket: &mut PlanServerContext,
 ) -> Result<(), Error> {
     let PlanServerContext { listen, .. } = socket;
@@ -242,7 +240,7 @@ fn update_plan_server_context(
 }
 
 fn update_plan_client_context(
-    resource: &Resource,
+    resource: &Program,
     socket: &mut PlanClientContext,
 ) -> Result<(), Error> {
     let PlanClientContext { connect, .. } = socket;
@@ -255,7 +253,7 @@ fn update_plan_client_context(
 }
 
 fn update_node_socket_context(
-    resource: &Resource,
+    resource: &Program,
     socket: &mut NodeSocketContext,
 ) -> Result<(), Error> {
     match socket {
@@ -268,7 +266,7 @@ fn update_node_socket_context(
 }
 
 fn update_node_pub_context(
-    resource: &Resource,
+    resource: &Program,
     socket: &mut NodePublicationContext,
 ) -> Result<(), Error> {
     let NodePublicationContext { link_to, .. } = socket;
@@ -279,7 +277,7 @@ fn update_node_pub_context(
 }
 
 fn update_node_sub_context(
-    resource: &Resource,
+    resource: &Program,
     socket: &mut NodeSubscriptionContext,
 ) -> Result<(), Error> {
     let NodeSubscriptionContext { link_to, .. } = socket;
@@ -290,7 +288,7 @@ fn update_node_sub_context(
 }
 
 fn update_node_server_context(
-    resource: &Resource,
+    resource: &Program,
     socket: &mut NodeServerContext,
 ) -> Result<(), Error> {
     let NodeServerContext { link_to, .. } = socket;
@@ -302,7 +300,7 @@ fn update_node_server_context(
 }
 
 fn update_node_client_context(
-    resource: &Resource,
+    resource: &Program,
     socket: &mut NodeClientContext,
 ) -> Result<(), Error> {
     let NodeClientContext { link_to, .. } = socket;
@@ -313,7 +311,7 @@ fn update_node_client_context(
 }
 
 fn initialize_node_socket_shared(
-    resource: &Resource,
+    resource: &Program,
     shared: &mut NodeSocketShared,
 ) -> Result<(), Error> {
     let Some(owned) = resource.node_socket_tab.get(shared.id()) else {
@@ -323,7 +321,7 @@ fn initialize_node_socket_shared(
     Ok(())
 }
 
-fn initialize_link_shared(resource: &Resource, shared: &mut LinkShared) -> Result<(), Error> {
+fn initialize_link_shared(resource: &Program, shared: &mut LinkShared) -> Result<(), Error> {
     let Some(owned) = resource.link_tab.get(shared.id()) else {
         todo!()
     };

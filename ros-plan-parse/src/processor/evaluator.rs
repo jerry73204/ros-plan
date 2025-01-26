@@ -2,12 +2,11 @@ mod eval;
 mod lua;
 mod store_eval;
 
-use crate::scope::ScopeRef;
 use crate::{
     context::{arg::ArgContext, expr::ExprContext},
     error::Error,
-    resource::Resource,
-    scope::{GroupScopeOwned, GroupScopeShared, PlanFileScopeOwned, PlanFileScopeShared},
+    program::Program,
+    scope::{GroupScopeOwned, GroupScopeShared, PlanScopeOwned, PlanScopeShared, ScopeRef},
 };
 use indexmap::IndexMap;
 use lua::{new_lua, ValueToLua};
@@ -26,7 +25,7 @@ pub struct Evaluator {
 impl Evaluator {
     pub fn eval_resource(
         &mut self,
-        resource: &mut Resource,
+        resource: &mut Program,
         args: IndexMap<ParamName, Value>,
     ) -> Result<(), Error> {
         {
@@ -56,7 +55,7 @@ impl Evaluator {
         Ok(())
     }
 
-    fn eval_plan_file(&mut self, current: &PlanFileScopeOwned) -> Result<(), Error> {
+    fn eval_plan_file(&mut self, current: &PlanScopeOwned) -> Result<(), Error> {
         // Create a new Lua context
         let lua = new_lua()?;
 
@@ -145,7 +144,7 @@ impl Evaluator {
 
 #[derive(Debug)]
 enum Job {
-    PlanFile { current: PlanFileScopeShared },
+    PlanFile { current: PlanScopeShared },
     Group { current: GroupScopeShared, lua: Lua },
 }
 

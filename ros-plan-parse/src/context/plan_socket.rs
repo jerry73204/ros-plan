@@ -1,10 +1,14 @@
+use crate::utils::shared_table::{Owned, Shared};
 use ros_plan_format::{
     key::{Key, KeyOwned},
     plan_socket::{PlanClientCfg, PlanPublicationCfg, PlanServerCfg, PlanSubscriptionCfg},
 };
 use serde::{Deserialize, Serialize};
 
-use crate::scope::NodeSocketShared;
+use super::node_socket::NodeSocketShared;
+
+pub type PlanSocketOwned = Owned<PlanSocketContext>;
+pub type PlanSocketShared = Shared<PlanSocketContext>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PlanSocketContext {

@@ -1,8 +1,8 @@
 use crate::{
-    context::link::{LinkContext, PubsubLinkContext, ServiceLinkContext},
+    context::link::{LinkContext, LinkShared, PubsubLinkContext, ServiceLinkContext},
     error::Error,
-    resource::Resource,
-    scope::{LinkShared, ScopeRef, ScopeRefExt, ScopeShared},
+    program::Program,
+    scope::{ScopeRef, ScopeRefExt, ScopeShared},
     utils::{
         resolve_node_client, resolve_node_publication, resolve_node_server,
         resolve_node_subscription,
@@ -34,7 +34,7 @@ pub struct LinkResolver {
 }
 
 impl LinkResolver {
-    pub fn traverse(&mut self, context: &mut Resource) -> Result<(), Error> {
+    pub fn traverse(&mut self, context: &mut Program) -> Result<(), Error> {
         // Schedule the job to visit the root
         self.queue.push_back(
             VisitNodeJob {
@@ -102,7 +102,7 @@ impl LinkResolver {
         Ok(())
     }
 
-    fn resolve_link(&mut self, context: &mut Resource, job: ResolveLinkJob) -> Result<(), Error> {
+    fn resolve_link(&mut self, context: &mut Program, job: ResolveLinkJob) -> Result<(), Error> {
         let ResolveLinkJob {
             current: scope_shared,
             current_prefix: _,
@@ -129,7 +129,7 @@ impl LinkResolver {
 }
 
 fn resolve_sockets_in_link(
-    context: &Resource,
+    context: &Program,
     current: &ScopeShared,
     link: &mut LinkContext,
 ) -> Result<(), Error> {
@@ -141,7 +141,7 @@ fn resolve_sockets_in_link(
 }
 
 fn resolve_sockets_in_pubsub_link(
-    context: &Resource,
+    context: &Program,
     current: &ScopeShared,
     link: &mut PubsubLinkContext,
 ) -> Result<(), Error> {
@@ -190,7 +190,7 @@ fn resolve_sockets_in_pubsub_link(
 }
 
 fn resolve_sockets_in_service_link(
-    context: &Resource,
+    context: &Program,
     current: &ScopeShared,
     link: &mut ServiceLinkContext,
 ) -> Result<(), Error> {

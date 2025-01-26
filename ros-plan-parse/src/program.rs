@@ -1,6 +1,8 @@
 use crate::{
     context::{
-        link::LinkContext, node::NodeContext, node_socket::NodeSocketContext,
+        link::LinkContext,
+        node::{NodeContext, NodeOwned},
+        node_socket::{NodeSocketContext, NodeSocketOwned},
         plan_socket::PlanSocketContext,
     },
     error::Error,
@@ -8,10 +10,7 @@ use crate::{
         evaluator::Evaluator, link_resolver::LinkResolver, plan_visitor::PlanVisitor,
         shared_ref_initializer::SharedRefInitializer, socket_resolver::SocketResolver,
     },
-    scope::{
-        GroupScope, NodeOwned, NodeSocketOwned, PlanFileScope, PlanFileScopeOwned, ScopeRef,
-        ScopeRefExt, ScopeShared,
-    },
+    scope::{GroupScope, PlanScope, PlanScopeOwned, ScopeRef, ScopeRefExt, ScopeShared},
     utils::shared_table::SharedTable,
 };
 use indexmap::IndexMap;
@@ -24,8 +23,8 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Resource {
-    pub(crate) include_tab: SharedTable<PlanFileScope>,
+pub struct Program {
+    pub(crate) include_tab: SharedTable<PlanScope>,
     pub(crate) group_tab: SharedTable<GroupScope>,
     pub(crate) node_tab: SharedTable<NodeContext>,
     pub(crate) link_tab: SharedTable<LinkContext>,
@@ -33,13 +32,13 @@ pub struct Resource {
     pub(crate) node_socket_tab: SharedTable<NodeSocketContext>,
 }
 
-impl Resource {
-    pub fn root(&self) -> Option<PlanFileScopeOwned> {
+impl Program {
+    pub fn root(&self) -> Option<PlanScopeOwned> {
         self.include_tab.get(0)
     }
 
     /// Construct the resource tree from the provided file.
-    pub fn from_plan_file<P>(path: P) -> Result<Resource, Error>
+    pub fn from_plan_file<P>(path: P) -> Result<Program, Error>
     where
         P: AsRef<Path>,
     {

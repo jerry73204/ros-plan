@@ -1,6 +1,6 @@
-use crate::scope::{
-    GroupScope, GroupScopeShared, KeyKind, LinkShared, NodeShared, PlanFileScope,
-    PlanFileScopeShared, ScopeRef,
+use crate::{
+    context::{link::LinkShared, node::NodeShared},
+    scope::{GroupScope, GroupScopeShared, KeyKind, PlanScope, PlanScopeShared, ScopeRef},
 };
 use indexmap::IndexMap;
 use parking_lot::RwLockReadGuard;
@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 #[derive(Debug)]
 pub enum ScopeReadGuard<'a> {
     Group(RwLockReadGuard<'a, GroupScope>),
-    Include(RwLockReadGuard<'a, PlanFileScope>),
+    Include(RwLockReadGuard<'a, PlanScope>),
 }
 
 impl<'a> ScopeReadGuard<'a> {
@@ -22,7 +22,7 @@ impl<'a> ScopeReadGuard<'a> {
         }
     }
 
-    pub fn as_include(&self) -> Option<&RwLockReadGuard<'a, PlanFileScope>> {
+    pub fn as_include(&self) -> Option<&RwLockReadGuard<'a, PlanScope>> {
         if let Self::Include(v) = self {
             Some(v)
         } else {
@@ -31,8 +31,8 @@ impl<'a> ScopeReadGuard<'a> {
     }
 }
 
-impl<'a> From<RwLockReadGuard<'a, PlanFileScope>> for ScopeReadGuard<'a> {
-    fn from(v: RwLockReadGuard<'a, PlanFileScope>) -> Self {
+impl<'a> From<RwLockReadGuard<'a, PlanScope>> for ScopeReadGuard<'a> {
+    fn from(v: RwLockReadGuard<'a, PlanScope>) -> Self {
         Self::Include(v)
     }
 }
@@ -58,7 +58,7 @@ impl ScopeRef for ScopeReadGuard<'_> {
         }
     }
 
-    fn include_map(&self) -> &IndexMap<KeyOwned, PlanFileScopeShared> {
+    fn include_map(&self) -> &IndexMap<KeyOwned, PlanScopeShared> {
         match self {
             ScopeReadGuard::Group(guard) => guard.include_map(),
             ScopeReadGuard::Include(guard) => guard.include_map(),

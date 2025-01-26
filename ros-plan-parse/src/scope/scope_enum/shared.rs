@@ -1,10 +1,10 @@
 use super::ScopeOwned;
-use crate::scope::{GroupScopeShared, PlanFileScopeShared};
+use crate::scope::{GroupScopeShared, PlanScopeShared};
 
 #[derive(Debug, Clone)]
 pub enum ScopeShared {
     Group(GroupScopeShared),
-    Include(PlanFileScopeShared),
+    Include(PlanScopeShared),
 }
 
 impl ScopeShared {
@@ -31,7 +31,7 @@ impl ScopeShared {
         }
     }
 
-    pub fn as_include(&self) -> Option<&PlanFileScopeShared> {
+    pub fn as_include(&self) -> Option<&PlanScopeShared> {
         if let Self::Include(v) = self {
             Some(v)
         } else {
@@ -39,7 +39,7 @@ impl ScopeShared {
         }
     }
 
-    pub fn as_include_mut(&mut self) -> Option<&mut PlanFileScopeShared> {
+    pub fn as_include_mut(&mut self) -> Option<&mut PlanScopeShared> {
         if let Self::Include(v) = self {
             Some(v)
         } else {
@@ -55,7 +55,7 @@ impl ScopeShared {
         }
     }
 
-    pub fn try_into_include(self) -> Result<PlanFileScopeShared, Self> {
+    pub fn try_into_include(self) -> Result<PlanScopeShared, Self> {
         if let Self::Include(v) = self {
             Ok(v)
         } else {
@@ -64,8 +64,8 @@ impl ScopeShared {
     }
 }
 
-impl From<PlanFileScopeShared> for ScopeShared {
-    fn from(v: PlanFileScopeShared) -> Self {
+impl From<PlanScopeShared> for ScopeShared {
+    fn from(v: PlanScopeShared) -> Self {
         Self::Include(v)
     }
 }

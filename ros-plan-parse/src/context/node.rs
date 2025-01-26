@@ -1,9 +1,14 @@
-use crate::{context::expr::ExprContext, scope::NodeSocketShared};
+use super::{expr::TextOrExprContext, node_socket::NodeSocketShared};
+use crate::{
+    context::expr::ExprContext,
+    utils::shared_table::{Owned, Shared},
+};
 use indexmap::IndexMap;
 use ros_plan_format::{key::KeyOwned, node_socket::NodeSocketIdent, parameter::ParamName};
 use serde::{Deserialize, Serialize};
 
-use super::expr::TextOrExprContext;
+pub type NodeOwned = Owned<NodeContext>;
+pub type NodeShared = Shared<NodeContext>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeContext {

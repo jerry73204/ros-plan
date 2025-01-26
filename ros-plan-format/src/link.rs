@@ -1,19 +1,7 @@
 use crate::{ident::IdentOwned, interface_type::InterfaceTypeOwned, key::KeyOwned, qos::Qos};
-use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 pub type LinkIdent = IdentOwned;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[repr(transparent)]
-#[serde(transparent)]
-pub struct LinkTable(pub IndexMap<LinkIdent, LinkCfg>);
-
-impl Default for LinkTable {
-    fn default() -> Self {
-        Self(IndexMap::new())
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LinkCfg {

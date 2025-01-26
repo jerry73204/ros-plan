@@ -57,6 +57,9 @@ pub enum Error {
 
     #[error("evaluation error: {error:?}")]
     EvaluationError { error: String },
+
+    #[error("either a `path` or a pair of `pkg` and `path` is expected")]
+    InvalidIncludePath,
 }
 
 impl From<mlua::Error> for Error {

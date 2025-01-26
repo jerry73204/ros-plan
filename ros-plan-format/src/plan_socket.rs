@@ -1,19 +1,7 @@
 use crate::{ident::IdentOwned, key::RelativeKeyOwned};
-use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 pub type PlanSocketIdent = IdentOwned;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[repr(transparent)]
-#[serde(transparent)]
-pub struct PlanSocketTable(pub IndexMap<PlanSocketIdent, PlanSocketCfg>);
-
-impl Default for PlanSocketTable {
-    fn default() -> Self {
-        Self(IndexMap::new())
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PlanSocketCfg {

@@ -1,6 +1,12 @@
 use crate::{
-    argument::ArgEntry, expr::ValueOrExpr, link::LinkTable, node::NodeTable, parameter::ParamName,
-    plan_socket::PlanSocketTable, subplan::SubplanTable,
+    argument::ArgEntry,
+    expr::ValueOrExpr,
+    key::RelativeKeyOwned,
+    link::{LinkCfg, LinkIdent},
+    node::{NodeCfg, NodeIdent},
+    parameter::ParamName,
+    plan_socket::{PlanSocketCfg, PlanSocketIdent},
+    subplan::{GroupCfg, IncludeCfg},
 };
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -15,14 +21,17 @@ pub struct Plan {
     pub var: IndexMap<ParamName, ValueOrExpr>,
 
     #[serde(default)]
-    pub socket: PlanSocketTable,
+    pub socket: IndexMap<PlanSocketIdent, PlanSocketCfg>,
 
     #[serde(default)]
-    pub node: NodeTable,
+    pub node: IndexMap<NodeIdent, NodeCfg>,
 
     #[serde(default)]
-    pub link: LinkTable,
+    pub link: IndexMap<LinkIdent, LinkCfg>,
 
-    #[serde(default, flatten)]
-    pub subplan: SubplanTable,
+    #[serde(default)]
+    pub include: IndexMap<RelativeKeyOwned, IncludeCfg>,
+
+    #[serde(default)]
+    pub group: IndexMap<RelativeKeyOwned, GroupCfg>,
 }

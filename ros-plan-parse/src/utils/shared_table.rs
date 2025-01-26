@@ -21,11 +21,13 @@ impl<T> SharedTable<T> {
 
     pub fn get(&self, id: usize) -> Option<Owned<T>> {
         let tab_guard = self.inner.read_arc();
-        tab_guard.get(id)?;
+        let entry_arc = tab_guard.get(id)?.clone();
+
         Some(Owned {
             id,
-            tab_guard,
             tab_weak: self.inner.downgrade(),
+            entry_arc,
+            _tab_guard: tab_guard,
         })
     }
 
@@ -85,19 +87,21 @@ where
 #[derive(Debug)]
 pub struct Owned<T> {
     id: usize,
-    tab_guard: ArcRwLockReadGuard<RawRwLock, StableVec<ArcRwLock<T>>>,
     tab_weak: WeakRwLock<StableVec<ArcRwLock<T>>>,
+    entry_arc: ArcRwLock<T>,
+
+    /// The read guard locks the table to prevent the entry from being
+    /// removed from the table.
+    _tab_guard: ArcRwLockReadGuard<RawRwLock, StableVec<ArcRwLock<T>>>,
 }
 
 impl<T> Owned<T> {
     pub fn read(&self) -> RwLockReadGuard<T> {
-        let entry = &self.tab_guard[self.id];
-        entry.read()
+        self.entry_arc.read()
     }
 
     pub fn write(&self) -> RwLockWriteGuard<T> {
-        let entry = &self.tab_guard[self.id];
-        entry.write()
+        self.entry_arc.write()
     }
 
     pub fn downgrade(&self) -> Shared<T> {
@@ -129,10 +133,13 @@ impl<T> Shared<T> {
     pub fn upgrade(&self) -> Option<Owned<T>> {
         let tab_arc = self.tab_weak.upgrade()?;
         let tab_guard = tab_arc.read_arc();
+        let entry_arc = tab_guard[self.id].clone();
+
         Some(Owned {
             id: self.id,
-            tab_guard,
             tab_weak: self.tab_weak.clone(),
+            entry_arc,
+            _tab_guard: tab_guard,
         })
     }
 
@@ -144,7 +151,7 @@ impl<T> Shared<T> {
 impl<T> Clone for Shared<T> {
     fn clone(&self) -> Self {
         Self {
-            id: self.id.clone(),
+            id: self.id,
             tab_weak: self.tab_weak.clone(),
         }
     }

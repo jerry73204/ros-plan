@@ -1,4 +1,10 @@
-use crate::context::{arg::ArgContext, expr::ExprContext};
+use crate::{
+    context::{
+        arg::ArgContext, expr::ExprContext, link::LinkShared, node::NodeShared,
+        plan_socket::PlanSocketShared,
+    },
+    utils::shared_table::{Owned, Shared},
+};
 use indexmap::IndexMap;
 use ros_plan_format::{
     key::KeyOwned, link::LinkIdent, node::NodeIdent, parameter::ParamName,
@@ -7,13 +13,13 @@ use ros_plan_format::{
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::PathBuf};
 
-use super::{
-    traits::ScopeMut, GroupScopeShared, KeyKind, LinkShared, NodeShared, PlanFileScopeShared,
-    PlanSocketShared, ScopeRef,
-};
+use super::{traits::ScopeMut, GroupScopeShared, KeyKind, ScopeRef};
+
+pub type PlanScopeOwned = Owned<PlanScope>;
+pub type PlanScopeShared = Shared<PlanScope>;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct PlanFileScope {
+pub struct PlanScope {
     pub path: PathBuf,
     pub when: Option<ExprContext>,
     pub arg_map: IndexMap<ParamName, ArgContext>,
@@ -21,12 +27,12 @@ pub struct PlanFileScope {
     pub socket_map: IndexMap<PlanSocketIdent, PlanSocketShared>,
     pub node_map: IndexMap<NodeIdent, NodeShared>,
     pub link_map: IndexMap<LinkIdent, LinkShared>,
-    pub include_map: IndexMap<KeyOwned, PlanFileScopeShared>,
+    pub include_map: IndexMap<KeyOwned, PlanScopeShared>,
     pub group_map: IndexMap<KeyOwned, GroupScopeShared>,
     pub key_map: BTreeMap<KeyOwned, KeyKind>,
 }
 
-impl ScopeMut for PlanFileScope {
+impl ScopeMut for PlanScope {
     fn node_map_mut(&mut self) -> &mut IndexMap<NodeIdent, NodeShared> {
         &mut self.node_map
     }
@@ -35,7 +41,7 @@ impl ScopeMut for PlanFileScope {
         &mut self.link_map
     }
 
-    fn include_map_mut(&mut self) -> &mut IndexMap<KeyOwned, PlanFileScopeShared> {
+    fn include_map_mut(&mut self) -> &mut IndexMap<KeyOwned, PlanScopeShared> {
         &mut self.include_map
     }
 
@@ -48,7 +54,7 @@ impl ScopeMut for PlanFileScope {
     }
 }
 
-impl ScopeRef for PlanFileScope {
+impl ScopeRef for PlanScope {
     fn node_map(&self) -> &IndexMap<NodeIdent, NodeShared> {
         &self.node_map
     }
@@ -57,7 +63,7 @@ impl ScopeRef for PlanFileScope {
         &self.link_map
     }
 
-    fn include_map(&self) -> &IndexMap<KeyOwned, PlanFileScopeShared> {
+    fn include_map(&self) -> &IndexMap<KeyOwned, PlanScopeShared> {
         &self.include_map
     }
 

@@ -2,9 +2,13 @@ pub mod arc_rwlock;
 pub mod shared_table;
 
 use crate::{
+    context::{
+        node_socket::{NodeSocketOwned, NodeSocketShared},
+        plan_socket::PlanSocketOwned,
+    },
     error::Error,
-    resource::Resource,
-    scope::{NodeSocketOwned, NodeSocketShared, PlanSocketOwned, ScopeRefExt, ScopeShared},
+    program::Program,
+    scope::{ScopeRefExt, ScopeShared},
 };
 use ros_plan_format::key::Key;
 use serde::Deserialize;
@@ -153,7 +157,7 @@ impl From<PlanSocketOwned> for FindSocket {
 }
 
 pub fn find_plan_or_node_socket(
-    resource: &Resource,
+    resource: &Program,
     current: ScopeShared,
     socket_key: &Key,
 ) -> Option<FindSocket> {
@@ -176,7 +180,7 @@ pub fn find_plan_or_node_socket(
 }
 
 pub fn resolve_node_publication(
-    resource: &Resource,
+    resource: &Program,
     current: ScopeShared,
     socket_key: &Key,
 ) -> Option<Vec<NodeSocketShared>> {
@@ -198,7 +202,7 @@ pub fn resolve_node_publication(
 }
 
 pub fn resolve_node_subscription(
-    resource: &Resource,
+    resource: &Program,
     current: ScopeShared,
     socket_key: &Key,
 ) -> Option<Vec<NodeSocketShared>> {
@@ -220,7 +224,7 @@ pub fn resolve_node_subscription(
 }
 
 pub fn resolve_node_server(
-    resource: &Resource,
+    resource: &Program,
     current: ScopeShared,
     socket_key: &Key,
 ) -> Option<NodeSocketShared> {
@@ -242,7 +246,7 @@ pub fn resolve_node_server(
 }
 
 pub fn resolve_node_client(
-    resource: &Resource,
+    resource: &Program,
     current: ScopeShared,
     socket_key: &Key,
 ) -> Option<Vec<NodeSocketShared>> {

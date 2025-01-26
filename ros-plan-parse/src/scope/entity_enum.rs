@@ -1,4 +1,7 @@
-use super::{LinkOwned, LinkShared, NodeOwned, NodeShared};
+use crate::context::{
+    link::{LinkOwned, LinkShared},
+    node::{NodeOwned, NodeShared},
+};
 
 #[derive(Debug)]
 pub enum EntityOwned {

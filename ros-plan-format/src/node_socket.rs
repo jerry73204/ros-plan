@@ -2,21 +2,9 @@ use crate::{
     expr::KeyOrExpr, ident::IdentOwned, interface_type::InterfaceTypeOwned,
     qos_requirement::QosRequirement,
 };
-use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 pub type NodeSocketIdent = IdentOwned;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[repr(transparent)]
-#[serde(transparent)]
-pub struct NodeSocketTable(pub IndexMap<NodeSocketIdent, NodeSocketCfg>);
-
-impl Default for NodeSocketTable {
-    fn default() -> Self {
-        Self(IndexMap::new())
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

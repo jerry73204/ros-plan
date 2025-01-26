@@ -1,17 +1,18 @@
+use crate::{
+    context::{link::LinkShared, node::NodeShared},
+    scope::{
+        GroupScope, GroupScopeShared, KeyKind, PlanScope, PlanScopeShared, ScopeMut, ScopeRef,
+    },
+};
 use indexmap::IndexMap;
 use parking_lot::RwLockWriteGuard;
 use ros_plan_format::{key::KeyOwned, link::LinkIdent, node::NodeIdent};
 use std::collections::BTreeMap;
 
-use crate::scope::{
-    GroupScope, GroupScopeShared, KeyKind, LinkShared, NodeShared, PlanFileScope,
-    PlanFileScopeShared, ScopeMut, ScopeRef,
-};
-
 #[derive(Debug)]
 pub enum ScopeWriteGuard<'a> {
     Group(RwLockWriteGuard<'a, GroupScope>),
-    Include(RwLockWriteGuard<'a, PlanFileScope>),
+    Include(RwLockWriteGuard<'a, PlanScope>),
 }
 
 impl<'a> ScopeWriteGuard<'a> {
@@ -31,7 +32,7 @@ impl<'a> ScopeWriteGuard<'a> {
         }
     }
 
-    pub fn as_include(&self) -> Option<&RwLockWriteGuard<'a, PlanFileScope>> {
+    pub fn as_include(&self) -> Option<&RwLockWriteGuard<'a, PlanScope>> {
         if let Self::Include(v) = self {
             Some(v)
         } else {
@@ -39,7 +40,7 @@ impl<'a> ScopeWriteGuard<'a> {
         }
     }
 
-    pub fn as_include_mut(&mut self) -> Option<&mut RwLockWriteGuard<'a, PlanFileScope>> {
+    pub fn as_include_mut(&mut self) -> Option<&mut RwLockWriteGuard<'a, PlanScope>> {
         if let Self::Include(v) = self {
             Some(v)
         } else {
@@ -48,8 +49,8 @@ impl<'a> ScopeWriteGuard<'a> {
     }
 }
 
-impl<'a> From<RwLockWriteGuard<'a, PlanFileScope>> for ScopeWriteGuard<'a> {
-    fn from(v: RwLockWriteGuard<'a, PlanFileScope>) -> Self {
+impl<'a> From<RwLockWriteGuard<'a, PlanScope>> for ScopeWriteGuard<'a> {
+    fn from(v: RwLockWriteGuard<'a, PlanScope>) -> Self {
         Self::Include(v)
     }
 }
@@ -75,7 +76,7 @@ impl ScopeRef for ScopeWriteGuard<'_> {
         }
     }
 
-    fn include_map(&self) -> &IndexMap<KeyOwned, PlanFileScopeShared> {
+    fn include_map(&self) -> &IndexMap<KeyOwned, PlanScopeShared> {
         match self {
             ScopeWriteGuard::Group(guard) => guard.include_map(),
             ScopeWriteGuard::Include(guard) => guard.include_map(),
@@ -112,7 +113,7 @@ impl ScopeMut for ScopeWriteGuard<'_> {
         }
     }
 
-    fn include_map_mut(&mut self) -> &mut IndexMap<KeyOwned, PlanFileScopeShared> {
+    fn include_map_mut(&mut self) -> &mut IndexMap<KeyOwned, PlanScopeShared> {
         match self {
             ScopeWriteGuard::Group(guard) => guard.include_map_mut(),
             ScopeWriteGuard::Include(guard) => guard.include_map_mut(),
