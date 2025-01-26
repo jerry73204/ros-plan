@@ -1,6 +1,6 @@
 use super::{plan_file::PlanScopeShared, traits::ScopeMut, KeyKind, ScopeRef};
 use crate::{
-    context::{expr::ExprContext, link::LinkShared, node::NodeShared},
+    context::{expr::ExprCtx, link::LinkShared, node::NodeShared},
     utils::shared_table::{Owned, Shared},
 };
 use indexmap::IndexMap;
@@ -13,7 +13,7 @@ pub type GroupScopeShared = Shared<GroupScope>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GroupScope {
-    pub when: Option<ExprContext>,
+    pub when: Option<ExprCtx>,
     pub node_map: IndexMap<NodeIdent, NodeShared>,
     pub link_map: IndexMap<LinkIdent, LinkShared>,
     pub include_map: IndexMap<KeyOwned, PlanScopeShared>,

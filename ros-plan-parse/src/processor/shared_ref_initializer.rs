@@ -1,14 +1,12 @@
 use crate::{
     context::{
-        link::{LinkContext, LinkShared, PubsubLinkContext, ServiceLinkContext},
+        link::{LinkCtx, LinkShared, PubsubLinkCtx, ServiceLinkCtx},
         node::NodeShared,
         node_socket::{
-            NodeClientContext, NodePublicationContext, NodeServerContext, NodeSocketContext,
-            NodeSocketShared, NodeSubscriptionContext,
+            NodeCliCtx, NodePubCtx, NodeSocketCtx, NodeSocketShared, NodeSrvCtx, NodeSubCtx,
         },
         plan_socket::{
-            PlanClientContext, PlanPublicationContext, PlanServerContext, PlanSocketContext,
-            PlanSocketShared, PlanSubscriptionContext,
+            PlanCliCtx, PlanPubCtx, PlanSocketCtx, PlanSocketShared, PlanSrvCtx, PlanSubCtx,
         },
     },
     error::Error,
@@ -137,19 +135,16 @@ fn update_socket_map(
     Ok(())
 }
 
-fn update_link_context(resource: &Program, link: &mut LinkContext) -> Result<(), Error> {
+fn update_link_context(resource: &Program, link: &mut LinkCtx) -> Result<(), Error> {
     match link {
-        LinkContext::PubSub(link) => update_pubsub_link_context(resource, link)?,
-        LinkContext::Service(link) => update_service_link_context(resource, link)?,
+        LinkCtx::PubSub(link) => update_pubsub_link_context(resource, link)?,
+        LinkCtx::Service(link) => update_service_link_context(resource, link)?,
     }
     Ok(())
 }
 
-fn update_pubsub_link_context(
-    resource: &Program,
-    link: &mut PubsubLinkContext,
-) -> Result<(), Error> {
-    let PubsubLinkContext { src, dst, .. } = link;
+fn update_pubsub_link_context(resource: &Program, link: &mut PubsubLinkCtx) -> Result<(), Error> {
+    let PubsubLinkCtx { src, dst, .. } = link;
 
     for uri in src.iter_mut().flatten() {
         initialize_node_socket_shared(resource, uri)?;
@@ -162,11 +157,8 @@ fn update_pubsub_link_context(
     Ok(())
 }
 
-fn update_service_link_context(
-    resource: &Program,
-    link: &mut ServiceLinkContext,
-) -> Result<(), Error> {
-    let ServiceLinkContext {
+fn update_service_link_context(resource: &Program, link: &mut ServiceLinkCtx) -> Result<(), Error> {
+    let ServiceLinkCtx {
         listen, connect, ..
     } = link;
 
@@ -180,24 +172,18 @@ fn update_service_link_context(
     Ok(())
 }
 
-fn update_plan_socket_context(
-    resource: &Program,
-    socket: &mut PlanSocketContext,
-) -> Result<(), Error> {
+fn update_plan_socket_context(resource: &Program, socket: &mut PlanSocketCtx) -> Result<(), Error> {
     match socket {
-        PlanSocketContext::Publication(socket) => update_plan_pub_context(resource, socket)?,
-        PlanSocketContext::Subscription(socket) => update_plan_sub_context(resource, socket)?,
-        PlanSocketContext::Server(socket) => update_plan_server_context(resource, socket)?,
-        PlanSocketContext::Client(socket) => update_plan_client_context(resource, socket)?,
+        PlanSocketCtx::Publication(socket) => update_plan_pub_context(resource, socket)?,
+        PlanSocketCtx::Subscription(socket) => update_plan_sub_context(resource, socket)?,
+        PlanSocketCtx::Server(socket) => update_plan_server_context(resource, socket)?,
+        PlanSocketCtx::Client(socket) => update_plan_client_context(resource, socket)?,
     }
     Ok(())
 }
 
-fn update_plan_pub_context(
-    resource: &Program,
-    socket: &mut PlanPublicationContext,
-) -> Result<(), Error> {
-    let PlanPublicationContext { src, .. } = socket;
+fn update_plan_pub_context(resource: &Program, socket: &mut PlanPubCtx) -> Result<(), Error> {
+    let PlanPubCtx { src, .. } = socket;
 
     for uri in src.iter_mut().flatten() {
         initialize_node_socket_shared(resource, uri)?;
@@ -206,11 +192,8 @@ fn update_plan_pub_context(
     Ok(())
 }
 
-fn update_plan_sub_context(
-    resource: &Program,
-    socket: &mut PlanSubscriptionContext,
-) -> Result<(), Error> {
-    let PlanSubscriptionContext { dst, .. } = socket;
+fn update_plan_sub_context(resource: &Program, socket: &mut PlanSubCtx) -> Result<(), Error> {
+    let PlanSubCtx { dst, .. } = socket;
 
     for uri in dst.iter_mut().flatten() {
         initialize_node_socket_shared(resource, uri)?;
@@ -219,11 +202,8 @@ fn update_plan_sub_context(
     Ok(())
 }
 
-fn update_plan_server_context(
-    resource: &Program,
-    socket: &mut PlanServerContext,
-) -> Result<(), Error> {
-    let PlanServerContext { listen, .. } = socket;
+fn update_plan_server_context(resource: &Program, socket: &mut PlanSrvCtx) -> Result<(), Error> {
+    let PlanSrvCtx { listen, .. } = socket;
 
     if let Some(uri) = listen {
         initialize_node_socket_shared(resource, uri)?;
@@ -232,11 +212,8 @@ fn update_plan_server_context(
     Ok(())
 }
 
-fn update_plan_client_context(
-    resource: &Program,
-    socket: &mut PlanClientContext,
-) -> Result<(), Error> {
-    let PlanClientContext { connect, .. } = socket;
+fn update_plan_client_context(resource: &Program, socket: &mut PlanCliCtx) -> Result<(), Error> {
+    let PlanCliCtx { connect, .. } = socket;
 
     for uri in connect.iter_mut().flatten() {
         initialize_node_socket_shared(resource, uri)?;
@@ -245,46 +222,34 @@ fn update_plan_client_context(
     Ok(())
 }
 
-fn update_node_socket_context(
-    resource: &Program,
-    socket: &mut NodeSocketContext,
-) -> Result<(), Error> {
+fn update_node_socket_context(resource: &Program, socket: &mut NodeSocketCtx) -> Result<(), Error> {
     match socket {
-        NodeSocketContext::Publication(socket) => update_node_pub_context(resource, socket)?,
-        NodeSocketContext::Subscription(socket) => update_node_sub_context(resource, socket)?,
-        NodeSocketContext::Server(socket) => update_node_server_context(resource, socket)?,
-        NodeSocketContext::Client(socket) => update_node_client_context(resource, socket)?,
+        NodeSocketCtx::Publication(socket) => update_node_pub_context(resource, socket)?,
+        NodeSocketCtx::Subscription(socket) => update_node_sub_context(resource, socket)?,
+        NodeSocketCtx::Server(socket) => update_node_server_context(resource, socket)?,
+        NodeSocketCtx::Client(socket) => update_node_client_context(resource, socket)?,
     }
     Ok(())
 }
 
-fn update_node_pub_context(
-    resource: &Program,
-    socket: &mut NodePublicationContext,
-) -> Result<(), Error> {
-    let NodePublicationContext { link_to, .. } = socket;
+fn update_node_pub_context(resource: &Program, socket: &mut NodePubCtx) -> Result<(), Error> {
+    let NodePubCtx { link_to, .. } = socket;
     if let Some(link_to) = link_to {
         initialize_link_shared(resource, link_to)?;
     }
     Ok(())
 }
 
-fn update_node_sub_context(
-    resource: &Program,
-    socket: &mut NodeSubscriptionContext,
-) -> Result<(), Error> {
-    let NodeSubscriptionContext { link_to, .. } = socket;
+fn update_node_sub_context(resource: &Program, socket: &mut NodeSubCtx) -> Result<(), Error> {
+    let NodeSubCtx { link_to, .. } = socket;
     if let Some(link_to) = link_to {
         initialize_link_shared(resource, link_to)?;
     }
     Ok(())
 }
 
-fn update_node_server_context(
-    resource: &Program,
-    socket: &mut NodeServerContext,
-) -> Result<(), Error> {
-    let NodeServerContext { link_to, .. } = socket;
+fn update_node_server_context(resource: &Program, socket: &mut NodeSrvCtx) -> Result<(), Error> {
+    let NodeSrvCtx { link_to, .. } = socket;
     if let Some(link_to) = link_to {
         initialize_link_shared(resource, link_to)?;
     }
@@ -292,11 +257,8 @@ fn update_node_server_context(
     Ok(())
 }
 
-fn update_node_client_context(
-    resource: &Program,
-    socket: &mut NodeClientContext,
-) -> Result<(), Error> {
-    let NodeClientContext { link_to, .. } = socket;
+fn update_node_client_context(resource: &Program, socket: &mut NodeCliCtx) -> Result<(), Error> {
+    let NodeCliCtx { link_to, .. } = socket;
     if let Some(link_to) = link_to {
         initialize_link_shared(resource, link_to)?;
     }

@@ -1,17 +1,11 @@
 use crate::{
     context::{
-        arg::ArgContext,
-        expr::{ExprContext, TextOrExprContext},
-        link::{LinkContext, PubsubLinkContext, ServiceLinkContext},
-        node::NodeContext,
-        node_socket::{
-            NodeClientContext, NodePublicationContext, NodeServerContext, NodeSocketContext,
-            NodeSubscriptionContext,
-        },
-        plan_socket::{
-            PlanClientContext, PlanPublicationContext, PlanServerContext, PlanSocketContext,
-            PlanSubscriptionContext,
-        },
+        arg::ArgCtx,
+        expr::{ExprCtx, TextOrExprCtx},
+        link::{LinkCtx, PubsubLinkCtx, ServiceLinkCtx},
+        node::NodeCtx,
+        node_socket::{NodeCliCtx, NodePubCtx, NodeSocketCtx, NodeSrvCtx, NodeSubCtx},
+        plan_socket::{PlanCliCtx, PlanPubCtx, PlanSocketCtx, PlanSrvCtx, PlanSubCtx},
     },
     error::Error,
     program::Program,
@@ -372,7 +366,7 @@ fn to_plan_scope(
         .into_iter()
         .map(|(name, arg_cfg)| {
             let assign = assign_arg.get(&name).cloned();
-            let arg_ctx = ArgContext::new(arg_cfg, assign);
+            let arg_ctx = ArgCtx::new(arg_cfg, assign);
             (name, arg_ctx)
         })
         .collect();
@@ -380,7 +374,7 @@ fn to_plan_scope(
     let var_map: IndexMap<_, _> = plan_cfg
         .var
         .into_iter()
-        .map(|(name, var_entry)| (name, ExprContext::new(var_entry)))
+        .map(|(name, var_entry)| (name, ExprCtx::new(var_entry)))
         .collect();
 
     let mut plan_ctx = PlanScope {
@@ -388,7 +382,7 @@ fn to_plan_scope(
         arg_map,
         var_map,
         socket_map,
-        when: when.map(ExprContext::new),
+        when: when.map(ExprCtx::new),
         node_map: IndexMap::new(),
         link_map: IndexMap::new(),
         include_map: IndexMap::new(),
@@ -424,7 +418,7 @@ fn to_group_scope(
     group: GroupCfg,
 ) -> Result<(GroupScope, SubplanTable), Error> {
     let mut group_ctx = GroupScope {
-        when: group.when.map(ExprContext::new),
+        when: group.when.map(ExprCtx::new),
         node_map: IndexMap::new(),
         link_map: IndexMap::new(),
         include_map: IndexMap::new(),
@@ -454,27 +448,27 @@ fn to_group_scope(
     Ok((group_ctx, subplan))
 }
 
-fn to_socket_context(key: KeyOwned, socket_ctx: PlanSocketCfg) -> PlanSocketContext {
+fn to_socket_context(key: KeyOwned, socket_ctx: PlanSocketCfg) -> PlanSocketCtx {
     match socket_ctx {
-        PlanSocketCfg::Publication(config) => PlanPublicationContext {
+        PlanSocketCfg::Pub(config) => PlanPubCtx {
             config,
             src: None,
             key,
         }
         .into(),
-        PlanSocketCfg::Subscription(config) => PlanSubscriptionContext {
+        PlanSocketCfg::Sub(config) => PlanSubCtx {
             config,
             dst: None,
             key,
         }
         .into(),
-        PlanSocketCfg::Server(config) => PlanServerContext {
+        PlanSocketCfg::Srv(config) => PlanSrvCtx {
             config,
             listen: None,
             key,
         }
         .into(),
-        PlanSocketCfg::Client(config) => PlanClientContext {
+        PlanSocketCfg::Cli(config) => PlanCliCtx {
             config,
             connect: None,
             key,
@@ -483,16 +477,16 @@ fn to_socket_context(key: KeyOwned, socket_ctx: PlanSocketCfg) -> PlanSocketCont
     }
 }
 
-fn to_link_context(key: KeyOwned, link_cfg: LinkCfg) -> LinkContext {
+fn to_link_context(key: KeyOwned, link_cfg: LinkCfg) -> LinkCtx {
     match link_cfg {
-        LinkCfg::PubSub(link_cfg) => PubsubLinkContext {
+        LinkCfg::PubSub(link_cfg) => PubsubLinkCtx {
             key,
             config: link_cfg,
             src: None,
             dst: None,
         }
         .into(),
-        LinkCfg::Service(link_cfg) => ServiceLinkContext {
+        LinkCfg::Service(link_cfg) => ServiceLinkCtx {
             key,
             config: link_cfg,
             listen: None,
@@ -546,11 +540,11 @@ fn check_arg_assignment(
     Ok(())
 }
 
-fn to_node_context(resource: &mut Program, node_key: KeyOwned, node_cfg: NodeCfg) -> NodeContext {
+fn to_node_context(resource: &mut Program, node_key: KeyOwned, node_cfg: NodeCfg) -> NodeCtx {
     let param = node_cfg
         .param
         .iter()
-        .map(|(name, eval)| (name.clone(), ExprContext::new(eval.clone())))
+        .map(|(name, eval)| (name.clone(), ExprCtx::new(eval.clone())))
         .collect();
     let socket: IndexMap<_, _> = node_cfg
         .socket
@@ -563,37 +557,37 @@ fn to_node_context(resource: &mut Program, node_key: KeyOwned, node_cfg: NodeCfg
         })
         .collect();
 
-    NodeContext {
+    NodeCtx {
         key: node_key,
-        pkg: node_cfg.pkg.map(TextOrExprContext::new),
-        exec: node_cfg.exec.map(TextOrExprContext::new),
-        plugin: node_cfg.plugin.map(TextOrExprContext::new),
+        pkg: node_cfg.pkg.map(TextOrExprCtx::new),
+        exec: node_cfg.exec.map(TextOrExprCtx::new),
+        plugin: node_cfg.plugin.map(TextOrExprCtx::new),
         param,
         socket,
     }
 }
 
-fn to_node_socket_context(key: KeyOwned, cfg: NodeSocketCfg) -> NodeSocketContext {
+fn to_node_socket_context(key: KeyOwned, cfg: NodeSocketCfg) -> NodeSocketCtx {
     match cfg {
-        NodeSocketCfg::Publication(cfg) => NodePublicationContext {
+        NodeSocketCfg::Pub(cfg) => NodePubCtx {
             key,
             config: cfg,
             link_to: None,
         }
         .into(),
-        NodeSocketCfg::Subscription(cfg) => NodeSubscriptionContext {
+        NodeSocketCfg::Sub(cfg) => NodeSubCtx {
             key,
             config: cfg,
             link_to: None,
         }
         .into(),
-        NodeSocketCfg::Server(cfg) => NodeServerContext {
+        NodeSocketCfg::Srv(cfg) => NodeSrvCtx {
             key,
             config: cfg,
             link_to: None,
         }
         .into(),
-        NodeSocketCfg::Client(cfg) => NodeClientContext {
+        NodeSocketCfg::Cli(cfg) => NodeCliCtx {
             key,
             config: cfg,
             link_to: None,

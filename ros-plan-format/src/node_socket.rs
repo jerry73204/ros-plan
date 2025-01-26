@@ -10,45 +10,45 @@ pub type NodeSocketIdent = IdentOwned;
 #[serde(rename_all = "snake_case")]
 pub enum NodeSocketCfg {
     #[serde(rename = "pub")]
-    Publication(NodePublicationCfg),
+    Pub(NodePubCfg),
 
     #[serde(rename = "sub")]
-    Subscription(NodeSubscriptionCfg),
+    Sub(NodeSubCfg),
 
     #[serde(rename = "srv")]
-    Server(NodeServerCfg),
+    Srv(NodeSrvCfg),
 
     #[serde(rename = "cli")]
-    Client(NodeClientCfg),
+    Cli(NodeCliCfg),
 }
 
-impl From<NodeClientCfg> for NodeSocketCfg {
-    fn from(v: NodeClientCfg) -> Self {
-        Self::Client(v)
+impl From<NodeCliCfg> for NodeSocketCfg {
+    fn from(v: NodeCliCfg) -> Self {
+        Self::Cli(v)
     }
 }
 
-impl From<NodeServerCfg> for NodeSocketCfg {
-    fn from(v: NodeServerCfg) -> Self {
-        Self::Server(v)
+impl From<NodeSrvCfg> for NodeSocketCfg {
+    fn from(v: NodeSrvCfg) -> Self {
+        Self::Srv(v)
     }
 }
 
-impl From<NodeSubscriptionCfg> for NodeSocketCfg {
-    fn from(v: NodeSubscriptionCfg) -> Self {
-        Self::Subscription(v)
+impl From<NodeSubCfg> for NodeSocketCfg {
+    fn from(v: NodeSubCfg) -> Self {
+        Self::Sub(v)
     }
 }
 
-impl From<NodePublicationCfg> for NodeSocketCfg {
-    fn from(v: NodePublicationCfg) -> Self {
-        Self::Publication(v)
+impl From<NodePubCfg> for NodeSocketCfg {
+    fn from(v: NodePubCfg) -> Self {
+        Self::Pub(v)
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct NodePublicationCfg {
+pub struct NodePubCfg {
     #[serde(rename = "type")]
     pub ty: Option<InterfaceTypeOwned>,
     pub qos: Option<QosRequirement>,
@@ -57,7 +57,7 @@ pub struct NodePublicationCfg {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct NodeSubscriptionCfg {
+pub struct NodeSubCfg {
     #[serde(rename = "type")]
     pub ty: Option<InterfaceTypeOwned>,
     pub qos: Option<QosRequirement>,
@@ -66,7 +66,7 @@ pub struct NodeSubscriptionCfg {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct NodeServerCfg {
+pub struct NodeSrvCfg {
     #[serde(rename = "type")]
     pub ty: Option<InterfaceTypeOwned>,
     pub from: Option<KeyOrExpr>,
@@ -74,7 +74,7 @@ pub struct NodeServerCfg {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct NodeClientCfg {
+pub struct NodeCliCfg {
     #[serde(rename = "type")]
     pub ty: Option<InterfaceTypeOwned>,
     pub from: Option<KeyOrExpr>,

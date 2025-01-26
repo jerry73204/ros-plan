@@ -1,38 +1,38 @@
 use crate::utils::shared_table::{Owned, Shared};
 use ros_plan_format::{
     key::{Key, KeyOwned},
-    node_socket::{NodeClientCfg, NodePublicationCfg, NodeServerCfg, NodeSubscriptionCfg},
+    node_socket::{NodeCliCfg, NodePubCfg, NodeSrvCfg, NodeSubCfg},
 };
 use serde::{Deserialize, Serialize};
 
 use super::link::LinkShared;
 
-pub type NodeSocketOwned = Owned<NodeSocketContext>;
-pub type NodeSocketShared = Shared<NodeSocketContext>;
+pub type NodeSocketOwned = Owned<NodeSocketCtx>;
+pub type NodeSocketShared = Shared<NodeSocketCtx>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum NodeSocketContext {
+pub enum NodeSocketCtx {
     #[serde(rename = "pub")]
-    Publication(NodePublicationContext),
+    Publication(NodePubCtx),
     #[serde(rename = "sub")]
-    Subscription(NodeSubscriptionContext),
+    Subscription(NodeSubCtx),
     #[serde(rename = "srv")]
-    Server(NodeServerContext),
+    Server(NodeSrvCtx),
     #[serde(rename = "cli")]
-    Client(NodeClientContext),
+    Client(NodeCliCtx),
 }
 
-impl NodeSocketContext {
+impl NodeSocketCtx {
     pub fn key(&self) -> &Key {
         match self {
-            NodeSocketContext::Publication(socket) => &socket.key,
-            NodeSocketContext::Subscription(socket) => &socket.key,
-            NodeSocketContext::Server(socket) => &socket.key,
-            NodeSocketContext::Client(socket) => &socket.key,
+            NodeSocketCtx::Publication(socket) => &socket.key,
+            NodeSocketCtx::Subscription(socket) => &socket.key,
+            NodeSocketCtx::Server(socket) => &socket.key,
+            NodeSocketCtx::Client(socket) => &socket.key,
         }
     }
 
-    pub fn as_publication(&self) -> Option<&NodePublicationContext> {
+    pub fn as_publication(&self) -> Option<&NodePubCtx> {
         if let Self::Publication(v) = self {
             Some(v)
         } else {
@@ -40,7 +40,7 @@ impl NodeSocketContext {
         }
     }
 
-    pub fn as_publication_mut(&mut self) -> Option<&mut NodePublicationContext> {
+    pub fn as_publication_mut(&mut self) -> Option<&mut NodePubCtx> {
         if let Self::Publication(v) = self {
             Some(v)
         } else {
@@ -48,7 +48,7 @@ impl NodeSocketContext {
         }
     }
 
-    pub fn as_subscription(&self) -> Option<&NodeSubscriptionContext> {
+    pub fn as_subscription(&self) -> Option<&NodeSubCtx> {
         if let Self::Subscription(v) = self {
             Some(v)
         } else {
@@ -56,7 +56,7 @@ impl NodeSocketContext {
         }
     }
 
-    pub fn as_subscription_mut(&mut self) -> Option<&mut NodeSubscriptionContext> {
+    pub fn as_subscription_mut(&mut self) -> Option<&mut NodeSubCtx> {
         if let Self::Subscription(v) = self {
             Some(v)
         } else {
@@ -64,7 +64,7 @@ impl NodeSocketContext {
         }
     }
 
-    pub fn as_server(&self) -> Option<&NodeServerContext> {
+    pub fn as_server(&self) -> Option<&NodeSrvCtx> {
         if let Self::Server(v) = self {
             Some(v)
         } else {
@@ -72,7 +72,7 @@ impl NodeSocketContext {
         }
     }
 
-    pub fn as_server_mut(&mut self) -> Option<&mut NodeServerContext> {
+    pub fn as_server_mut(&mut self) -> Option<&mut NodeSrvCtx> {
         if let Self::Server(v) = self {
             Some(v)
         } else {
@@ -80,7 +80,7 @@ impl NodeSocketContext {
         }
     }
 
-    pub fn as_client(&self) -> Option<&NodeClientContext> {
+    pub fn as_client(&self) -> Option<&NodeCliCtx> {
         if let Self::Client(v) = self {
             Some(v)
         } else {
@@ -88,7 +88,7 @@ impl NodeSocketContext {
         }
     }
 
-    pub fn as_client_mut(&mut self) -> Option<&mut NodeClientContext> {
+    pub fn as_client_mut(&mut self) -> Option<&mut NodeCliCtx> {
         if let Self::Client(v) = self {
             Some(v)
         } else {
@@ -129,54 +129,54 @@ impl NodeSocketContext {
     }
 }
 
-impl From<NodeClientContext> for NodeSocketContext {
-    fn from(v: NodeClientContext) -> Self {
+impl From<NodeCliCtx> for NodeSocketCtx {
+    fn from(v: NodeCliCtx) -> Self {
         Self::Client(v)
     }
 }
 
-impl From<NodeServerContext> for NodeSocketContext {
-    fn from(v: NodeServerContext) -> Self {
+impl From<NodeSrvCtx> for NodeSocketCtx {
+    fn from(v: NodeSrvCtx) -> Self {
         Self::Server(v)
     }
 }
 
-impl From<NodeSubscriptionContext> for NodeSocketContext {
-    fn from(v: NodeSubscriptionContext) -> Self {
+impl From<NodeSubCtx> for NodeSocketCtx {
+    fn from(v: NodeSubCtx) -> Self {
         Self::Subscription(v)
     }
 }
 
-impl From<NodePublicationContext> for NodeSocketContext {
-    fn from(v: NodePublicationContext) -> Self {
+impl From<NodePubCtx> for NodeSocketCtx {
+    fn from(v: NodePubCtx) -> Self {
         Self::Publication(v)
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NodePublicationContext {
+pub struct NodePubCtx {
     pub key: KeyOwned,
-    pub config: NodePublicationCfg,
+    pub config: NodePubCfg,
     pub link_to: Option<LinkShared>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NodeSubscriptionContext {
+pub struct NodeSubCtx {
     pub key: KeyOwned,
-    pub config: NodeSubscriptionCfg,
+    pub config: NodeSubCfg,
     pub link_to: Option<LinkShared>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NodeServerContext {
+pub struct NodeSrvCtx {
     pub key: KeyOwned,
-    pub config: NodeServerCfg,
+    pub config: NodeSrvCfg,
     pub link_to: Option<LinkShared>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NodeClientContext {
+pub struct NodeCliCtx {
     pub key: KeyOwned,
-    pub config: NodeClientCfg,
+    pub config: NodeCliCfg,
     pub link_to: Option<LinkShared>,
 }

@@ -6,42 +6,45 @@ pub type PlanSocketIdent = IdentOwned;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PlanSocketCfg {
     #[serde(rename = "pub")]
-    Publication(PlanPublicationCfg),
+    Pub(PlanPubCfg),
+
     #[serde(rename = "sub")]
-    Subscription(PlanSubscriptionCfg),
+    Sub(PlanSubCfg),
+
     #[serde(rename = "srv")]
-    Server(PlanServerCfg),
+    Srv(PlanSrvCfg),
+
     #[serde(rename = "cli")]
-    Client(PlanClientCfg),
+    Cli(PlanCliCfg),
 }
 
-impl From<PlanClientCfg> for PlanSocketCfg {
-    fn from(v: PlanClientCfg) -> Self {
-        Self::Client(v)
+impl From<PlanCliCfg> for PlanSocketCfg {
+    fn from(v: PlanCliCfg) -> Self {
+        Self::Cli(v)
     }
 }
 
-impl From<PlanServerCfg> for PlanSocketCfg {
-    fn from(v: PlanServerCfg) -> Self {
-        Self::Server(v)
+impl From<PlanSrvCfg> for PlanSocketCfg {
+    fn from(v: PlanSrvCfg) -> Self {
+        Self::Srv(v)
     }
 }
 
-impl From<PlanSubscriptionCfg> for PlanSocketCfg {
-    fn from(v: PlanSubscriptionCfg) -> Self {
-        Self::Subscription(v)
+impl From<PlanSubCfg> for PlanSocketCfg {
+    fn from(v: PlanSubCfg) -> Self {
+        Self::Sub(v)
     }
 }
 
-impl From<PlanPublicationCfg> for PlanSocketCfg {
-    fn from(v: PlanPublicationCfg) -> Self {
-        Self::Publication(v)
+impl From<PlanPubCfg> for PlanSocketCfg {
+    fn from(v: PlanPubCfg) -> Self {
+        Self::Pub(v)
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct PlanPublicationCfg {
+pub struct PlanPubCfg {
     // #[serde(rename = "type")]
     // pub ty: RosTypeOwned,
     // pub qos: Option<QosRequirement>,
@@ -50,7 +53,7 @@ pub struct PlanPublicationCfg {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct PlanSubscriptionCfg {
+pub struct PlanSubCfg {
     // #[serde(rename = "type")]
     // pub ty: RosTypeOwned,
     // pub qos: Option<QosRequirement>,
@@ -59,7 +62,7 @@ pub struct PlanSubscriptionCfg {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct PlanServerCfg {
+pub struct PlanSrvCfg {
     // #[serde(rename = "type")]
     // pub ty: RosTypeOwned,
     pub listen: RelativeKeyOwned,
@@ -67,7 +70,7 @@ pub struct PlanServerCfg {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct PlanClientCfg {
+pub struct PlanCliCfg {
     // #[serde(rename = "type")]
     // pub ty: RosTypeOwned,
     pub connect: Vec<RelativeKeyOwned>,

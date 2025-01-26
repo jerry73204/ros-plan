@@ -1,6 +1,6 @@
 use crate::{
     context::{
-        arg::ArgContext, expr::ExprContext, link::LinkShared, node::NodeShared,
+        arg::ArgCtx, expr::ExprCtx, link::LinkShared, node::NodeShared,
         plan_socket::PlanSocketShared,
     },
     utils::shared_table::{Owned, Shared},
@@ -21,9 +21,9 @@ pub type PlanScopeShared = Shared<PlanScope>;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PlanScope {
     pub path: PathBuf,
-    pub when: Option<ExprContext>,
-    pub arg_map: IndexMap<ParamName, ArgContext>,
-    pub var_map: IndexMap<ParamName, ExprContext>,
+    pub when: Option<ExprCtx>,
+    pub arg_map: IndexMap<ParamName, ArgCtx>,
+    pub var_map: IndexMap<ParamName, ExprCtx>,
     pub socket_map: IndexMap<PlanSocketIdent, PlanSocketShared>,
     pub node_map: IndexMap<NodeIdent, NodeShared>,
     pub link_map: IndexMap<LinkIdent, LinkShared>,

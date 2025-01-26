@@ -3,7 +3,7 @@ mod lua;
 mod store_eval;
 
 use crate::{
-    context::{arg::ArgContext, expr::ExprContext},
+    context::{arg::ArgCtx, expr::ExprCtx},
     error::Error,
     program::Program,
     scope::{GroupScopeOwned, GroupScopeShared, PlanScopeOwned, PlanScopeShared, ScopeRef},
@@ -148,12 +148,12 @@ enum Job {
     Group { current: GroupScopeShared, lua: Lua },
 }
 
-fn load_arg_table(lua: &Lua, arg_table: &mut IndexMap<ParamName, ArgContext>) -> Result<(), Error> {
+fn load_arg_table(lua: &Lua, arg_table: &mut IndexMap<ParamName, ArgCtx>) -> Result<(), Error> {
     let globals = lua.globals();
     globals.set_readonly(false);
 
     for (name, arg) in arg_table {
-        let ArgContext {
+        let ArgCtx {
             ty,
             default,
             assign,
@@ -186,10 +186,7 @@ fn load_arg_table(lua: &Lua, arg_table: &mut IndexMap<ParamName, ArgContext>) ->
     Ok(())
 }
 
-fn load_var_table(
-    lua: &Lua,
-    var_table: &mut IndexMap<ParamName, ExprContext>,
-) -> Result<(), Error> {
+fn load_var_table(lua: &Lua, var_table: &mut IndexMap<ParamName, ExprCtx>) -> Result<(), Error> {
     let globals = lua.globals();
 
     // Evaluate local variables and populate them to the global scope
@@ -211,7 +208,7 @@ fn load_var_table(
 }
 
 fn assign_arg_table(
-    arg_table: &mut IndexMap<ParamName, ArgContext>,
+    arg_table: &mut IndexMap<ParamName, ArgCtx>,
     assign_arg: IndexMap<ParamName, Value>,
 ) -> Result<(), Error> {
     for (_, entry) in arg_table.iter_mut() {
@@ -223,7 +220,7 @@ fn assign_arg_table(
             return Err(Error::ArgumentNotFound { name });
         };
 
-        let mut ctx = ExprContext::new(value.clone().into());
+        let mut ctx = ExprCtx::new(value.clone().into());
         ctx.result = Some(value);
         arg_ctx.assign = Some(ctx);
     }

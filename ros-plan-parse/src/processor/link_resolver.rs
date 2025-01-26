@@ -1,5 +1,5 @@
 use crate::{
-    context::link::{LinkContext, LinkShared, PubsubLinkContext, ServiceLinkContext},
+    context::link::{LinkCtx, LinkShared, PubsubLinkCtx, ServiceLinkCtx},
     error::Error,
     program::Program,
     scope::{ScopeRef, ScopeRefExt, ScopeShared},
@@ -131,11 +131,11 @@ impl LinkResolver {
 fn resolve_sockets_in_link(
     context: &Program,
     current: &ScopeShared,
-    link: &mut LinkContext,
+    link: &mut LinkCtx,
 ) -> Result<(), Error> {
     match link {
-        LinkContext::PubSub(link) => resolve_sockets_in_pubsub_link(context, current, link)?,
-        LinkContext::Service(link) => resolve_sockets_in_service_link(context, current, link)?,
+        LinkCtx::PubSub(link) => resolve_sockets_in_pubsub_link(context, current, link)?,
+        LinkCtx::Service(link) => resolve_sockets_in_service_link(context, current, link)?,
     }
     Ok(())
 }
@@ -143,7 +143,7 @@ fn resolve_sockets_in_link(
 fn resolve_sockets_in_pubsub_link(
     context: &Program,
     current: &ScopeShared,
-    link: &mut PubsubLinkContext,
+    link: &mut PubsubLinkCtx,
 ) -> Result<(), Error> {
     {
         let src: Vec<_> = link
@@ -192,7 +192,7 @@ fn resolve_sockets_in_pubsub_link(
 fn resolve_sockets_in_service_link(
     context: &Program,
     current: &ScopeShared,
-    link: &mut ServiceLinkContext,
+    link: &mut ServiceLinkCtx,
 ) -> Result<(), Error> {
     let listen = {
         let socket_key = &link.config.listen;
@@ -226,7 +226,7 @@ fn associate_link_on_node_sockets(link_shared: &LinkShared) {
     let link_guard = link_owned.read();
 
     match &*link_guard {
-        LinkContext::PubSub(pubsub) => {
+        LinkCtx::PubSub(pubsub) => {
             for socket_shared in pubsub.src.as_ref().unwrap() {
                 let socket_owned = socket_shared.upgrade().unwrap();
                 let mut guard = socket_owned.write();
@@ -241,7 +241,7 @@ fn associate_link_on_node_sockets(link_shared: &LinkShared) {
                 set_or_panic!(sub.link_to, link_shared.clone());
             }
         }
-        LinkContext::Service(service) => {
+        LinkCtx::Service(service) => {
             {
                 let socket_shared = service.listen.as_ref().unwrap();
                 let socket_owned = socket_shared.upgrade().unwrap();

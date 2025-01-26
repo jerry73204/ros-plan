@@ -2,14 +2,14 @@ use ros_plan_format::expr::{TextOrExpr, Value, ValueOrExpr, ValueType};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TextOrExprContext {
+pub struct TextOrExprCtx {
     pub default: TextOrExpr,
     #[serde(rename = "override")]
     pub override_: Option<String>,
     pub result: Option<String>,
 }
 
-impl TextOrExprContext {
+impl TextOrExprCtx {
     pub fn new(default: TextOrExpr) -> Self {
         Self {
             default,
@@ -20,14 +20,14 @@ impl TextOrExprContext {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExprContext {
+pub struct ExprCtx {
     pub default: ValueOrExpr,
     #[serde(rename = "override")]
     pub override_: Option<Value>,
     pub result: Option<Value>,
 }
 
-impl ExprContext {
+impl ExprCtx {
     pub fn new(default: ValueOrExpr) -> Self {
         Self {
             default,

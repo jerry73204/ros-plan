@@ -1,8 +1,5 @@
 use crate::{
-    context::plan_socket::{
-        PlanClientContext, PlanPublicationContext, PlanServerContext, PlanSocketContext,
-        PlanSubscriptionContext,
-    },
+    context::plan_socket::{PlanCliCtx, PlanPubCtx, PlanSocketCtx, PlanSrvCtx, PlanSubCtx},
     error::Error,
     program::Program,
     scope::{PlanScopeShared, ScopeRefExt, ScopeShared},
@@ -125,21 +122,17 @@ impl SocketResolver {
 fn resolve_socket_topics(
     resource: &mut Program,
     current: PlanScopeShared,
-    socket_ctx: &mut PlanSocketContext,
+    socket_ctx: &mut PlanSocketCtx,
 ) -> Result<(), Error> {
     match socket_ctx {
-        PlanSocketContext::Publication(pub_ctx) => {
+        PlanSocketCtx::Publication(pub_ctx) => {
             resolve_pub_socket_topics(resource, current, pub_ctx)?
         }
-        PlanSocketContext::Subscription(sub_ctx) => {
+        PlanSocketCtx::Subscription(sub_ctx) => {
             resolve_sub_socket_topics(resource, current, sub_ctx)?
         }
-        PlanSocketContext::Server(srv_ctx) => {
-            resolve_srv_socket_topics(resource, current, srv_ctx)?
-        }
-        PlanSocketContext::Client(qry_ctx) => {
-            resolve_qry_socket_topics(resource, current, qry_ctx)?
-        }
+        PlanSocketCtx::Server(srv_ctx) => resolve_srv_socket_topics(resource, current, srv_ctx)?,
+        PlanSocketCtx::Client(qry_ctx) => resolve_qry_socket_topics(resource, current, qry_ctx)?,
     }
     Ok(())
 }
@@ -147,7 +140,7 @@ fn resolve_socket_topics(
 fn resolve_pub_socket_topics(
     resource: &mut Program,
     current: PlanScopeShared,
-    pub_: &mut PlanPublicationContext,
+    pub_: &mut PlanPubCtx,
 ) -> Result<(), Error> {
     let src: Vec<_> = pub_
         .config
@@ -174,7 +167,7 @@ fn resolve_pub_socket_topics(
 fn resolve_sub_socket_topics(
     resource: &mut Program,
     current: PlanScopeShared,
-    sub: &mut PlanSubscriptionContext,
+    sub: &mut PlanSubCtx,
 ) -> Result<(), Error> {
     let dst: Vec<_> = sub
         .config
@@ -201,7 +194,7 @@ fn resolve_sub_socket_topics(
 fn resolve_srv_socket_topics(
     resource: &mut Program,
     current: PlanScopeShared,
-    srv: &mut PlanServerContext,
+    srv: &mut PlanSrvCtx,
 ) -> Result<(), Error> {
     let socket_key = &srv.config.listen;
     let Some(socket) = resolve_node_server(resource, current.clone().into(), socket_key) else {
@@ -215,7 +208,7 @@ fn resolve_srv_socket_topics(
 fn resolve_qry_socket_topics(
     resource: &mut Program,
     current: PlanScopeShared,
-    qry: &mut PlanClientContext,
+    qry: &mut PlanCliCtx,
 ) -> Result<(), Error> {
     let connect: Vec<_> = qry
         .config

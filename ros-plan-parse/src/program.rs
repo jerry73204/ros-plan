@@ -1,9 +1,9 @@
 use crate::{
     context::{
-        link::LinkContext,
-        node::{NodeContext, NodeOwned},
-        node_socket::{NodeSocketContext, NodeSocketOwned},
-        plan_socket::PlanSocketContext,
+        link::LinkCtx,
+        node::{NodeCtx, NodeOwned},
+        node_socket::{NodeSocketCtx, NodeSocketOwned},
+        plan_socket::PlanSocketCtx,
     },
     error::Error,
     processor::{
@@ -26,10 +26,10 @@ use std::path::Path;
 pub struct Program {
     pub(crate) include_tab: SharedTable<PlanScope>,
     pub(crate) group_tab: SharedTable<GroupScope>,
-    pub(crate) node_tab: SharedTable<NodeContext>,
-    pub(crate) link_tab: SharedTable<LinkContext>,
-    pub(crate) plan_socket_tab: SharedTable<PlanSocketContext>,
-    pub(crate) node_socket_tab: SharedTable<NodeSocketContext>,
+    pub(crate) node_tab: SharedTable<NodeCtx>,
+    pub(crate) link_tab: SharedTable<LinkCtx>,
+    pub(crate) plan_socket_tab: SharedTable<PlanSocketCtx>,
+    pub(crate) node_socket_tab: SharedTable<NodeSocketCtx>,
 }
 
 impl Program {

@@ -1,9 +1,9 @@
 use super::eval::Eval;
 use crate::{
     context::{
-        arg::ArgContext,
-        expr::{ExprContext, TextOrExprContext},
-        node::{NodeContext, NodeShared},
+        arg::ArgCtx,
+        expr::{ExprCtx, TextOrExprCtx},
+        node::{NodeCtx, NodeShared},
     },
     error::Error,
     scope::{GroupScopeShared, PlanScopeShared},
@@ -16,9 +16,9 @@ pub trait StoreEval {
     fn store_eval(&mut self, lua: &Lua) -> Result<(), Error>;
 }
 
-impl StoreEval for ExprContext {
+impl StoreEval for ExprCtx {
     fn store_eval(&mut self, lua: &Lua) -> Result<(), Error> {
-        let ExprContext {
+        let ExprCtx {
             ref default,
             ref override_,
             result,
@@ -34,9 +34,9 @@ impl StoreEval for ExprContext {
     }
 }
 
-impl StoreEval for TextOrExprContext {
+impl StoreEval for TextOrExprCtx {
     fn store_eval(&mut self, lua: &Lua) -> Result<(), Error> {
-        let TextOrExprContext {
+        let TextOrExprCtx {
             ref default,
             ref override_,
             result,
@@ -52,7 +52,7 @@ impl StoreEval for TextOrExprContext {
     }
 }
 
-impl StoreEval for NodeContext {
+impl StoreEval for NodeCtx {
     fn store_eval(&mut self, lua: &Lua) -> Result<(), Error> {
         if let Some(pkg) = &mut self.pkg {
             pkg.store_eval(lua)?;
@@ -132,10 +132,10 @@ pub fn store_eval_node_map(
 
 pub fn store_eval_arg_assignment(
     lua: &Lua,
-    arg_table: &mut IndexMap<ParamName, ArgContext>,
+    arg_table: &mut IndexMap<ParamName, ArgCtx>,
 ) -> Result<(), Error> {
     for (_name, arg) in arg_table {
-        let ArgContext { ty, assign, .. } = arg;
+        let ArgCtx { ty, assign, .. } = arg;
 
         if let Some(assign) = assign {
             assign.store_eval(lua)?;
