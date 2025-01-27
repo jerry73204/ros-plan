@@ -83,7 +83,7 @@ impl SharedRefInitializer {
         }
 
         {
-            let root = program.root();
+            let root = program.root_scope();
             self.queue.push_back(root.into());
 
             while let Some(curr) = self.queue.pop_front() {

@@ -5,7 +5,7 @@ use crate::{
         node::NodeShared,
         plan_socket::{PlanCliShared, PlanPubShared, PlanSrvShared, PlanSubShared},
     },
-    eval::{BoolStore, ValueStore},
+    eval::ValueStore,
     utils::shared_table::{Owned, Shared},
 };
 use indexmap::IndexMap;
@@ -16,7 +16,7 @@ use ros_plan_format::{
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::PathBuf};
 
-use super::{traits::ScopeMut, GroupScopeShared, KeyKind, ScopeRef};
+use super::{include::IncludeShared, traits::ScopeMut, GroupScopeShared, KeyKind, ScopeRef};
 
 pub type PlanScopeOwned = Owned<PlanScope>;
 pub type PlanScopeShared = Shared<PlanScope>;
@@ -24,7 +24,6 @@ pub type PlanScopeShared = Shared<PlanScope>;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PlanScope {
     pub path: PathBuf,
-    pub when: Option<BoolStore>,
     pub arg: IndexMap<ParamName, ArgCtx>,
     pub var: IndexMap<ParamName, ValueStore>,
     #[serde(rename = "pub")]
@@ -35,7 +34,7 @@ pub struct PlanScope {
     pub node: IndexMap<NodeIdent, NodeShared>,
     pub pubsub_link: IndexMap<LinkIdent, PubSubLinkShared>,
     pub service_link: IndexMap<LinkIdent, ServiceLinkShared>,
-    pub include: IndexMap<KeyOwned, PlanScopeShared>,
+    pub include: IndexMap<KeyOwned, IncludeShared>,
     pub group: IndexMap<KeyOwned, GroupScopeShared>,
     pub key: BTreeMap<KeyOwned, KeyKind>,
 }
@@ -53,7 +52,7 @@ impl ScopeMut for PlanScope {
         &mut self.service_link
     }
 
-    fn include_mut(&mut self) -> &mut IndexMap<KeyOwned, PlanScopeShared> {
+    fn include_mut(&mut self) -> &mut IndexMap<KeyOwned, IncludeShared> {
         &mut self.include
     }
 
@@ -79,7 +78,7 @@ impl ScopeRef for PlanScope {
         &self.service_link
     }
 
-    fn include(&self) -> &IndexMap<KeyOwned, PlanScopeShared> {
+    fn include(&self) -> &IndexMap<KeyOwned, IncludeShared> {
         &self.include
     }
 

@@ -1,4 +1,4 @@
-use super::{plan_file::PlanScopeShared, traits::ScopeMut, KeyKind, ScopeRef};
+use super::{include::IncludeShared, traits::ScopeMut, KeyKind, ScopeRef};
 use crate::{
     context::{
         link::{PubSubLinkShared, ServiceLinkShared},
@@ -21,7 +21,7 @@ pub struct GroupScope {
     pub node: IndexMap<NodeIdent, NodeShared>,
     pub pubsub_link: IndexMap<LinkIdent, PubSubLinkShared>,
     pub service_link: IndexMap<LinkIdent, ServiceLinkShared>,
-    pub include: IndexMap<KeyOwned, PlanScopeShared>,
+    pub include: IndexMap<KeyOwned, IncludeShared>,
     pub group: IndexMap<KeyOwned, GroupScopeShared>,
     pub key: BTreeMap<KeyOwned, KeyKind>,
 }
@@ -39,7 +39,7 @@ impl ScopeMut for GroupScope {
         &mut self.service_link
     }
 
-    fn include_mut(&mut self) -> &mut IndexMap<KeyOwned, PlanScopeShared> {
+    fn include_mut(&mut self) -> &mut IndexMap<KeyOwned, IncludeShared> {
         &mut self.include
     }
 
@@ -65,7 +65,7 @@ impl ScopeRef for GroupScope {
         &self.service_link
     }
 
-    fn include(&self) -> &IndexMap<KeyOwned, PlanScopeShared> {
+    fn include(&self) -> &IndexMap<KeyOwned, IncludeShared> {
         &self.include
     }
 

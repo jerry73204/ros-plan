@@ -1,4 +1,4 @@
-use super::{EntityShared, GroupScopeShared, PlanScopeShared, ScopeShared};
+use super::{EntityShared, GroupScopeShared, IncludeShared, ScopeShared};
 use crate::{
     context::{
         link::{PubSubLinkShared, ServiceLinkShared},
@@ -32,7 +32,7 @@ pub trait ScopeRef {
     fn node(&self) -> &IndexMap<NodeIdent, NodeShared>;
     fn pubsub_link(&self) -> &IndexMap<LinkIdent, PubSubLinkShared>;
     fn service_link(&self) -> &IndexMap<LinkIdent, ServiceLinkShared>;
-    fn include(&self) -> &IndexMap<KeyOwned, PlanScopeShared>;
+    fn include(&self) -> &IndexMap<KeyOwned, IncludeShared>;
     fn group(&self) -> &IndexMap<KeyOwned, GroupScopeShared>;
     fn key(&self) -> &BTreeMap<KeyOwned, KeyKind>;
 }
@@ -41,23 +41,23 @@ pub trait ScopeMut: ScopeRef {
     fn node_mut(&mut self) -> &mut IndexMap<NodeIdent, NodeShared>;
     fn pubsub_link_mut(&mut self) -> &mut IndexMap<LinkIdent, PubSubLinkShared>;
     fn service_link_mut(&mut self) -> &mut IndexMap<LinkIdent, ServiceLinkShared>;
-    fn include_mut(&mut self) -> &mut IndexMap<KeyOwned, PlanScopeShared>;
+    fn include_mut(&mut self) -> &mut IndexMap<KeyOwned, IncludeShared>;
     fn group_mut(&mut self) -> &mut IndexMap<KeyOwned, GroupScopeShared>;
     fn key_mut(&mut self) -> &mut BTreeMap<KeyOwned, KeyKind>;
 }
 
 pub trait ScopeRefExt: ScopeRef {
-    fn subscope_iter(&self) -> Box<dyn Iterator<Item = (&Key, ScopeShared)> + '_> {
-        let group_iter = self
-            .group()
-            .iter()
-            .map(|(key, group)| (key.as_key(), ScopeShared::from(group.clone())));
-        let include_iter = self
-            .include()
-            .iter()
-            .map(|(key, include)| (key.as_key(), ScopeShared::from(include.clone())));
-        Box::new(group_iter.chain(include_iter))
-    }
+    // fn subscope_iter(&self) -> Box<dyn Iterator<Item = (&Key, ScopeShared)> + '_> {
+    //     let group_iter = self
+    //         .group()
+    //         .iter()
+    //         .map(|(key, group)| (key.as_key(), ScopeShared::from(group.clone())));
+    //     let include_iter = self
+    //         .include()
+    //         .iter()
+    //         .map(|(key, include)| (key.as_key(), ScopeShared::from(include.clone())));
+    //     Box::new(group_iter.chain(include_iter))
+    // }
 
     fn key_upper_bound(&self, bound: Bound<&Key>) -> Option<(&Key, KeyKind)> {
         let range = (Bound::Unbounded, bound);
@@ -102,7 +102,10 @@ pub trait ScopeRefExt: ScopeRef {
 
         let subscope: ScopeShared = match kind {
             KeyKind::Group => self.group()[prefix_key].clone().into(),
-            KeyKind::Include => self.include()[prefix_key].clone().into(),
+            KeyKind::Include => {
+                let include = &self.include()[prefix_key];
+                include.with_read(|guard| guard.plan.clone())?.into()
+            }
             _ => return None,
         };
 
@@ -208,7 +211,7 @@ impl<S> ScopeEntry<'_, S>
 where
     S: ScopeMut,
 {
-    pub fn insert_include(self, include: PlanScopeShared) {
+    pub fn insert_include(self, include: IncludeShared) {
         self.scope
             .key_mut()
             .insert(self.key.clone(), KeyKind::Include);

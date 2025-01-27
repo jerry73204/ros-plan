@@ -1,16 +1,19 @@
 use crate::{
     context::{
         arg::ArgCtx,
+        link::{PubSubLinkCtx, PubSubLinkShared, ServiceLinkCtx, ServiceLinkShared},
         node::{NodeCtx, NodeShared},
     },
     error::Error,
     eval::{new_lua, ValueStore, ValueToLua},
     program::Program,
-    scope::{GroupScopeShared, PlanScopeShared, ScopeRef},
+    scope::{GroupScopeShared, IncludeShared, ScopeRef},
 };
 use indexmap::IndexMap;
 use mlua::prelude::*;
-use ros_plan_format::{expr::Value, key::KeyOwned, node::NodeIdent, parameter::ParamName};
+use ros_plan_format::{
+    expr::Value, key::KeyOwned, link::LinkIdent, node::NodeIdent, parameter::ParamName,
+};
 use std::collections::VecDeque;
 
 #[derive(Debug, Default)]
@@ -24,37 +27,61 @@ impl Evaluator {
         program: &mut Program,
         args: IndexMap<ParamName, Value>,
     ) -> Result<(), Error> {
-        {
-            let root = program.root();
+        // Get the root include context.
+        let root_include = program.root_include();
 
-            // Assign arguments provided from caller
-            root.with_write(|mut guard| -> Result<_, Error> {
-                assign_arg_table(&mut guard.arg, args)?;
-                Ok(())
-            })?;
+        // Assign arguments to the root include context
+        let assign_arg = args
+            .into_iter()
+            .map(|(name, value)| (name, ValueStore::new(value.into())))
+            .collect();
+        root_include.with_write(|mut guard| {
+            guard.assign_arg = assign_arg;
+        });
 
-            // Traverse all nodes in the tree
-            self.queue.push_back(Job::PlanFile { current: root });
-        }
+        // Insert the root include to the job queue.
+        self.queue.push_back(Job::Include {
+            include: root_include,
+        });
 
+        // Process jobs
         while let Some(job) = self.queue.pop_front() {
             match job {
-                Job::PlanFile { current } => self.eval_plan_file(&current)?,
-                Job::Group { current, lua } => self.eval_group(&lua, &current)?,
+                Job::Include { include: current } => self.eval_include(&current)?,
+                Job::Group {
+                    group: current,
+                    lua,
+                } => self.eval_group(&lua, &current)?,
             }
         }
 
         Ok(())
     }
 
-    fn eval_plan_file(&mut self, current: &PlanScopeShared) -> Result<(), Error> {
+    fn eval_include(&mut self, include: &IncludeShared) -> Result<(), Error> {
         // Create a new Lua context
         let lua = new_lua()?;
 
-        current.with_write(|mut guard| -> Result<_, Error> {
-            // Populate arguments into the global scope
-            load_arg_table(&lua, &mut guard.arg)?;
+        let plan = include.with_read(|include_ctx| -> Result<_, Error> {
+            // If the plan scope is not loaded yet, skip the
+            // evaluation.
+            let Some(plan) = &include_ctx.plan else {
+                return Ok(None);
+            };
 
+            // Populate arguments into the global scope
+            plan.with_write(|mut plan_ctx| {
+                load_arg_table(&lua, &mut plan_ctx.arg, &include_ctx.assign_arg)
+            })?;
+
+            Ok(Some(plan.clone()))
+        })?;
+
+        let Some(plan) = plan else {
+            return Ok(());
+        };
+
+        plan.with_write(|mut guard| -> Result<_, Error> {
             // Populate local variables into the global scope
             load_var_table(&lua, &mut guard.var)?;
 
@@ -65,10 +92,11 @@ impl Evaluator {
             eval_node_map(&lua, &mut guard.node)?;
 
             // Evaluate the link table
-            // store_eval_link_map(&lua, &mut scope_guard.link_map)?;
+            eval_pubsub_link_map(&lua, &mut guard.pubsub_link)?;
+            eval_service_link_map(&lua, &mut guard.service_link)?;
 
             // Evaluate the socket table
-            // store_eval_socket_map(&lua, &mut scope_guard.socket_map)?;
+            // store_eval_socket_map(&lua, &mut guard.socket)?;
 
             // Evaluate assigned arguments and `when` conditions on
             // subscopes.
@@ -79,7 +107,7 @@ impl Evaluator {
         })?;
 
         // Schedule jobs to visit child scopes
-        current.with_read(|guard| -> Result<_, Error> {
+        plan.with_read(|guard| -> Result<_, Error> {
             self.schedule_subplan_jobs(&lua, &*guard)?;
             Ok(())
         })?;
@@ -97,7 +125,7 @@ impl Evaluator {
 
             // Evaluate assigned arguments and `when` condition on
             // subscopes
-            eval_include_table(lua, &guard.include)?;
+            eval_include_table(lua, &mut guard.include)?;
             eval_group_table(lua, &guard.group)?;
 
             Ok(())
@@ -118,42 +146,42 @@ impl Evaluator {
     {
         for child in guard.group().values() {
             let job = Job::Group {
-                current: child.clone(),
+                group: child.clone(),
                 lua: lua.clone(),
             };
             self.queue.push_back(job);
         }
 
-        for child in guard.include().values() {
-            let job = Job::PlanFile {
-                current: child.clone(),
+        for include in guard.include().values() {
+            let job = Job::Include {
+                include: include.clone(),
             };
             self.queue.push_back(job);
         }
+
         Ok(())
     }
 }
 
 #[derive(Debug)]
 enum Job {
-    PlanFile { current: PlanScopeShared },
-    Group { current: GroupScopeShared, lua: Lua },
+    Include { include: IncludeShared },
+    Group { group: GroupScopeShared, lua: Lua },
 }
 
-fn load_arg_table(lua: &Lua, arg_table: &mut IndexMap<ParamName, ArgCtx>) -> Result<(), Error> {
+fn load_arg_table(
+    lua: &Lua,
+    arg_table: &mut IndexMap<ParamName, ArgCtx>,
+    assign_arg: &IndexMap<ParamName, ValueStore>,
+) -> Result<(), Error> {
     let globals = lua.globals();
     globals.set_readonly(false);
 
     for (name, arg) in arg_table {
-        let ArgCtx {
-            ty,
-            default,
-            assign,
-            ..
-        } = arg;
+        let ArgCtx { ty, default, .. } = arg;
 
-        let value = if let Some(assign) = assign {
-            assign.get_stored()?
+        let value = if let Some(value) = assign_arg.get(name) {
+            value.get_stored()?
         } else if let Some(default) = default {
             default.eval_and_store(lua)?
         } else {
@@ -195,27 +223,7 @@ fn load_var_table(lua: &Lua, var_table: &mut IndexMap<ParamName, ValueStore>) ->
     Ok(())
 }
 
-fn assign_arg_table(
-    arg_table: &mut IndexMap<ParamName, ArgCtx>,
-    assign_arg: IndexMap<ParamName, Value>,
-) -> Result<(), Error> {
-    for (_, entry) in arg_table.iter_mut() {
-        entry.assign = None;
-    }
-
-    for (name, value) in assign_arg {
-        let Some(arg_ctx) = arg_table.get_mut(&name) else {
-            return Err(Error::ArgumentNotFound { name });
-        };
-
-        let store = ValueStore::new(value.clone().into());
-        arg_ctx.assign = Some(store);
-    }
-
-    Ok(())
-}
-
-fn eval_node_ctx(node: &mut NodeCtx, lua: &Lua) -> Result<(), Error> {
+fn eval_node(node: &mut NodeCtx, lua: &Lua) -> Result<(), Error> {
     if let Some(pkg) = &mut node.pkg {
         pkg.eval_and_store(lua)?;
     }
@@ -237,52 +245,92 @@ fn eval_node_map(lua: &Lua, node_map: &mut IndexMap<NodeIdent, NodeShared>) -> R
     for (_key, shared) in node_map {
         let owned = shared.upgrade().unwrap();
         let mut guard = owned.write();
-        eval_node_ctx(&mut guard, lua)?;
+        eval_node(&mut guard, lua)?;
     }
 
     Ok(())
 }
 
-fn eval_arg_assignment(
+fn eval_pubsub_link_map(
     lua: &Lua,
-    arg_table: &mut IndexMap<ParamName, ArgCtx>,
+    link_map: &mut IndexMap<LinkIdent, PubSubLinkShared>,
 ) -> Result<(), Error> {
-    for (_name, arg) in arg_table {
-        let ArgCtx { ty, assign, .. } = arg;
-
-        if let Some(assign) = assign {
-            assign.eval_and_store(lua)?;
-
-            let value = assign.get_stored()?;
-            if *ty != value.ty() {
-                return Err(Error::TypeMismatch {
-                    expect: *ty,
-                    found: value.ty(),
-                });
-            }
-        }
+    for (_key, link) in link_map {
+        link.with_write(|mut guard| eval_pubsub_link(lua, &mut guard))?;
     }
+
+    Ok(())
+}
+
+fn eval_service_link_map(
+    lua: &Lua,
+    link_map: &mut IndexMap<LinkIdent, ServiceLinkShared>,
+) -> Result<(), Error> {
+    for (_key, link) in link_map {
+        link.with_write(|mut guard| eval_service_link(lua, &mut guard))?;
+    }
+
+    Ok(())
+}
+
+fn eval_pubsub_link(lua: &Lua, link: &mut PubSubLinkCtx) -> Result<(), Error> {
+    let PubSubLinkCtx {
+        when,
+        src_key,
+        dst_key,
+        ..
+    } = link;
+
+    if let Some(when) = when {
+        when.eval_and_store(lua)?;
+    };
+
+    for key in src_key {
+        key.eval_and_store(lua)?;
+    }
+
+    for key in dst_key {
+        key.eval_and_store(lua)?;
+    }
+
+    Ok(())
+}
+
+fn eval_service_link(lua: &Lua, link: &mut ServiceLinkCtx) -> Result<(), Error> {
+    let ServiceLinkCtx {
+        when,
+        listen_key,
+        connect_key,
+        ..
+    } = link;
+
+    if let Some(when) = when {
+        when.eval_and_store(lua)?;
+    };
+
+    listen_key.eval_and_store(lua)?;
+
+    for key in connect_key {
+        key.eval_and_store(lua)?;
+    }
+
     Ok(())
 }
 
 fn eval_include_table(
     lua: &Lua,
-    children: &IndexMap<KeyOwned, PlanScopeShared>,
+    children: &IndexMap<KeyOwned, IncludeShared>,
 ) -> Result<(), Error> {
-    for shared in children.values() {
-        let owned = shared.upgrade().unwrap();
-        let mut scope = owned.write();
-
-        if let Some(when) = &mut scope.when {
-            when.eval_and_store(lua)?;
-
-            if !*when.get_stored()? {
-                return Err(Error::EvaluationError {
-                    error: "cannot evaluate to a boolean value".to_string(),
-                });
+    for include in children.values() {
+        include.with_write(|mut guard| -> Result<_, Error> {
+            if let Some(when) = &mut guard.when {
+                when.eval_and_store(lua)?;
             };
-        };
-        eval_arg_assignment(lua, &mut scope.arg)?;
+            for (_name, value) in &mut guard.assign_arg {
+                value.eval_and_store(lua)?;
+            }
+            Ok(())
+        })?;
     }
 
     Ok(())
@@ -298,11 +346,6 @@ fn eval_group_table(
 
         if let Some(when) = &mut scope.when {
             when.eval_and_store(lua)?;
-            if !*when.get_stored()? {
-                return Err(Error::EvaluationError {
-                    error: "cannot evaluate to a boolean value".to_string(),
-                });
-            };
         };
     }
 

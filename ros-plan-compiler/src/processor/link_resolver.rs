@@ -2,10 +2,9 @@ use crate::{
     context::link::{PubSubLinkCtx, PubSubLinkShared, ServiceLinkCtx, ServiceLinkShared},
     error::Error,
     program::Program,
-    scope::{ScopeRef, ScopeRefExt, ScopeShared},
+    scope::{ScopeRef, ScopeShared},
 };
 use itertools::Itertools;
-use ros_plan_format::key::KeyOwned;
 use std::collections::VecDeque;
 
 macro_rules! bail {
@@ -33,74 +32,60 @@ impl LinkResolver {
     pub fn resolve(&mut self, program: &mut Program) -> Result<(), Error> {
         // Schedule the job to visit the root
         self.queue.push_back(
-            VisitNodeJob {
-                current: program.root().into(),
-                current_prefix: KeyOwned::new_root(),
+            Job {
+                current: program.root_scope().into(),
             }
             .into(),
         );
 
         // Perform traversal
         while let Some(job) = self.queue.pop_front() {
-            match job {
-                Job::VisitNode(job) => {
-                    self.visit_node(job)?;
-                }
-                Job::ResolveLink(job) => {
-                    self.resolve_link(program, job)?;
-                }
-            }
+            self.visit_scope(program, job)?;
         }
 
         Ok(())
     }
 
-    fn visit_node(&mut self, job: VisitNodeJob) -> Result<(), Error> {
-        let VisitNodeJob {
-            current: shared,
-            current_prefix,
-        } = job;
+    fn visit_scope(&mut self, program: &Program, job: Job) -> Result<(), Error> {
+        let Job { current: shared } = job;
 
-        shared.with_read(|guard| {
-            // Schedule jobs to visit child nodes.
-            for (suffix, subscope) in guard.subscope_iter() {
-                let Ok(child_prefix) = &current_prefix / suffix else {
-                    unreachable!()
-                };
+        shared.with_read(|guard| -> Result<_, Error> {
+            let visitor = Visitor::new(program, &shared);
 
+            for link in guard.pubsub_link().values() {
+                link.with_write(|mut link| visitor.visit_pubsub_link(&mut link))?;
+                associate_pubsub_link_with_node_sockets(link);
+            }
+
+            for link in guard.service_link().values() {
+                link.with_write(|mut link| visitor.visit_service_link(&mut link))?;
+                associate_service_link_with_node_sockets(link);
+            }
+
+            // Schedule a job to resolve links if the node has a plan
+            // or a group
+            for (_suffix, group) in guard.group() {
                 self.queue.push_back(
-                    VisitNodeJob {
-                        current: subscope,
-                        current_prefix: child_prefix,
+                    Job {
+                        current: group.clone().into(),
                     }
                     .into(),
                 );
             }
 
-            // Schedule a job to resolve links if the node has a plan or a
-            // group
-            for (_suffix, subscope) in guard.subscope_iter() {
-                self.queue
-                    .push_back(ResolveLinkJob { current: subscope }.into());
-            }
+            for include in guard.include().values() {
+                include.with_read(|guard| {
+                    let Some(plan) = &guard.plan else {
+                        todo!();
+                    };
 
-            Ok(())
-        })
-    }
-
-    fn resolve_link(&mut self, program: &mut Program, job: ResolveLinkJob) -> Result<(), Error> {
-        let ResolveLinkJob { current: scope } = job;
-        let visitor = Visitor::new(program, &scope);
-
-        scope.with_read(|scope| {
-            for link in scope.pubsub_link().values() {
-                link.with_write(|mut link| visitor.visit_pubsub_link(&mut link))?;
-                associate_pubsub_link_with_node_sockets(link);
-            }
-
-            for link in scope.service_link().values() {
-                link.with_write(|mut link| visitor.visit_service_link(&mut link))?;
-                associate_service_link_with_node_sockets(link);
+                    self.queue.push_back(
+                        Job {
+                            current: plan.clone().into(),
+                        }
+                        .into(),
+                    );
+                });
             }
 
             Ok(())
@@ -247,30 +232,6 @@ fn associate_service_link_with_node_sockets(shared: &ServiceLinkShared) {
 }
 
 #[derive(Debug)]
-enum Job {
-    VisitNode(VisitNodeJob),
-    ResolveLink(ResolveLinkJob),
-}
-
-impl From<ResolveLinkJob> for Job {
-    fn from(v: ResolveLinkJob) -> Self {
-        Self::ResolveLink(v)
-    }
-}
-
-impl From<VisitNodeJob> for Job {
-    fn from(v: VisitNodeJob) -> Self {
-        Self::VisitNode(v)
-    }
-}
-
-#[derive(Debug)]
-struct VisitNodeJob {
-    current: ScopeShared,
-    current_prefix: KeyOwned,
-}
-
-#[derive(Debug)]
-struct ResolveLinkJob {
-    current: ScopeShared,
+struct Job {
+    pub current: ScopeShared,
 }

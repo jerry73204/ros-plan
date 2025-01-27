@@ -3,9 +3,7 @@ use crate::{
         link::{PubSubLinkShared, ServiceLinkShared},
         node::NodeShared,
     },
-    scope::{
-        GroupScope, GroupScopeShared, KeyKind, PlanScope, PlanScopeShared, ScopeMut, ScopeRef,
-    },
+    scope::{GroupScope, GroupScopeShared, IncludeShared, KeyKind, PlanScope, ScopeMut, ScopeRef},
 };
 use indexmap::IndexMap;
 use parking_lot::RwLockWriteGuard;
@@ -86,7 +84,7 @@ impl ScopeRef for ScopeWriteGuard<'_> {
         }
     }
 
-    fn include(&self) -> &IndexMap<KeyOwned, PlanScopeShared> {
+    fn include(&self) -> &IndexMap<KeyOwned, IncludeShared> {
         match self {
             ScopeWriteGuard::Group(guard) => guard.include(),
             ScopeWriteGuard::Include(guard) => guard.include(),
@@ -130,7 +128,7 @@ impl ScopeMut for ScopeWriteGuard<'_> {
         }
     }
 
-    fn include_mut(&mut self) -> &mut IndexMap<KeyOwned, PlanScopeShared> {
+    fn include_mut(&mut self) -> &mut IndexMap<KeyOwned, IncludeShared> {
         match self {
             ScopeWriteGuard::Group(guard) => guard.include_mut(),
             ScopeWriteGuard::Include(guard) => guard.include_mut(),

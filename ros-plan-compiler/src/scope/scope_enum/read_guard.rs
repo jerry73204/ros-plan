@@ -3,7 +3,7 @@ use crate::{
         link::{PubSubLinkShared, ServiceLinkShared},
         node::NodeShared,
     },
-    scope::{GroupScope, GroupScopeShared, KeyKind, PlanScope, PlanScopeShared, ScopeRef},
+    scope::{GroupScope, GroupScopeShared, IncludeShared, KeyKind, PlanScope, ScopeRef},
 };
 use indexmap::IndexMap;
 use parking_lot::RwLockReadGuard;
@@ -68,7 +68,7 @@ impl ScopeRef for ScopeReadGuard<'_> {
         }
     }
 
-    fn include(&self) -> &IndexMap<KeyOwned, PlanScopeShared> {
+    fn include(&self) -> &IndexMap<KeyOwned, IncludeShared> {
         match self {
             ScopeReadGuard::Group(guard) => guard.include(),
             ScopeReadGuard::Include(guard) => guard.include(),

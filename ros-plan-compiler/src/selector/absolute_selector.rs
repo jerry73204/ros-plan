@@ -22,7 +22,7 @@ impl<'a> AbsoluteSelector<'a> {
         // Set the starting scope according to the key type.
         let (mut curr, mut suffix) = match key.to_kind() {
             KeyKind::Absolute { suffix, .. } => {
-                let root: ScopeShared = self.program.root().into();
+                let root: ScopeShared = self.program.root_scope().into();
                 (root, suffix)
             }
             _ => return None,

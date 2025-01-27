@@ -56,9 +56,3 @@ pub fn find_pkg_dir(pkg: &str) -> Result<PathBuf, Error> {
 
     Ok(pkg_dir)
 }
-
-pub fn find_plan_file_from_pkg(pkg: &str, file: &str) -> Result<PathBuf, Error> {
-    let pkg_dir = find_pkg_dir(pkg)?;
-    let plan_path = pkg_dir.join("share").join(pkg).join("plan").join(file);
-    Ok(plan_path)
-}

@@ -2,7 +2,7 @@ use crate::{
     context::plan_socket::{PlanCliCtx, PlanPubCtx, PlanSrvCtx, PlanSubCtx},
     error::Error,
     program::Program,
-    scope::{PlanScopeShared, ScopeRefExt, ScopeShared},
+    scope::{PlanScopeShared, ScopeRef, ScopeShared},
 };
 use itertools::Itertools;
 use ros_plan_format::key::KeyOwned;
@@ -33,7 +33,7 @@ impl SocketResolver {
     pub fn resolve(&mut self, program: &mut Program) -> Result<(), Error> {
         self.queue.push_back(
             VisitNodeJob {
-                current: program.root().into(),
+                current: program.root_scope().into(),
                 current_prefix: KeyOwned::new_root().clone(),
             }
             .into(),
@@ -60,19 +60,38 @@ impl SocketResolver {
         } = job;
 
         current.with_read(|guard| {
-            // Visit children
-            for (suffix, subscope) in guard.subscope_iter() {
+            for (suffix, group) in guard.group() {
                 let Ok(child_prefix) = &current_prefix / suffix else {
                     unreachable!()
                 };
 
                 self.queue.push_back(
                     VisitNodeJob {
-                        current: subscope.clone(),
+                        current: group.clone().into(),
                         current_prefix: child_prefix,
                     }
                     .into(),
                 );
+            }
+
+            for (suffix, include) in guard.include() {
+                include.with_read(|guard| {
+                    let Some(plan) = &guard.plan else {
+                        todo!();
+                    };
+
+                    let Ok(child_prefix) = &current_prefix / suffix else {
+                        unreachable!()
+                    };
+
+                    self.queue.push_back(
+                        VisitNodeJob {
+                            current: plan.clone().into(),
+                            current_prefix: child_prefix,
+                        }
+                        .into(),
+                    );
+                });
             }
         });
 

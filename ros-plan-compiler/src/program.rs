@@ -7,7 +7,7 @@ use crate::{
     },
     error::Error,
     processor::shared_ref_initializer::SharedRefInitializer,
-    scope::{GroupScope, PlanScope, PlanScopeShared, ScopeShared},
+    scope::{GroupScope, IncludeCtx, IncludeShared, PlanScope, PlanScopeShared, ScopeShared},
     selector::{AbsoluteSelector, Selector},
     utils::shared_table::SharedTable,
 };
@@ -20,8 +20,9 @@ use std::{
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Program {
-    pub(crate) include_tab: SharedTable<PlanScope>,
+    pub(crate) plan_tab: SharedTable<PlanScope>,
     pub(crate) group_tab: SharedTable<GroupScope>,
+    pub(crate) include_tab: SharedTable<IncludeCtx>,
     pub(crate) node_tab: SharedTable<NodeCtx>,
     pub(crate) pubsub_link_tab: SharedTable<PubSubLinkCtx>,
     pub(crate) service_link_tab: SharedTable<ServiceLinkCtx>,
@@ -67,8 +68,12 @@ impl Program {
         Ok(program)
     }
 
-    pub fn root(&self) -> PlanScopeShared {
+    pub fn root_include(&self) -> IncludeShared {
         self.include_tab.get(0).unwrap().downgrade()
+    }
+
+    pub fn root_scope(&self) -> PlanScopeShared {
+        self.plan_tab.get(0).unwrap().downgrade()
     }
 
     pub fn absolute_selector(&self) -> AbsoluteSelector<'_> {
