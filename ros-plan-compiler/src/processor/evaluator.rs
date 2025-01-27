@@ -3,6 +3,8 @@ use crate::{
         arg::ArgCtx,
         link::{PubSubLinkCtx, PubSubLinkShared, ServiceLinkCtx, ServiceLinkShared},
         node::{NodeCtx, NodeShared},
+        node_socket::{NodeCliShared, NodePubShared, NodeSrvShared, NodeSubShared},
+        plan_socket::{PlanCliShared, PlanPubShared, PlanSrvShared, PlanSubShared},
     },
     error::Error,
     eval::{new_lua, ValueStore, ValueToLua},
@@ -12,7 +14,8 @@ use crate::{
 use indexmap::IndexMap;
 use mlua::prelude::*;
 use ros_plan_format::{
-    expr::Value, key::KeyOwned, link::LinkIdent, node::NodeIdent, parameter::ParamName,
+    expr::Value, key::KeyOwned, link::LinkIdent, node::NodeIdent, node_socket::NodeSocketIdent,
+    parameter::ParamName, plan_socket::PlanSocketIdent,
 };
 use std::collections::VecDeque;
 
@@ -96,7 +99,10 @@ impl Evaluator {
             eval_service_link_map(&lua, &mut guard.service_link)?;
 
             // Evaluate the socket table
-            // store_eval_socket_map(&lua, &mut guard.socket)?;
+            eval_plan_pub_map(&lua, &guard.pub_)?;
+            eval_plan_sub_map(&lua, &guard.sub)?;
+            eval_plan_srv_map(&lua, &guard.srv)?;
+            eval_plan_cli_map(&lua, &guard.cli)?;
 
             // Evaluate assigned arguments and `when` conditions on
             // subscopes.
@@ -121,7 +127,8 @@ impl Evaluator {
             eval_node_map(lua, &mut guard.node)?;
 
             // Evaluate the link table
-            // store_eval_link_map(lua, &mut scope_guard.link_map)?;
+            eval_pubsub_link_map(&lua, &mut guard.pubsub_link)?;
+            eval_service_link_map(&lua, &mut guard.service_link)?;
 
             // Evaluate assigned arguments and `when` condition on
             // subscopes
@@ -238,6 +245,11 @@ fn eval_node(node: &mut NodeCtx, lua: &Lua) -> Result<(), Error> {
         param.eval_and_store(lua)?;
     }
 
+    eval_node_pub_map(lua, &node.pub_)?;
+    eval_node_sub_map(lua, &node.sub)?;
+    eval_node_srv_map(lua, &node.srv)?;
+    eval_node_cli_map(lua, &node.cli)?;
+
     Ok(())
 }
 
@@ -347,6 +359,132 @@ fn eval_group_table(
         if let Some(when) = &mut scope.when {
             when.eval_and_store(lua)?;
         };
+    }
+
+    Ok(())
+}
+
+fn eval_plan_pub_map(
+    lua: &Lua,
+    map: &IndexMap<PlanSocketIdent, PlanPubShared>,
+) -> Result<(), Error> {
+    for (_key, shared) in map {
+        shared.with_write(|mut guard| -> Result<_, Error> {
+            for key in &mut guard.src_key {
+                key.eval_and_store(lua)?;
+            }
+            Ok(())
+        })?;
+    }
+
+    Ok(())
+}
+
+fn eval_plan_sub_map(
+    lua: &Lua,
+    map: &IndexMap<PlanSocketIdent, PlanSubShared>,
+) -> Result<(), Error> {
+    for (_key, shared) in map {
+        shared.with_write(|mut guard| -> Result<_, Error> {
+            for key in &mut guard.dst_key {
+                key.eval_and_store(lua)?;
+            }
+            Ok(())
+        })?;
+    }
+
+    Ok(())
+}
+
+fn eval_plan_srv_map(
+    lua: &Lua,
+    map: &IndexMap<PlanSocketIdent, PlanSrvShared>,
+) -> Result<(), Error> {
+    for (_key, shared) in map {
+        shared.with_write(|mut guard| -> Result<_, Error> {
+            guard.listen_key.eval_and_store(lua)?;
+            Ok(())
+        })?;
+    }
+
+    Ok(())
+}
+
+fn eval_plan_cli_map(
+    lua: &Lua,
+    map: &IndexMap<PlanSocketIdent, PlanCliShared>,
+) -> Result<(), Error> {
+    for (_key, shared) in map {
+        shared.with_write(|mut guard| -> Result<_, Error> {
+            for key in &mut guard.connect_key {
+                key.eval_and_store(lua)?;
+            }
+            Ok(())
+        })?;
+    }
+
+    Ok(())
+}
+
+fn eval_node_pub_map(
+    lua: &Lua,
+    map: &IndexMap<NodeSocketIdent, NodePubShared>,
+) -> Result<(), Error> {
+    for (_key, shared) in map {
+        shared.with_write(|mut guard| -> Result<_, Error> {
+            if let Some(remap_from) = &mut guard.remap_from {
+                remap_from.eval_and_store(lua)?;
+            }
+            Ok(())
+        })?;
+    }
+
+    Ok(())
+}
+
+fn eval_node_sub_map(
+    lua: &Lua,
+    map: &IndexMap<NodeSocketIdent, NodeSubShared>,
+) -> Result<(), Error> {
+    for (_key, shared) in map {
+        shared.with_write(|mut guard| -> Result<_, Error> {
+            if let Some(remap_from) = &mut guard.remap_from {
+                remap_from.eval_and_store(lua)?;
+            }
+            Ok(())
+        })?;
+    }
+
+    Ok(())
+}
+
+fn eval_node_srv_map(
+    lua: &Lua,
+    map: &IndexMap<NodeSocketIdent, NodeSrvShared>,
+) -> Result<(), Error> {
+    for (_key, shared) in map {
+        shared.with_write(|mut guard| -> Result<_, Error> {
+            if let Some(remap_from) = &mut guard.remap_from {
+                remap_from.eval_and_store(lua)?;
+            }
+            Ok(())
+        })?;
+    }
+
+    Ok(())
+}
+
+fn eval_node_cli_map(
+    lua: &Lua,
+    map: &IndexMap<NodeSocketIdent, NodeCliShared>,
+) -> Result<(), Error> {
+    for (_key, shared) in map {
+        shared.with_write(|mut guard| -> Result<_, Error> {
+            if let Some(remap_from) = &mut guard.remap_from {
+                remap_from.eval_and_store(lua)?;
+            }
+            Ok(())
+        })?;
     }
 
     Ok(())

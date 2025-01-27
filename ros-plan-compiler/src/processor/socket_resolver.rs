@@ -11,7 +11,7 @@ use std::collections::VecDeque;
 macro_rules! bail {
     ($key:expr, $reason:expr) => {
         return Err(Error::KeyResolutionError {
-            key: $key.to_owned().into(),
+            key: (*$key.to_owned().get_stored().unwrap()).clone().into(),
             reason: $reason.to_string(),
         });
     };
@@ -164,13 +164,12 @@ impl<'a> Visitor<'a> {
 
     pub fn visit_pub_socket(&self, pub_: &mut PlanPubCtx) -> Result<(), Error> {
         let src: Result<Vec<_>, _> = pub_
-            .config
-            .src
+            .src_key
             .iter()
             .map(|socket_key| {
                 self.program
                     .selector(&self.current.clone().into())
-                    .find_plan_or_node_pub(socket_key)
+                    .find_plan_or_node_pub(socket_key.get_stored().unwrap())
                     .ok_or(socket_key)?
                     .to_node_pub()
                     .ok_or(socket_key)
@@ -189,13 +188,12 @@ impl<'a> Visitor<'a> {
 
     pub fn visit_sub_socket(&self, sub: &mut PlanSubCtx) -> Result<(), Error> {
         let dst: Result<Vec<_>, _> = sub
-            .config
-            .dst
+            .dst_key
             .iter()
             .map(|socket_key| {
                 self.program
                     .selector(&self.current.clone().into())
-                    .find_plan_or_node_sub(socket_key)
+                    .find_plan_or_node_sub(socket_key.get_stored().unwrap())
                     .ok_or(socket_key)?
                     .to_node_sub()
                     .ok_or(socket_key)
@@ -213,11 +211,11 @@ impl<'a> Visitor<'a> {
     }
 
     pub fn visit_srv_socket(&self, srv: &mut PlanSrvCtx) -> Result<(), Error> {
-        let socket_key = &srv.config.listen;
+        let socket_key = &srv.listen_key;
         let listen = (|| {
             self.program
                 .selector(&self.current.clone().into())
-                .find_plan_or_node_srv(socket_key)?
+                .find_plan_or_node_srv(socket_key.get_stored().unwrap())?
                 .to_node_srv()
         })();
         let Some(listen) = listen else {
@@ -230,13 +228,12 @@ impl<'a> Visitor<'a> {
 
     pub fn visit_cli_socket(&self, cli: &mut PlanCliCtx) -> Result<(), Error> {
         let connect: Result<Vec<_>, _> = cli
-            .config
-            .connect
+            .connect_key
             .iter()
             .map(|socket_key| {
                 self.program
                     .selector(&self.current.clone().into())
-                    .find_plan_or_node_cli(socket_key)
+                    .find_plan_or_node_cli(socket_key.get_stored().unwrap())
                     .ok_or(socket_key)?
                     .to_node_cli()
                     .ok_or(socket_key)

@@ -38,4 +38,3 @@ pub struct GroupCfg {
     #[serde(default)]
     pub group: IndexMap<RelativeKeyOwned, GroupCfg>,
 }
-

@@ -1,4 +1,7 @@
-use crate::{ident::IdentOwned, key::RelativeKeyOwned};
+use crate::{
+    expr::KeyOrExpr, ident::IdentOwned, interface_type::InterfaceTypeOwned,
+    qos_requirement::QosRequirement,
+};
 use serde::{Deserialize, Serialize};
 
 pub type PlanSocketIdent = IdentOwned;
@@ -45,33 +48,33 @@ impl From<PlanPubCfg> for PlanSocketCfg {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanPubCfg {
-    // #[serde(rename = "type")]
-    // pub ty: RosTypeOwned,
-    // pub qos: Option<QosRequirement>,
-    pub src: Vec<RelativeKeyOwned>,
+    #[serde(rename = "type")]
+    pub ty: InterfaceTypeOwned,
+    pub qos: Option<QosRequirement>,
+    pub src: Vec<KeyOrExpr>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanSubCfg {
-    // #[serde(rename = "type")]
-    // pub ty: RosTypeOwned,
-    // pub qos: Option<QosRequirement>,
-    pub dst: Vec<RelativeKeyOwned>,
+    #[serde(rename = "type")]
+    pub ty: InterfaceTypeOwned,
+    pub qos: Option<QosRequirement>,
+    pub dst: Vec<KeyOrExpr>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanSrvCfg {
-    // #[serde(rename = "type")]
-    // pub ty: RosTypeOwned,
-    pub listen: RelativeKeyOwned,
+    #[serde(rename = "type")]
+    pub ty: InterfaceTypeOwned,
+    pub listen: KeyOrExpr,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlanCliCfg {
-    // #[serde(rename = "type")]
-    // pub ty: RosTypeOwned,
-    pub connect: Vec<RelativeKeyOwned>,
+    #[serde(rename = "type")]
+    pub ty: InterfaceTypeOwned,
+    pub connect: Vec<KeyOrExpr>,
 }

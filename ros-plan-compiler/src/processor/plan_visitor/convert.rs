@@ -172,30 +172,49 @@ pub fn to_group_scope(
 
 pub fn to_socket_context(key: KeyOwned, socket_ctx: PlanSocketCfg) -> PlanSocketCtx {
     match socket_ctx {
-        PlanSocketCfg::Pub(config) => PlanPubCtx {
-            config,
-            src: None,
-            key,
+        PlanSocketCfg::Pub(config) => {
+            let src_key: Vec<_> = config.src.into_iter().map(KeyStore::new).collect();
+            PlanPubCtx {
+                key,
+                ty: config.ty,
+                qos: config.qos,
+                src_key,
+                src: None,
+            }
+            .into()
         }
-        .into(),
-        PlanSocketCfg::Sub(config) => PlanSubCtx {
-            config,
-            dst: None,
-            key,
+        PlanSocketCfg::Sub(config) => {
+            let dst_key: Vec<_> = config.dst.into_iter().map(KeyStore::new).collect();
+            PlanSubCtx {
+                key,
+                ty: config.ty,
+                qos: config.qos,
+                dst_key,
+                dst: None,
+            }
+            .into()
         }
-        .into(),
-        PlanSocketCfg::Srv(config) => PlanSrvCtx {
-            config,
-            listen: None,
-            key,
+        PlanSocketCfg::Srv(config) => {
+            let listen_key = KeyStore::new(config.listen);
+            PlanSrvCtx {
+                key,
+                ty: config.ty,
+                listen_key,
+                listen: None,
+            }
+            .into()
         }
-        .into(),
-        PlanSocketCfg::Cli(config) => PlanCliCtx {
-            config,
-            connect: None,
-            key,
+        PlanSocketCfg::Cli(config) => {
+            let connect_key: Vec<_> = config.connect.into_iter().map(KeyStore::new).collect();
+
+            PlanCliCtx {
+                key,
+                ty: config.ty,
+                connect_key,
+                connect: None,
+            }
+            .into()
         }
-        .into(),
     }
 }
 
@@ -300,25 +319,31 @@ pub fn to_node_socket_context(key: KeyOwned, cfg: NodeSocketCfg) -> NodeSocketCt
     match cfg {
         NodeSocketCfg::Pub(cfg) => NodePubCtx {
             key,
-            config: cfg,
+            ty: cfg.ty,
+            qos: cfg.qos,
+            remap_from: cfg.from.map(KeyStore::new),
             link_to: None,
         }
         .into(),
         NodeSocketCfg::Sub(cfg) => NodeSubCtx {
             key,
-            config: cfg,
+            ty: cfg.ty,
+            qos: cfg.qos,
+            remap_from: cfg.from.map(KeyStore::new),
             link_to: None,
         }
         .into(),
         NodeSocketCfg::Srv(cfg) => NodeSrvCtx {
             key,
-            config: cfg,
+            ty: cfg.ty,
+            remap_from: cfg.from.map(KeyStore::new),
             link_to: None,
         }
         .into(),
         NodeSocketCfg::Cli(cfg) => NodeCliCtx {
             key,
-            config: cfg,
+            ty: cfg.ty,
+            remap_from: cfg.from.map(KeyStore::new),
             link_to: None,
         }
         .into(),
