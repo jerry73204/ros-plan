@@ -1,4 +1,9 @@
-use crate::{ident::IdentOwned, interface_type::InterfaceTypeOwned, key::KeyOwned, qos::Qos};
+use crate::{
+    expr::{BoolExpr, KeyOrExpr},
+    ident::IdentOwned,
+    interface_type::InterfaceTypeOwned,
+    qos::Qos,
+};
 use serde::{Deserialize, Serialize};
 
 pub type LinkIdent = IdentOwned;
@@ -27,21 +32,25 @@ impl From<ServiceLinkCfg> for LinkCfg {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PubSubLinkCfg {
+    pub when: Option<BoolExpr>,
+
     #[serde(rename = "type")]
     pub ty: InterfaceTypeOwned,
 
     #[serde(default)]
     pub qos: Qos,
 
-    pub src: Vec<KeyOwned>,
-    pub dst: Vec<KeyOwned>,
+    pub src: Vec<KeyOrExpr>,
+    pub dst: Vec<KeyOrExpr>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ServiceLinkCfg {
+    pub when: Option<BoolExpr>,
+
     #[serde(rename = "type")]
     pub ty: InterfaceTypeOwned,
-    pub listen: KeyOwned,
-    pub connect: Vec<KeyOwned>,
+    pub listen: KeyOrExpr,
+    pub connect: Vec<KeyOrExpr>,
 }

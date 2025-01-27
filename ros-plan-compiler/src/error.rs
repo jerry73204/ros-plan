@@ -61,6 +61,9 @@ pub enum Error {
     #[error("evaluation error: {error:?}")]
     EvaluationError { error: String },
 
+    #[error("the value is referred before evaluation")]
+    ReferredBeforeEvaluationError,
+
     #[error("either a `path` or a pair of `pkg` and `path` is expected")]
     InvalidIncludePath,
 }

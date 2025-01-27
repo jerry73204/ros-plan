@@ -1,6 +1,6 @@
-use super::{expr::TextOrExprCtx, node_socket::NodeSocketShared};
+use super::node_socket::{NodeCliShared, NodePubShared, NodeSrvShared, NodeSubShared};
 use crate::{
-    context::expr::ExprCtx,
+    eval::{TextStore, ValueStore},
     utils::shared_table::{Owned, Shared},
 };
 use indexmap::IndexMap;
@@ -13,9 +13,13 @@ pub type NodeShared = Shared<NodeCtx>;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeCtx {
     pub key: KeyOwned,
-    pub pkg: Option<TextOrExprCtx>,
-    pub exec: Option<TextOrExprCtx>,
-    pub plugin: Option<TextOrExprCtx>,
-    pub param: IndexMap<ParamName, ExprCtx>,
-    pub socket: IndexMap<NodeSocketIdent, NodeSocketShared>,
+    pub pkg: Option<TextStore>,
+    pub exec: Option<TextStore>,
+    pub plugin: Option<TextStore>,
+    pub param: IndexMap<ParamName, ValueStore>,
+    #[serde(rename = "pub")]
+    pub pub_: IndexMap<NodeSocketIdent, NodePubShared>,
+    pub sub: IndexMap<NodeSocketIdent, NodeSubShared>,
+    pub srv: IndexMap<NodeSocketIdent, NodeSrvShared>,
+    pub cli: IndexMap<NodeSocketIdent, NodeCliShared>,
 }

@@ -1,5 +1,8 @@
 use crate::{
-    context::{link::LinkShared, node::NodeShared},
+    context::{
+        link::{PubSubLinkShared, ServiceLinkShared},
+        node::NodeShared,
+    },
     scope::{
         GroupScope, GroupScopeShared, KeyKind, PlanScope, PlanScopeShared, ScopeMut, ScopeRef,
     },
@@ -62,75 +65,89 @@ impl<'a> From<RwLockWriteGuard<'a, GroupScope>> for ScopeWriteGuard<'a> {
 }
 
 impl ScopeRef for ScopeWriteGuard<'_> {
-    fn node_map(&self) -> &IndexMap<NodeIdent, NodeShared> {
+    fn node(&self) -> &IndexMap<NodeIdent, NodeShared> {
         match self {
-            ScopeWriteGuard::Group(guard) => guard.node_map(),
-            ScopeWriteGuard::Include(guard) => guard.node_map(),
+            ScopeWriteGuard::Group(guard) => guard.node(),
+            ScopeWriteGuard::Include(guard) => guard.node(),
         }
     }
 
-    fn link_map(&self) -> &IndexMap<LinkIdent, LinkShared> {
+    fn pubsub_link(&self) -> &IndexMap<LinkIdent, PubSubLinkShared> {
         match self {
-            ScopeWriteGuard::Group(guard) => guard.link_map(),
-            ScopeWriteGuard::Include(guard) => guard.link_map(),
+            ScopeWriteGuard::Group(guard) => guard.pubsub_link(),
+            ScopeWriteGuard::Include(guard) => guard.pubsub_link(),
         }
     }
 
-    fn include_map(&self) -> &IndexMap<KeyOwned, PlanScopeShared> {
+    fn service_link(&self) -> &IndexMap<LinkIdent, ServiceLinkShared> {
         match self {
-            ScopeWriteGuard::Group(guard) => guard.include_map(),
-            ScopeWriteGuard::Include(guard) => guard.include_map(),
+            ScopeWriteGuard::Group(guard) => guard.service_link(),
+            ScopeWriteGuard::Include(guard) => guard.service_link(),
         }
     }
 
-    fn group_map(&self) -> &IndexMap<KeyOwned, GroupScopeShared> {
+    fn include(&self) -> &IndexMap<KeyOwned, PlanScopeShared> {
         match self {
-            ScopeWriteGuard::Group(guard) => guard.group_map(),
-            ScopeWriteGuard::Include(guard) => guard.group_map(),
+            ScopeWriteGuard::Group(guard) => guard.include(),
+            ScopeWriteGuard::Include(guard) => guard.include(),
         }
     }
 
-    fn key_map(&self) -> &BTreeMap<KeyOwned, KeyKind> {
+    fn group(&self) -> &IndexMap<KeyOwned, GroupScopeShared> {
         match self {
-            ScopeWriteGuard::Group(guard) => guard.key_map(),
-            ScopeWriteGuard::Include(guard) => guard.key_map(),
+            ScopeWriteGuard::Group(guard) => guard.group(),
+            ScopeWriteGuard::Include(guard) => guard.group(),
+        }
+    }
+
+    fn key(&self) -> &BTreeMap<KeyOwned, KeyKind> {
+        match self {
+            ScopeWriteGuard::Group(guard) => guard.key(),
+            ScopeWriteGuard::Include(guard) => guard.key(),
         }
     }
 }
 
 impl ScopeMut for ScopeWriteGuard<'_> {
-    fn node_map_mut(&mut self) -> &mut IndexMap<NodeIdent, NodeShared> {
+    fn node_mut(&mut self) -> &mut IndexMap<NodeIdent, NodeShared> {
         match self {
-            ScopeWriteGuard::Group(guard) => guard.node_map_mut(),
-            ScopeWriteGuard::Include(guard) => guard.node_map_mut(),
+            ScopeWriteGuard::Group(guard) => guard.node_mut(),
+            ScopeWriteGuard::Include(guard) => guard.node_mut(),
         }
     }
 
-    fn link_map_mut(&mut self) -> &mut IndexMap<LinkIdent, LinkShared> {
+    fn pubsub_link_mut(&mut self) -> &mut IndexMap<LinkIdent, PubSubLinkShared> {
         match self {
-            ScopeWriteGuard::Group(guard) => guard.link_map_mut(),
-            ScopeWriteGuard::Include(guard) => guard.link_map_mut(),
+            ScopeWriteGuard::Group(guard) => guard.pubsub_link_mut(),
+            ScopeWriteGuard::Include(guard) => guard.pubsub_link_mut(),
         }
     }
 
-    fn include_map_mut(&mut self) -> &mut IndexMap<KeyOwned, PlanScopeShared> {
+    fn service_link_mut(&mut self) -> &mut IndexMap<LinkIdent, ServiceLinkShared> {
         match self {
-            ScopeWriteGuard::Group(guard) => guard.include_map_mut(),
-            ScopeWriteGuard::Include(guard) => guard.include_map_mut(),
+            ScopeWriteGuard::Group(guard) => guard.service_link_mut(),
+            ScopeWriteGuard::Include(guard) => guard.service_link_mut(),
         }
     }
 
-    fn group_map_mut(&mut self) -> &mut IndexMap<KeyOwned, GroupScopeShared> {
+    fn include_mut(&mut self) -> &mut IndexMap<KeyOwned, PlanScopeShared> {
         match self {
-            ScopeWriteGuard::Group(guard) => guard.group_map_mut(),
-            ScopeWriteGuard::Include(guard) => guard.group_map_mut(),
+            ScopeWriteGuard::Group(guard) => guard.include_mut(),
+            ScopeWriteGuard::Include(guard) => guard.include_mut(),
         }
     }
 
-    fn key_map_mut(&mut self) -> &mut BTreeMap<KeyOwned, KeyKind> {
+    fn group_mut(&mut self) -> &mut IndexMap<KeyOwned, GroupScopeShared> {
         match self {
-            ScopeWriteGuard::Group(guard) => guard.key_map_mut(),
-            ScopeWriteGuard::Include(guard) => guard.key_map_mut(),
+            ScopeWriteGuard::Group(guard) => guard.group_mut(),
+            ScopeWriteGuard::Include(guard) => guard.group_mut(),
+        }
+    }
+
+    fn key_mut(&mut self) -> &mut BTreeMap<KeyOwned, KeyKind> {
+        match self {
+            ScopeWriteGuard::Group(guard) => guard.key_mut(),
+            ScopeWriteGuard::Include(guard) => guard.key_mut(),
         }
     }
 }

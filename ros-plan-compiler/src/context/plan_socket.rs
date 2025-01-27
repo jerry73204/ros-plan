@@ -1,4 +1,3 @@
-use super::node_socket::NodeSocketShared;
 use crate::utils::shared_table::{Owned, Shared};
 use ros_plan_format::{
     key::{Key, KeyOwned},
@@ -6,8 +5,19 @@ use ros_plan_format::{
 };
 use serde::{Deserialize, Serialize};
 
-pub type PlanSocketOwned = Owned<PlanSocketCtx>;
-pub type PlanSocketShared = Shared<PlanSocketCtx>;
+use super::node_socket::{NodeCliShared, NodePubShared, NodeSrvShared, NodeSubShared};
+
+pub type PlanPubOwned = Owned<PlanPubCtx>;
+pub type PlanPubShared = Shared<PlanPubCtx>;
+
+pub type PlanSubOwned = Owned<PlanSubCtx>;
+pub type PlanSubShared = Shared<PlanSubCtx>;
+
+pub type PlanSrvOwned = Owned<PlanSrvCtx>;
+pub type PlanSrvShared = Shared<PlanSrvCtx>;
+
+pub type PlanCliOwned = Owned<PlanCliCtx>;
+pub type PlanCliShared = Shared<PlanCliCtx>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PlanSocketCtx {
@@ -95,26 +105,26 @@ impl From<PlanPubCtx> for PlanSocketCtx {
 pub struct PlanPubCtx {
     pub key: KeyOwned,
     pub config: PlanPubCfg,
-    pub src: Option<Vec<NodeSocketShared>>,
+    pub src: Option<Vec<NodePubShared>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanSubCtx {
     pub key: KeyOwned,
     pub config: PlanSubCfg,
-    pub dst: Option<Vec<NodeSocketShared>>,
+    pub dst: Option<Vec<NodeSubShared>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanSrvCtx {
     pub key: KeyOwned,
     pub config: PlanSrvCfg,
-    pub listen: Option<NodeSocketShared>,
+    pub listen: Option<NodeSrvShared>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanCliCtx {
     pub key: KeyOwned,
     pub config: PlanCliCfg,
-    pub connect: Option<Vec<NodeSocketShared>>,
+    pub connect: Option<Vec<NodeCliShared>>,
 }

@@ -1,6 +1,9 @@
 use crate::{
     context::{
-        link::LinkCtx, node::NodeCtx, node_socket::NodeSocketCtx, plan_socket::PlanSocketCtx,
+        link::{PubSubLinkCtx, ServiceLinkCtx},
+        node::NodeCtx,
+        node_socket::{NodeCliCtx, NodePubCtx, NodeSrvCtx, NodeSubCtx},
+        plan_socket::{PlanCliCtx, PlanPubCtx, PlanSrvCtx, PlanSubCtx},
     },
     error::Error,
     processor::shared_ref_initializer::SharedRefInitializer,
@@ -20,9 +23,16 @@ pub struct Program {
     pub(crate) include_tab: SharedTable<PlanScope>,
     pub(crate) group_tab: SharedTable<GroupScope>,
     pub(crate) node_tab: SharedTable<NodeCtx>,
-    pub(crate) link_tab: SharedTable<LinkCtx>,
-    pub(crate) plan_socket_tab: SharedTable<PlanSocketCtx>,
-    pub(crate) node_socket_tab: SharedTable<NodeSocketCtx>,
+    pub(crate) pubsub_link_tab: SharedTable<PubSubLinkCtx>,
+    pub(crate) service_link_tab: SharedTable<ServiceLinkCtx>,
+    pub(crate) plan_pub_tab: SharedTable<PlanPubCtx>,
+    pub(crate) plan_sub_tab: SharedTable<PlanSubCtx>,
+    pub(crate) plan_srv_tab: SharedTable<PlanSrvCtx>,
+    pub(crate) plan_cli_tab: SharedTable<PlanCliCtx>,
+    pub(crate) node_pub_tab: SharedTable<NodePubCtx>,
+    pub(crate) node_sub_tab: SharedTable<NodeSubCtx>,
+    pub(crate) node_srv_tab: SharedTable<NodeSrvCtx>,
+    pub(crate) node_cli_tab: SharedTable<NodeCliCtx>,
 }
 
 impl Program {

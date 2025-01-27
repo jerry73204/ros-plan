@@ -1,17 +1,24 @@
 use crate::context::{
-    link::{LinkOwned, LinkShared},
+    link::{PubSubLinkOwned, PubSubLinkShared, ServiceLinkOwned, ServiceLinkShared},
     node::{NodeOwned, NodeShared},
 };
 
 #[derive(Debug)]
 pub enum EntityOwned {
     Node(NodeOwned),
-    Link(LinkOwned),
+    PubSubLink(PubSubLinkOwned),
+    ServiceLink(ServiceLinkOwned),
 }
 
-impl From<LinkOwned> for EntityOwned {
-    fn from(v: LinkOwned) -> Self {
-        Self::Link(v)
+impl From<ServiceLinkOwned> for EntityOwned {
+    fn from(v: ServiceLinkOwned) -> Self {
+        Self::ServiceLink(v)
+    }
+}
+
+impl From<PubSubLinkOwned> for EntityOwned {
+    fn from(v: PubSubLinkOwned) -> Self {
+        Self::PubSubLink(v)
     }
 }
 
@@ -24,12 +31,19 @@ impl From<NodeOwned> for EntityOwned {
 #[derive(Debug, Clone)]
 pub enum EntityShared {
     Node(NodeShared),
-    Link(LinkShared),
+    PubSubLink(PubSubLinkShared),
+    ServiceLink(ServiceLinkShared),
 }
 
-impl From<LinkShared> for EntityShared {
-    fn from(v: LinkShared) -> Self {
-        Self::Link(v)
+impl From<ServiceLinkShared> for EntityShared {
+    fn from(v: ServiceLinkShared) -> Self {
+        Self::ServiceLink(v)
+    }
+}
+
+impl From<PubSubLinkShared> for EntityShared {
+    fn from(v: PubSubLinkShared) -> Self {
+        Self::PubSubLink(v)
     }
 }
 

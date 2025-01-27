@@ -1,12 +1,14 @@
 use crate::{
     context::{
-        link::{LinkCtx, LinkShared, PubsubLinkCtx, ServiceLinkCtx},
+        link::{PubSubLinkCtx, PubSubLinkShared, ServiceLinkCtx, ServiceLinkShared},
         node::NodeShared,
         node_socket::{
-            NodeCliCtx, NodePubCtx, NodeSocketCtx, NodeSocketShared, NodeSrvCtx, NodeSubCtx,
+            NodeCliCtx, NodeCliShared, NodePubCtx, NodePubShared, NodeSrvCtx, NodeSrvShared,
+            NodeSubCtx, NodeSubShared,
         },
         plan_socket::{
-            PlanCliCtx, PlanPubCtx, PlanSocketCtx, PlanSocketShared, PlanSrvCtx, PlanSubCtx,
+            PlanCliCtx, PlanCliShared, PlanPubCtx, PlanPubShared, PlanSrvCtx, PlanSrvShared,
+            PlanSubCtx, PlanSubShared,
         },
     },
     error::Error,
@@ -26,22 +28,57 @@ impl SharedRefInitializer {
     pub fn initialize(&mut self, program: &Program) -> Result<(), Error> {
         {
             let Program {
-                link_tab,
-                plan_socket_tab,
-                node_socket_tab,
+                pubsub_link_tab,
+                service_link_tab,
+                plan_pub_tab,
+                plan_sub_tab,
+                plan_srv_tab,
+                plan_cli_tab,
+                node_pub_tab,
+                node_sub_tab,
+                node_srv_tab,
+                node_cli_tab,
                 ..
             } = program;
 
-            for (_id, link) in link_tab.read_inner().iter() {
-                update_link_context(program, &mut link.write())?;
+            for (_id, link) in pubsub_link_tab.read_inner().iter() {
+                update_pubsub_link_context(program, &mut link.write())?;
             }
 
-            for (_id, socket) in plan_socket_tab.read_inner().iter() {
-                update_plan_socket_context(program, &mut socket.write())?;
+            for (_id, link) in service_link_tab.read_inner().iter() {
+                update_service_link_context(program, &mut link.write())?;
             }
 
-            for (_id, socket) in node_socket_tab.read_inner().iter() {
-                update_node_socket_context(program, &mut socket.write())?;
+            for (_id, socket) in plan_pub_tab.read_inner().iter() {
+                update_plan_pub_context(program, &mut socket.write())?;
+            }
+
+            for (_id, socket) in plan_sub_tab.read_inner().iter() {
+                update_plan_sub_context(program, &mut socket.write())?;
+            }
+
+            for (_id, socket) in plan_srv_tab.read_inner().iter() {
+                update_plan_srv_context(program, &mut socket.write())?;
+            }
+
+            for (_id, socket) in plan_cli_tab.read_inner().iter() {
+                update_plan_cli_context(program, &mut socket.write())?;
+            }
+
+            for (_id, socket) in node_pub_tab.read_inner().iter() {
+                update_node_pub_context(program, &mut socket.write())?;
+            }
+
+            for (_id, socket) in node_sub_tab.read_inner().iter() {
+                update_node_sub_context(program, &mut socket.write())?;
+            }
+
+            for (_id, socket) in node_srv_tab.read_inner().iter() {
+                update_node_srv_context(program, &mut socket.write())?;
+            }
+
+            for (_id, socket) in node_cli_tab.read_inner().iter() {
+                update_node_cli_context(program, &mut socket.write())?;
             }
         }
 
@@ -68,15 +105,23 @@ impl SharedRefInitializer {
 fn update_plan_file_scope(program: &Program, shared: &PlanScopeShared) -> Result<(), Error> {
     shared.with_write(|mut scope| {
         let PlanScope {
-            socket_map,
-            node_map,
-            link_map,
+            node: node_map,
+            pubsub_link: pubsub_link_map,
+            service_link: service_link_map,
+            pub_: pub_map,
+            sub: sub_map,
+            srv: srv_map,
+            cli: cli_map,
             ..
         } = &mut *scope;
 
         update_node_map(program, node_map)?;
-        update_link_map(program, link_map)?;
-        update_socket_map(program, socket_map)?;
+        update_pubsub_link_map(program, pubsub_link_map)?;
+        update_service_link_map(program, service_link_map)?;
+        update_pub_map(program, pub_map)?;
+        update_sub_map(program, sub_map)?;
+        update_srv_map(program, srv_map)?;
+        update_cli_map(program, cli_map)?;
         Ok(())
     })
 }
@@ -84,11 +129,15 @@ fn update_plan_file_scope(program: &Program, shared: &PlanScopeShared) -> Result
 fn update_group_scope(program: &Program, shared: &GroupScopeShared) -> Result<(), Error> {
     shared.with_write(|mut scope| {
         let GroupScope {
-            node_map, link_map, ..
+            node: node_map,
+            pubsub_link: pubsub_link_map,
+            service_link: service_link_map,
+            ..
         } = &mut *scope;
 
         update_node_map(program, node_map)?;
-        update_link_map(program, link_map)?;
+        update_pubsub_link_map(program, pubsub_link_map)?;
+        update_service_link_map(program, service_link_map)?;
         Ok(())
     })
 }
@@ -106,12 +155,12 @@ fn update_node_map(
     Ok(())
 }
 
-fn update_link_map(
+fn update_pubsub_link_map(
     program: &Program,
-    link_map: &mut IndexMap<LinkIdent, LinkShared>,
+    link_map: &mut IndexMap<LinkIdent, PubSubLinkShared>,
 ) -> Result<(), Error> {
     for shared in link_map.values_mut() {
-        let Some(owned) = program.link_tab.get(shared.id()) else {
+        let Some(owned) = program.pubsub_link_tab.get(shared.id()) else {
             todo!()
         };
         *shared = owned.downgrade();
@@ -119,12 +168,25 @@ fn update_link_map(
     Ok(())
 }
 
-fn update_socket_map(
+fn update_service_link_map(
     program: &Program,
-    socket_map: &mut IndexMap<PlanSocketIdent, PlanSocketShared>,
+    link_map: &mut IndexMap<LinkIdent, ServiceLinkShared>,
+) -> Result<(), Error> {
+    for shared in link_map.values_mut() {
+        let Some(owned) = program.service_link_tab.get(shared.id()) else {
+            todo!()
+        };
+        *shared = owned.downgrade();
+    }
+    Ok(())
+}
+
+fn update_pub_map(
+    program: &Program,
+    socket_map: &mut IndexMap<PlanSocketIdent, PlanPubShared>,
 ) -> Result<(), Error> {
     for shared in socket_map.values_mut() {
-        let Some(owned) = program.plan_socket_tab.get(shared.id()) else {
+        let Some(owned) = program.plan_pub_tab.get(shared.id()) else {
             todo!()
         };
         *shared = owned.downgrade();
@@ -132,23 +194,58 @@ fn update_socket_map(
     Ok(())
 }
 
-fn update_link_context(program: &Program, link: &mut LinkCtx) -> Result<(), Error> {
-    match link {
-        LinkCtx::PubSub(link) => update_pubsub_link_context(program, link)?,
-        LinkCtx::Service(link) => update_service_link_context(program, link)?,
+fn update_sub_map(
+    program: &Program,
+    socket_map: &mut IndexMap<PlanSocketIdent, PlanSubShared>,
+) -> Result<(), Error> {
+    for shared in socket_map.values_mut() {
+        let Some(owned) = program.plan_sub_tab.get(shared.id()) else {
+            todo!()
+        };
+        *shared = owned.downgrade();
     }
     Ok(())
 }
 
-fn update_pubsub_link_context(program: &Program, link: &mut PubsubLinkCtx) -> Result<(), Error> {
-    let PubsubLinkCtx { src, dst, .. } = link;
+fn update_srv_map(
+    program: &Program,
+    socket_map: &mut IndexMap<PlanSocketIdent, PlanSrvShared>,
+) -> Result<(), Error> {
+    for shared in socket_map.values_mut() {
+        let Some(owned) = program.plan_srv_tab.get(shared.id()) else {
+            todo!()
+        };
+        *shared = owned.downgrade();
+    }
+    Ok(())
+}
 
-    for uri in src.iter_mut().flatten() {
-        initialize_node_socket_shared(program, uri)?;
+fn update_cli_map(
+    program: &Program,
+    socket_map: &mut IndexMap<PlanSocketIdent, PlanCliShared>,
+) -> Result<(), Error> {
+    for shared in socket_map.values_mut() {
+        let Some(owned) = program.plan_cli_tab.get(shared.id()) else {
+            todo!()
+        };
+        *shared = owned.downgrade();
+    }
+    Ok(())
+}
+
+fn update_pubsub_link_context(program: &Program, link: &mut PubSubLinkCtx) -> Result<(), Error> {
+    let PubSubLinkCtx {
+        src_socket,
+        dst_socket,
+        ..
+    } = link;
+
+    for uri in src_socket.iter_mut().flatten() {
+        initialize_node_pub_shared(program, uri)?;
     }
 
-    for uri in dst.iter_mut().flatten() {
-        initialize_node_socket_shared(program, uri)?;
+    for uri in dst_socket.iter_mut().flatten() {
+        initialize_node_sub_shared(program, uri)?;
     }
 
     Ok(())
@@ -156,25 +253,17 @@ fn update_pubsub_link_context(program: &Program, link: &mut PubsubLinkCtx) -> Re
 
 fn update_service_link_context(program: &Program, link: &mut ServiceLinkCtx) -> Result<(), Error> {
     let ServiceLinkCtx {
-        listen, connect, ..
+        listen_socket,
+        connect_socket,
+        ..
     } = link;
 
-    if let Some(uri) = listen {
-        initialize_node_socket_shared(program, uri)?;
+    if let Some(uri) = listen_socket {
+        initialize_node_srv_shared(program, uri)?;
     }
 
-    for uri in connect.iter_mut().flatten() {
-        initialize_node_socket_shared(program, uri)?;
-    }
-    Ok(())
-}
-
-fn update_plan_socket_context(program: &Program, socket: &mut PlanSocketCtx) -> Result<(), Error> {
-    match socket {
-        PlanSocketCtx::Pub(socket) => update_plan_pub_context(program, socket)?,
-        PlanSocketCtx::Sub(socket) => update_plan_sub_context(program, socket)?,
-        PlanSocketCtx::Srv(socket) => update_plan_server_context(program, socket)?,
-        PlanSocketCtx::Cli(socket) => update_plan_client_context(program, socket)?,
+    for uri in connect_socket.iter_mut().flatten() {
+        initialize_node_cli_shared(program, uri)?;
     }
     Ok(())
 }
@@ -183,7 +272,7 @@ fn update_plan_pub_context(program: &Program, socket: &mut PlanPubCtx) -> Result
     let PlanPubCtx { src, .. } = socket;
 
     for uri in src.iter_mut().flatten() {
-        initialize_node_socket_shared(program, uri)?;
+        initialize_node_pub_shared(program, uri)?;
     }
 
     Ok(())
@@ -193,46 +282,36 @@ fn update_plan_sub_context(program: &Program, socket: &mut PlanSubCtx) -> Result
     let PlanSubCtx { dst, .. } = socket;
 
     for uri in dst.iter_mut().flatten() {
-        initialize_node_socket_shared(program, uri)?;
+        initialize_node_sub_shared(program, uri)?;
     }
 
     Ok(())
 }
 
-fn update_plan_server_context(program: &Program, socket: &mut PlanSrvCtx) -> Result<(), Error> {
+fn update_plan_srv_context(program: &Program, socket: &mut PlanSrvCtx) -> Result<(), Error> {
     let PlanSrvCtx { listen, .. } = socket;
 
     if let Some(uri) = listen {
-        initialize_node_socket_shared(program, uri)?;
+        initialize_node_srv_shared(program, uri)?;
     }
 
     Ok(())
 }
 
-fn update_plan_client_context(program: &Program, socket: &mut PlanCliCtx) -> Result<(), Error> {
+fn update_plan_cli_context(program: &Program, socket: &mut PlanCliCtx) -> Result<(), Error> {
     let PlanCliCtx { connect, .. } = socket;
 
     for uri in connect.iter_mut().flatten() {
-        initialize_node_socket_shared(program, uri)?;
+        initialize_node_cli_shared(program, uri)?;
     }
 
-    Ok(())
-}
-
-fn update_node_socket_context(program: &Program, socket: &mut NodeSocketCtx) -> Result<(), Error> {
-    match socket {
-        NodeSocketCtx::Pub(socket) => update_node_pub_context(program, socket)?,
-        NodeSocketCtx::Sub(socket) => update_node_sub_context(program, socket)?,
-        NodeSocketCtx::Srv(socket) => update_node_server_context(program, socket)?,
-        NodeSocketCtx::Cli(socket) => update_node_client_context(program, socket)?,
-    }
     Ok(())
 }
 
 fn update_node_pub_context(program: &Program, socket: &mut NodePubCtx) -> Result<(), Error> {
     let NodePubCtx { link_to, .. } = socket;
     if let Some(link_to) = link_to {
-        initialize_link_shared(program, link_to)?;
+        initialize_pubsub_link_shared(program, link_to)?;
     }
     Ok(())
 }
@@ -240,41 +319,76 @@ fn update_node_pub_context(program: &Program, socket: &mut NodePubCtx) -> Result
 fn update_node_sub_context(program: &Program, socket: &mut NodeSubCtx) -> Result<(), Error> {
     let NodeSubCtx { link_to, .. } = socket;
     if let Some(link_to) = link_to {
-        initialize_link_shared(program, link_to)?;
+        initialize_pubsub_link_shared(program, link_to)?;
     }
     Ok(())
 }
 
-fn update_node_server_context(program: &Program, socket: &mut NodeSrvCtx) -> Result<(), Error> {
+fn update_node_srv_context(program: &Program, socket: &mut NodeSrvCtx) -> Result<(), Error> {
     let NodeSrvCtx { link_to, .. } = socket;
     if let Some(link_to) = link_to {
-        initialize_link_shared(program, link_to)?;
+        initialize_service_link_shared(program, link_to)?;
     }
 
     Ok(())
 }
 
-fn update_node_client_context(program: &Program, socket: &mut NodeCliCtx) -> Result<(), Error> {
+fn update_node_cli_context(program: &Program, socket: &mut NodeCliCtx) -> Result<(), Error> {
     let NodeCliCtx { link_to, .. } = socket;
     if let Some(link_to) = link_to {
-        initialize_link_shared(program, link_to)?;
+        initialize_service_link_shared(program, link_to)?;
     }
     Ok(())
 }
 
-fn initialize_node_socket_shared(
-    program: &Program,
-    shared: &mut NodeSocketShared,
-) -> Result<(), Error> {
-    let Some(owned) = program.node_socket_tab.get(shared.id()) else {
+fn initialize_node_pub_shared(program: &Program, shared: &mut NodePubShared) -> Result<(), Error> {
+    let Some(owned) = program.node_pub_tab.get(shared.id()) else {
         todo!()
     };
     *shared = owned.downgrade();
     Ok(())
 }
 
-fn initialize_link_shared(program: &Program, shared: &mut LinkShared) -> Result<(), Error> {
-    let Some(owned) = program.link_tab.get(shared.id()) else {
+fn initialize_node_sub_shared(program: &Program, shared: &mut NodeSubShared) -> Result<(), Error> {
+    let Some(owned) = program.node_sub_tab.get(shared.id()) else {
+        todo!()
+    };
+    *shared = owned.downgrade();
+    Ok(())
+}
+
+fn initialize_node_srv_shared(program: &Program, shared: &mut NodeSrvShared) -> Result<(), Error> {
+    let Some(owned) = program.node_srv_tab.get(shared.id()) else {
+        todo!()
+    };
+    *shared = owned.downgrade();
+    Ok(())
+}
+
+fn initialize_node_cli_shared(program: &Program, shared: &mut NodeCliShared) -> Result<(), Error> {
+    let Some(owned) = program.node_cli_tab.get(shared.id()) else {
+        todo!()
+    };
+    *shared = owned.downgrade();
+    Ok(())
+}
+
+fn initialize_pubsub_link_shared(
+    program: &Program,
+    shared: &mut PubSubLinkShared,
+) -> Result<(), Error> {
+    let Some(owned) = program.pubsub_link_tab.get(shared.id()) else {
+        todo!()
+    };
+    *shared = owned.downgrade();
+    Ok(())
+}
+
+fn initialize_service_link_shared(
+    program: &Program,
+    shared: &mut ServiceLinkShared,
+) -> Result<(), Error> {
+    let Some(owned) = program.service_link_tab.get(shared.id()) else {
         todo!()
     };
     *shared = owned.downgrade();

@@ -1,5 +1,5 @@
 use crate::{
-    context::link::{LinkCtx, LinkShared, PubsubLinkCtx, ServiceLinkCtx},
+    context::link::{PubSubLinkCtx, PubSubLinkShared, ServiceLinkCtx, ServiceLinkShared},
     error::Error,
     program::Program,
     scope::{ScopeRef, ScopeRefExt, ScopeShared},
@@ -89,18 +89,18 @@ impl LinkResolver {
     }
 
     fn resolve_link(&mut self, program: &mut Program, job: ResolveLinkJob) -> Result<(), Error> {
-        let ResolveLinkJob {
-            current: scope_shared,
-        } = job;
-        let visitor = Visitor::new(program, &scope_shared);
+        let ResolveLinkJob { current: scope } = job;
+        let visitor = Visitor::new(program, &scope);
 
-        scope_shared.with_read(|scope_guard| {
-            let link_map = scope_guard.link_map();
+        scope.with_read(|scope| {
+            for link in scope.pubsub_link().values() {
+                link.with_write(|mut link| visitor.visit_pubsub_link(&mut link))?;
+                associate_pubsub_link_with_node_sockets(link);
+            }
 
-            // Resolve links
-            for link_shared in link_map.values() {
-                link_shared.with_write(|mut link_guard| visitor.visit_link(&mut link_guard))?;
-                associate_link_on_node_sockets(link_shared);
+            for link in scope.service_link().values() {
+                link.with_write(|mut link| visitor.visit_service_link(&mut link))?;
+                associate_service_link_with_node_sockets(link);
             }
 
             Ok(())
@@ -118,24 +118,18 @@ impl<'a> Visitor<'a> {
         Self { program, current }
     }
 
-    pub fn visit_link(&self, link: &mut LinkCtx) -> Result<(), Error> {
-        match link {
-            LinkCtx::PubSub(link) => self.visit_pubsub_link(link)?,
-            LinkCtx::Service(link) => self.visit_service_link(link)?,
-        }
-        Ok(())
-    }
-
-    pub fn visit_pubsub_link(&self, link: &mut PubsubLinkCtx) -> Result<(), Error> {
+    pub fn visit_pubsub_link(&self, link: &mut PubSubLinkCtx) -> Result<(), Error> {
         {
             let src: Result<Vec<_>, _> = link
-                .config
-                .src
+                .src_key
                 .iter()
                 .map(|socket_key| {
+                    let socket_key = socket_key.get_stored().unwrap();
                     self.program
                         .selector(self.current)
-                        .find_node_pub(socket_key)
+                        .find_plan_or_node_pub(socket_key)
+                        .ok_or(socket_key)?
+                        .to_node_pub()
                         .ok_or(socket_key)
                 })
                 .flatten_ok()
@@ -146,18 +140,20 @@ impl<'a> Visitor<'a> {
                     bail!(bad_key, "the key does not resolve to a publication socket");
                 }
             };
-            set_or_panic!(link.src, src);
+            set_or_panic!(link.src_socket, src);
         }
 
         {
             let dst: Result<Vec<_>, _> = link
-                .config
-                .dst
+                .dst_key
                 .iter()
                 .map(|socket_key| {
+                    let socket_key = socket_key.get_stored().unwrap();
                     self.program
                         .selector(self.current)
-                        .find_node_sub(socket_key)
+                        .find_plan_or_node_sub(socket_key)
+                        .ok_or(socket_key)?
+                        .to_node_sub()
                         .ok_or(socket_key)
                 })
                 .flatten_ok()
@@ -168,18 +164,21 @@ impl<'a> Visitor<'a> {
                     bail!(bad_key, "the key does not resolve to a publication socket");
                 }
             };
-            set_or_panic!(link.dst, dst);
+            set_or_panic!(link.dst_socket, dst);
         }
         Ok(())
     }
 
     fn visit_service_link(&self, link: &mut ServiceLinkCtx) -> Result<(), Error> {
         let listen = {
-            let socket_key = &link.config.listen;
-            let listen = self
-                .program
-                .selector(self.current)
-                .find_node_srv(socket_key);
+            let socket_key = link.listen_key.get_stored()?;
+
+            let listen = (|| {
+                self.program
+                    .selector(self.current)
+                    .find_plan_or_node_srv(socket_key)?
+                    .to_node_srv()
+            })();
             let Some(listen) = listen else {
                 bail!(socket_key, "the key does not resolve to a server socket");
             };
@@ -187,13 +186,15 @@ impl<'a> Visitor<'a> {
         };
 
         let connect: Result<Vec<_>, _> = link
-            .config
-            .connect
+            .connect_key
             .iter()
             .map(|socket_key| {
+                let socket_key = socket_key.get_stored().unwrap();
                 self.program
                     .selector(self.current)
-                    .find_node_cli(socket_key)
+                    .find_plan_or_node_cli(socket_key)
+                    .ok_or(socket_key)?
+                    .to_node_cli()
                     .ok_or(socket_key)
             })
             .flatten_ok()
@@ -205,45 +206,42 @@ impl<'a> Visitor<'a> {
             }
         };
 
-        set_or_panic!(link.listen, listen);
-        set_or_panic!(link.connect, connect);
+        set_or_panic!(link.listen_socket, listen);
+        set_or_panic!(link.connect_socket, connect);
 
         Ok(())
     }
 }
 
-fn associate_link_on_node_sockets(link_shared: &LinkShared) {
-    link_shared.with_read(|link_guard| match &*link_guard {
-        LinkCtx::PubSub(pubsub) => {
-            for socket_shared in pubsub.src.as_ref().unwrap() {
-                socket_shared.with_write(|mut guard| {
-                    let pub_ = guard.as_pub_mut().unwrap();
-                    set_or_panic!(pub_.link_to, link_shared.clone());
-                });
-            }
-
-            for socket_shared in pubsub.dst.as_ref().unwrap() {
-                socket_shared.with_write(|mut guard| {
-                    let sub = guard.as_sub_mut().unwrap();
-                    set_or_panic!(sub.link_to, link_shared.clone());
-                });
-            }
+fn associate_pubsub_link_with_node_sockets(shared: &PubSubLinkShared) {
+    shared.with_read(|pubsub| {
+        for socket_shared in pubsub.src_socket.as_ref().unwrap() {
+            socket_shared.with_write(|mut guard| {
+                set_or_panic!(guard.link_to, shared.clone());
+            });
         }
-        LinkCtx::Service(service) => {
-            {
-                let socket_shared = service.listen.as_ref().unwrap();
-                socket_shared.with_write(|mut guard| {
-                    let srv = guard.as_srv_mut().unwrap();
-                    set_or_panic!(srv.link_to, link_shared.clone());
-                });
-            }
 
-            for socket_shared in service.connect.as_ref().unwrap() {
-                socket_shared.with_write(|mut guard| {
-                    let cli = guard.as_cli_mut().unwrap();
-                    set_or_panic!(cli.link_to, link_shared.clone());
-                });
-            }
+        for socket_shared in pubsub.dst_socket.as_ref().unwrap() {
+            socket_shared.with_write(|mut guard| {
+                set_or_panic!(guard.link_to, shared.clone());
+            });
+        }
+    });
+}
+
+fn associate_service_link_with_node_sockets(shared: &ServiceLinkShared) {
+    shared.with_read(|service| {
+        {
+            let socket_shared = service.listen_socket.as_ref().unwrap();
+            socket_shared.with_write(|mut guard| {
+                set_or_panic!(guard.link_to, shared.clone());
+            });
+        }
+
+        for socket_shared in service.connect_socket.as_ref().unwrap() {
+            socket_shared.with_write(|mut guard| {
+                set_or_panic!(guard.link_to, shared.clone());
+            });
         }
     });
 }

@@ -1,19 +1,24 @@
-use super::node_socket::NodeSocketShared;
-use crate::utils::shared_table::{Owned, Shared};
+use super::node_socket::{NodeCliShared, NodePubShared, NodeSrvShared, NodeSubShared};
+use crate::{
+    eval::{BoolStore, KeyStore},
+    utils::shared_table::{Owned, Shared},
+};
 use ros_plan_format::{
+    interface_type::InterfaceTypeOwned,
     key::{Key, KeyOwned},
-    link::{PubSubLinkCfg, ServiceLinkCfg},
+    qos::Qos,
 };
 use serde::{Deserialize, Serialize};
 
-pub type LinkOwned = Owned<LinkCtx>;
-pub type LinkShared = Shared<LinkCtx>;
+pub type PubSubLinkOwned = Owned<PubSubLinkCtx>;
+pub type PubSubLinkShared = Shared<PubSubLinkCtx>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+pub type ServiceLinkOwned = Owned<ServiceLinkCtx>;
+pub type ServiceLinkShared = Shared<ServiceLinkCtx>;
+
+#[derive(Debug, Clone)]
 pub enum LinkCtx {
-    #[serde(rename = "pubsub")]
-    PubSub(PubsubLinkCtx),
-    #[serde(rename = "service")]
+    PubSub(PubSubLinkCtx),
     Service(ServiceLinkCtx),
 }
 
@@ -32,24 +37,31 @@ impl From<ServiceLinkCtx> for LinkCtx {
     }
 }
 
-impl From<PubsubLinkCtx> for LinkCtx {
-    fn from(v: PubsubLinkCtx) -> Self {
+impl From<PubSubLinkCtx> for LinkCtx {
+    fn from(v: PubSubLinkCtx) -> Self {
         Self::PubSub(v)
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PubsubLinkCtx {
+pub struct PubSubLinkCtx {
     pub key: KeyOwned,
-    pub config: PubSubLinkCfg,
-    pub src: Option<Vec<NodeSocketShared>>,
-    pub dst: Option<Vec<NodeSocketShared>>,
+    pub ty: InterfaceTypeOwned,
+    pub qos: Qos,
+    pub when: Option<BoolStore>,
+    pub src_key: Vec<KeyStore>,
+    pub dst_key: Vec<KeyStore>,
+    pub src_socket: Option<Vec<NodePubShared>>,
+    pub dst_socket: Option<Vec<NodeSubShared>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceLinkCtx {
     pub key: KeyOwned,
-    pub config: ServiceLinkCfg,
-    pub listen: Option<NodeSocketShared>,
-    pub connect: Option<Vec<NodeSocketShared>>,
+    pub ty: InterfaceTypeOwned,
+    pub when: Option<BoolStore>,
+    pub listen_key: KeyStore,
+    pub connect_key: Vec<KeyStore>,
+    pub listen_socket: Option<NodeSrvShared>,
+    pub connect_socket: Option<Vec<NodeCliShared>>,
 }

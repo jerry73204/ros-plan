@@ -1,8 +1,11 @@
 use crate::{
     context::{
-        arg::ArgCtx, expr::ExprCtx, link::LinkShared, node::NodeShared,
-        plan_socket::PlanSocketShared,
+        arg::ArgCtx,
+        link::{PubSubLinkShared, ServiceLinkShared},
+        node::NodeShared,
+        plan_socket::{PlanCliShared, PlanPubShared, PlanSrvShared, PlanSubShared},
     },
+    eval::{BoolStore, ValueStore},
     utils::shared_table::{Owned, Shared},
 };
 use indexmap::IndexMap;
@@ -21,57 +24,70 @@ pub type PlanScopeShared = Shared<PlanScope>;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PlanScope {
     pub path: PathBuf,
-    pub when: Option<ExprCtx>,
-    pub arg_map: IndexMap<ParamName, ArgCtx>,
-    pub var_map: IndexMap<ParamName, ExprCtx>,
-    pub socket_map: IndexMap<PlanSocketIdent, PlanSocketShared>,
-    pub node_map: IndexMap<NodeIdent, NodeShared>,
-    pub link_map: IndexMap<LinkIdent, LinkShared>,
-    pub include_map: IndexMap<KeyOwned, PlanScopeShared>,
-    pub group_map: IndexMap<KeyOwned, GroupScopeShared>,
-    pub key_map: BTreeMap<KeyOwned, KeyKind>,
+    pub when: Option<BoolStore>,
+    pub arg: IndexMap<ParamName, ArgCtx>,
+    pub var: IndexMap<ParamName, ValueStore>,
+    #[serde(rename = "pub")]
+    pub pub_: IndexMap<PlanSocketIdent, PlanPubShared>,
+    pub sub: IndexMap<PlanSocketIdent, PlanSubShared>,
+    pub srv: IndexMap<PlanSocketIdent, PlanSrvShared>,
+    pub cli: IndexMap<PlanSocketIdent, PlanCliShared>,
+    pub node: IndexMap<NodeIdent, NodeShared>,
+    pub pubsub_link: IndexMap<LinkIdent, PubSubLinkShared>,
+    pub service_link: IndexMap<LinkIdent, ServiceLinkShared>,
+    pub include: IndexMap<KeyOwned, PlanScopeShared>,
+    pub group: IndexMap<KeyOwned, GroupScopeShared>,
+    pub key: BTreeMap<KeyOwned, KeyKind>,
 }
 
 impl ScopeMut for PlanScope {
-    fn node_map_mut(&mut self) -> &mut IndexMap<NodeIdent, NodeShared> {
-        &mut self.node_map
+    fn node_mut(&mut self) -> &mut IndexMap<NodeIdent, NodeShared> {
+        &mut self.node
     }
 
-    fn link_map_mut(&mut self) -> &mut IndexMap<LinkIdent, LinkShared> {
-        &mut self.link_map
+    fn pubsub_link_mut(&mut self) -> &mut IndexMap<LinkIdent, PubSubLinkShared> {
+        &mut self.pubsub_link
     }
 
-    fn include_map_mut(&mut self) -> &mut IndexMap<KeyOwned, PlanScopeShared> {
-        &mut self.include_map
+    fn service_link_mut(&mut self) -> &mut IndexMap<LinkIdent, ServiceLinkShared> {
+        &mut self.service_link
     }
 
-    fn group_map_mut(&mut self) -> &mut IndexMap<KeyOwned, GroupScopeShared> {
-        &mut self.group_map
+    fn include_mut(&mut self) -> &mut IndexMap<KeyOwned, PlanScopeShared> {
+        &mut self.include
     }
 
-    fn key_map_mut(&mut self) -> &mut BTreeMap<KeyOwned, KeyKind> {
-        &mut self.key_map
+    fn group_mut(&mut self) -> &mut IndexMap<KeyOwned, GroupScopeShared> {
+        &mut self.group
+    }
+
+    fn key_mut(&mut self) -> &mut BTreeMap<KeyOwned, KeyKind> {
+        &mut self.key
     }
 }
 
 impl ScopeRef for PlanScope {
-    fn node_map(&self) -> &IndexMap<NodeIdent, NodeShared> {
-        &self.node_map
+    fn node(&self) -> &IndexMap<NodeIdent, NodeShared> {
+        &self.node
     }
 
-    fn link_map(&self) -> &IndexMap<LinkIdent, LinkShared> {
-        &self.link_map
+    fn pubsub_link(&self) -> &IndexMap<LinkIdent, PubSubLinkShared> {
+        &self.pubsub_link
     }
 
-    fn include_map(&self) -> &IndexMap<KeyOwned, PlanScopeShared> {
-        &self.include_map
+    fn service_link(&self) -> &IndexMap<LinkIdent, ServiceLinkShared> {
+        &self.service_link
     }
 
-    fn group_map(&self) -> &IndexMap<KeyOwned, GroupScopeShared> {
-        &self.group_map
+    fn include(&self) -> &IndexMap<KeyOwned, PlanScopeShared> {
+        &self.include
     }
 
-    fn key_map(&self) -> &BTreeMap<KeyOwned, KeyKind> {
-        &self.key_map
+    fn group(&self) -> &IndexMap<KeyOwned, GroupScopeShared> {
+        &self.group
+    }
+
+    fn key(&self) -> &BTreeMap<KeyOwned, KeyKind> {
+        &self.key
     }
 }

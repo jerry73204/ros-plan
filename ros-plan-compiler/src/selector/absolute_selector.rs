@@ -1,5 +1,9 @@
 use crate::{
-    context::{link::LinkShared, node::NodeShared, node_socket::NodeSocketShared},
+    context::{
+        link::{PubSubLinkShared, ServiceLinkShared},
+        node::NodeShared,
+        node_socket::{NodeCliShared, NodePubShared, NodeSrvShared, NodeSubShared},
+    },
     scope::{ScopeRef, ScopeRefExt, ScopeShared},
     Program,
 };
@@ -47,24 +51,60 @@ impl<'a> AbsoluteSelector<'a> {
         let node_ident = node_ident?;
 
         let subscope = self.find_subscope(scope_key)?;
-        subscope.with_read(|guard| guard.node_map().get(node_ident).cloned())
+        subscope.with_read(|guard| guard.node().get(node_ident).cloned())
     }
 
-    pub fn find_link(&self, key: &Key) -> Option<LinkShared> {
+    pub fn find_pubsub_link(&self, key: &Key) -> Option<PubSubLinkShared> {
         let (scope_key, link_ident) = key.split_parent();
         let scope_key = scope_key?;
         let link_ident = link_ident?;
 
         let subscope = self.find_subscope(scope_key)?;
-        subscope.with_read(|guard| guard.link_map().get(link_ident).cloned())
+        subscope.with_read(|guard| guard.pubsub_link().get(link_ident).cloned())
     }
 
-    pub fn find_node_socket(&self, key: &Key) -> Option<NodeSocketShared> {
+    pub fn find_service_link(&self, key: &Key) -> Option<ServiceLinkShared> {
+        let (scope_key, link_ident) = key.split_parent();
+        let scope_key = scope_key?;
+        let link_ident = link_ident?;
+
+        let subscope = self.find_subscope(scope_key)?;
+        subscope.with_read(|guard| guard.service_link().get(link_ident).cloned())
+    }
+
+    pub fn find_node_pub(&self, key: &Key) -> Option<NodePubShared> {
         let (node_key, socket_ident) = key.split_parent();
         let node_key = node_key?;
         let socket_ident = socket_ident?;
 
         let scope = self.find_node(node_key)?;
-        scope.with_read(|guard| guard.socket.get(socket_ident).cloned())
+        scope.with_read(|guard| guard.pub_.get(socket_ident).cloned())
+    }
+
+    pub fn find_node_sub(&self, key: &Key) -> Option<NodeSubShared> {
+        let (node_key, socket_ident) = key.split_parent();
+        let node_key = node_key?;
+        let socket_ident = socket_ident?;
+
+        let scope = self.find_node(node_key)?;
+        scope.with_read(|guard| guard.sub.get(socket_ident).cloned())
+    }
+
+    pub fn find_node_srv(&self, key: &Key) -> Option<NodeSrvShared> {
+        let (node_key, socket_ident) = key.split_parent();
+        let node_key = node_key?;
+        let socket_ident = socket_ident?;
+
+        let scope = self.find_node(node_key)?;
+        scope.with_read(|guard| guard.srv.get(socket_ident).cloned())
+    }
+
+    pub fn find_node_cli(&self, key: &Key) -> Option<NodeCliShared> {
+        let (node_key, socket_ident) = key.split_parent();
+        let node_key = node_key?;
+        let socket_ident = socket_ident?;
+
+        let scope = self.find_node(node_key)?;
+        scope.with_read(|guard| guard.cli.get(socket_ident).cloned())
     }
 }

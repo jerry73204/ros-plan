@@ -1,4 +1,4 @@
-use super::link::LinkShared;
+use super::link::{PubSubLinkShared, ServiceLinkShared};
 use crate::utils::shared_table::{Owned, Shared};
 use ros_plan_format::{
     key::{Key, KeyOwned},
@@ -6,8 +6,17 @@ use ros_plan_format::{
 };
 use serde::{Deserialize, Serialize};
 
-pub type NodeSocketOwned = Owned<NodeSocketCtx>;
-pub type NodeSocketShared = Shared<NodeSocketCtx>;
+pub type NodePubOwned = Owned<NodePubCtx>;
+pub type NodePubShared = Shared<NodePubCtx>;
+
+pub type NodeSubOwned = Owned<NodeSubCtx>;
+pub type NodeSubShared = Shared<NodeSubCtx>;
+
+pub type NodeSrvOwned = Owned<NodeSrvCtx>;
+pub type NodeSrvShared = Shared<NodeSrvCtx>;
+
+pub type NodeCliOwned = Owned<NodeCliCtx>;
+pub type NodeCliShared = Shared<NodeCliCtx>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NodeSocketCtx {
@@ -147,26 +156,26 @@ impl From<NodePubCtx> for NodeSocketCtx {
 pub struct NodePubCtx {
     pub key: KeyOwned,
     pub config: NodePubCfg,
-    pub link_to: Option<LinkShared>,
+    pub link_to: Option<PubSubLinkShared>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeSubCtx {
     pub key: KeyOwned,
     pub config: NodeSubCfg,
-    pub link_to: Option<LinkShared>,
+    pub link_to: Option<PubSubLinkShared>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeSrvCtx {
     pub key: KeyOwned,
     pub config: NodeSrvCfg,
-    pub link_to: Option<LinkShared>,
+    pub link_to: Option<ServiceLinkShared>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeCliCtx {
     pub key: KeyOwned,
     pub config: NodeCliCfg,
-    pub link_to: Option<LinkShared>,
+    pub link_to: Option<ServiceLinkShared>,
 }

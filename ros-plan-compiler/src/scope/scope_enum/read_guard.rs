@@ -1,5 +1,8 @@
 use crate::{
-    context::{link::LinkShared, node::NodeShared},
+    context::{
+        link::{PubSubLinkShared, ServiceLinkShared},
+        node::NodeShared,
+    },
     scope::{GroupScope, GroupScopeShared, KeyKind, PlanScope, PlanScopeShared, ScopeRef},
 };
 use indexmap::IndexMap;
@@ -44,38 +47,45 @@ impl<'a> From<RwLockReadGuard<'a, GroupScope>> for ScopeReadGuard<'a> {
 }
 
 impl ScopeRef for ScopeReadGuard<'_> {
-    fn node_map(&self) -> &IndexMap<NodeIdent, NodeShared> {
+    fn node(&self) -> &IndexMap<NodeIdent, NodeShared> {
         match self {
-            ScopeReadGuard::Group(guard) => guard.node_map(),
-            ScopeReadGuard::Include(guard) => guard.node_map(),
+            ScopeReadGuard::Group(guard) => guard.node(),
+            ScopeReadGuard::Include(guard) => guard.node(),
         }
     }
 
-    fn link_map(&self) -> &IndexMap<LinkIdent, LinkShared> {
+    fn pubsub_link(&self) -> &IndexMap<LinkIdent, PubSubLinkShared> {
         match self {
-            ScopeReadGuard::Group(guard) => guard.link_map(),
-            ScopeReadGuard::Include(guard) => guard.link_map(),
+            ScopeReadGuard::Group(guard) => guard.pubsub_link(),
+            ScopeReadGuard::Include(guard) => guard.pubsub_link(),
         }
     }
 
-    fn include_map(&self) -> &IndexMap<KeyOwned, PlanScopeShared> {
+    fn service_link(&self) -> &IndexMap<LinkIdent, ServiceLinkShared> {
         match self {
-            ScopeReadGuard::Group(guard) => guard.include_map(),
-            ScopeReadGuard::Include(guard) => guard.include_map(),
+            ScopeReadGuard::Group(guard) => guard.service_link(),
+            ScopeReadGuard::Include(guard) => guard.service_link(),
         }
     }
 
-    fn group_map(&self) -> &IndexMap<KeyOwned, GroupScopeShared> {
+    fn include(&self) -> &IndexMap<KeyOwned, PlanScopeShared> {
         match self {
-            ScopeReadGuard::Group(guard) => guard.group_map(),
-            ScopeReadGuard::Include(guard) => guard.group_map(),
+            ScopeReadGuard::Group(guard) => guard.include(),
+            ScopeReadGuard::Include(guard) => guard.include(),
         }
     }
 
-    fn key_map(&self) -> &BTreeMap<KeyOwned, KeyKind> {
+    fn group(&self) -> &IndexMap<KeyOwned, GroupScopeShared> {
         match self {
-            ScopeReadGuard::Group(guard) => guard.key_map(),
-            ScopeReadGuard::Include(guard) => guard.key_map(),
+            ScopeReadGuard::Group(guard) => guard.group(),
+            ScopeReadGuard::Include(guard) => guard.group(),
+        }
+    }
+
+    fn key(&self) -> &BTreeMap<KeyOwned, KeyKind> {
+        match self {
+            ScopeReadGuard::Group(guard) => guard.key(),
+            ScopeReadGuard::Include(guard) => guard.key(),
         }
     }
 }

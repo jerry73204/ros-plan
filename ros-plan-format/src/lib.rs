@@ -13,6 +13,7 @@ pub mod plan_socket;
 pub mod qos;
 pub mod qos_requirement;
 pub mod subplan;
+pub mod when;
 
 pub use crate::plan::Plan;
 

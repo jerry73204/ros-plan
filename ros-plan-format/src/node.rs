@@ -1,5 +1,5 @@
 use crate::{
-    expr::{TextOrExpr, ValueOrExpr},
+    expr::{BoolExpr, TextOrExpr, ValueOrExpr},
     ident::IdentOwned,
     node_socket::{NodeSocketCfg, NodeSocketIdent},
     parameter::ParamName,
@@ -15,6 +15,7 @@ pub struct NodeCfg {
     pub pkg: Option<TextOrExpr>,
     pub exec: Option<TextOrExpr>,
     pub plugin: Option<TextOrExpr>,
+    pub when: Option<BoolExpr>,
 
     #[serde(default)]
     pub param: IndexMap<ParamName, ValueOrExpr>,

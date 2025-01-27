@@ -1,5 +1,5 @@
 use crate::{
-    expr::ValueOrExpr,
+    expr::{BoolExpr, ValueOrExpr},
     key::RelativeKeyOwned,
     link::{LinkCfg, LinkIdent},
     node::{NodeCfg, NodeIdent},
@@ -12,7 +12,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct IncludeCfg {
-    pub when: Option<ValueOrExpr>,
+    pub when: Option<BoolExpr>,
     pub pkg: Option<String>,
     pub file: Option<String>,
     pub path: Option<PathBuf>,
@@ -24,7 +24,7 @@ pub struct IncludeCfg {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GroupCfg {
-    pub when: Option<ValueOrExpr>,
+    pub when: Option<BoolExpr>,
 
     #[serde(default)]
     pub node: IndexMap<NodeIdent, NodeCfg>,

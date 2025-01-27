@@ -1,13 +1,13 @@
 use crate::{
     context::{
         arg::ArgCtx,
-        expr::{ExprCtx, TextOrExprCtx},
-        link::{LinkCtx, PubsubLinkCtx, ServiceLinkCtx},
+        link::{LinkCtx, PubSubLinkCtx, ServiceLinkCtx},
         node::NodeCtx,
         node_socket::{NodeCliCtx, NodePubCtx, NodeSocketCtx, NodeSrvCtx, NodeSubCtx},
         plan_socket::{PlanCliCtx, PlanPubCtx, PlanSocketCtx, PlanSrvCtx, PlanSubCtx},
     },
     error::Error,
+    eval::{BoolStore, KeyStore, TextStore, ValueStore},
     program::Program,
     scope::{GroupScope, PlanScope, PlanScopeShared, ScopeMutExt, ScopeShared},
     utils::{find_plan_file_from_pkg, read_yaml_file, shared_table::SharedTable},
@@ -15,9 +15,9 @@ use crate::{
 use indexmap::IndexMap;
 use ros_plan_format::{
     argument::ArgEntry,
-    expr::ValueOrExpr,
+    expr::{BoolExpr, ValueOrExpr},
     key::{Key, KeyOwned, RelativeKeyOwned},
-    link::LinkCfg,
+    link::{LinkCfg, PubSubLinkCfg, ServiceLinkCfg},
     node::NodeCfg,
     node_socket::NodeSocketCfg,
     parameter::ParamName,
@@ -39,9 +39,16 @@ impl PlanVisitor {
     pub fn traverse(&mut self, path: &Path) -> Result<Program, Error> {
         let mut context = Program {
             node_tab: SharedTable::default(),
-            link_tab: SharedTable::default(),
-            plan_socket_tab: SharedTable::default(),
-            node_socket_tab: SharedTable::default(),
+            pubsub_link_tab: SharedTable::default(),
+            service_link_tab: SharedTable::default(),
+            node_pub_tab: SharedTable::default(),
+            node_sub_tab: SharedTable::default(),
+            node_srv_tab: SharedTable::default(),
+            node_cli_tab: SharedTable::default(),
+            plan_pub_tab: SharedTable::default(),
+            plan_sub_tab: SharedTable::default(),
+            plan_srv_tab: SharedTable::default(),
+            plan_cli_tab: SharedTable::default(),
             include_tab: SharedTable::default(),
             group_tab: SharedTable::default(),
         };
@@ -326,7 +333,7 @@ struct InsertPlanFileJob {
     child_suffix: KeyOwned,
     child_plan_path: PathBuf,
     assign_args: IndexMap<ParamName, ValueOrExpr>,
-    when: Option<ValueOrExpr>,
+    when: Option<BoolExpr>,
 }
 
 #[derive(Debug)]
@@ -340,7 +347,7 @@ fn to_plan_scope(
     path: PathBuf,
     scope_key: &Key,
     plan_cfg: Plan,
-    when: Option<ValueOrExpr>,
+    when: Option<BoolExpr>,
     assign_arg: IndexMap<ParamName, ValueOrExpr>,
 ) -> Result<(PlanScope, SubplanTable), Error> {
     // Check if there is an argument assignment that does not exist.
@@ -350,16 +357,34 @@ fn to_plan_scope(
         }
     }
 
-    let socket_map: IndexMap<_, _> = plan_cfg
-        .socket
-        .into_iter()
-        .map(|(ident, cfg)| {
-            let socket_key = scope_key / &ident;
-            let ctx = to_socket_context(socket_key, cfg);
-            let shared = program.plan_socket_tab.insert(ctx);
-            (ident, shared)
-        })
-        .collect();
+    let mut pub_map = IndexMap::new();
+    let mut sub_map = IndexMap::new();
+    let mut srv_map = IndexMap::new();
+    let mut cli_map = IndexMap::new();
+
+    for (ident, cfg) in plan_cfg.socket.into_iter() {
+        let socket_key = scope_key / &ident;
+        let ctx = to_socket_context(socket_key, cfg);
+
+        match ctx {
+            PlanSocketCtx::Pub(ctx) => {
+                let shared = program.plan_pub_tab.insert(ctx);
+                pub_map.insert(ident, shared);
+            }
+            PlanSocketCtx::Sub(ctx) => {
+                let shared = program.plan_sub_tab.insert(ctx);
+                sub_map.insert(ident, shared);
+            }
+            PlanSocketCtx::Srv(ctx) => {
+                let shared = program.plan_srv_tab.insert(ctx);
+                srv_map.insert(ident, shared);
+            }
+            PlanSocketCtx::Cli(ctx) => {
+                let shared = program.plan_cli_tab.insert(ctx);
+                cli_map.insert(ident, shared);
+            }
+        }
+    }
 
     let arg_map: IndexMap<_, _> = plan_cfg
         .arg
@@ -374,20 +399,24 @@ fn to_plan_scope(
     let var_map: IndexMap<_, _> = plan_cfg
         .var
         .into_iter()
-        .map(|(name, var_entry)| (name, ExprCtx::new(var_entry)))
+        .map(|(name, var_entry)| (name, ValueStore::new(var_entry)))
         .collect();
 
     let mut plan_ctx = PlanScope {
         path,
-        arg_map,
-        var_map,
-        socket_map,
-        when: when.map(ExprCtx::new),
-        node_map: IndexMap::new(),
-        link_map: IndexMap::new(),
-        include_map: IndexMap::new(),
-        group_map: IndexMap::new(),
-        key_map: BTreeMap::new(),
+        arg: arg_map,
+        var: var_map,
+        pub_: pub_map,
+        sub: sub_map,
+        srv: srv_map,
+        cli: cli_map,
+        when: when.map(BoolStore::new),
+        node: IndexMap::new(),
+        pubsub_link: IndexMap::new(),
+        service_link: IndexMap::new(),
+        include: IndexMap::new(),
+        group: IndexMap::new(),
+        key: BTreeMap::new(),
     };
 
     for (ident, cfg) in plan_cfg.node.into_iter() {
@@ -400,8 +429,16 @@ fn to_plan_scope(
     for (ident, cfg) in plan_cfg.link.into_iter() {
         let link_key = scope_key / &ident;
         let ctx = to_link_context(link_key, cfg);
-        let shared = program.link_tab.insert(ctx);
-        plan_ctx.entity_entry(ident)?.insert_link(shared);
+        match ctx {
+            LinkCtx::PubSub(ctx) => {
+                let shared = program.pubsub_link_tab.insert(ctx);
+                plan_ctx.entity_entry(ident)?.insert_pubsub_link(shared);
+            }
+            LinkCtx::Service(ctx) => {
+                let shared = program.service_link_tab.insert(ctx);
+                plan_ctx.entity_entry(ident)?.insert_service_link(shared);
+            }
+        }
     }
 
     let subplan = SubplanTable {
@@ -418,12 +455,13 @@ fn to_group_scope(
     group: GroupCfg,
 ) -> Result<(GroupScope, SubplanTable), Error> {
     let mut group_ctx = GroupScope {
-        when: group.when.map(ExprCtx::new),
-        node_map: IndexMap::new(),
-        link_map: IndexMap::new(),
-        include_map: IndexMap::new(),
-        group_map: IndexMap::new(),
-        key_map: BTreeMap::new(),
+        when: group.when.map(BoolStore::new),
+        node: IndexMap::new(),
+        pubsub_link: IndexMap::new(),
+        service_link: IndexMap::new(),
+        include: IndexMap::new(),
+        group: IndexMap::new(),
+        key: BTreeMap::new(),
     };
 
     for (ident, cfg) in group.node.into_iter() {
@@ -436,8 +474,16 @@ fn to_group_scope(
     for (ident, cfg) in group.link.into_iter() {
         let link_key = scope_key / &ident;
         let ctx = to_link_context(link_key, cfg);
-        let shared = program.link_tab.insert(ctx);
-        group_ctx.entity_entry(ident)?.insert_link(shared);
+        match ctx {
+            LinkCtx::PubSub(ctx) => {
+                let shared = program.pubsub_link_tab.insert(ctx);
+                group_ctx.entity_entry(ident)?.insert_pubsub_link(shared);
+            }
+            LinkCtx::Service(ctx) => {
+                let shared = program.service_link_tab.insert(ctx);
+                group_ctx.entity_entry(ident)?.insert_service_link(shared);
+            }
+        }
     }
 
     let subplan = SubplanTable {
@@ -479,20 +525,49 @@ fn to_socket_context(key: KeyOwned, socket_ctx: PlanSocketCfg) -> PlanSocketCtx 
 
 fn to_link_context(key: KeyOwned, link_cfg: LinkCfg) -> LinkCtx {
     match link_cfg {
-        LinkCfg::PubSub(link_cfg) => PubsubLinkCtx {
-            key,
-            config: link_cfg,
-            src: None,
-            dst: None,
+        LinkCfg::PubSub(link_cfg) => {
+            let PubSubLinkCfg {
+                ty,
+                qos,
+                src,
+                dst,
+                when,
+            } = link_cfg;
+            let src_key: Vec<_> = src.into_iter().map(KeyStore::new).collect();
+            let dst_key: Vec<_> = dst.into_iter().map(KeyStore::new).collect();
+            PubSubLinkCtx {
+                key,
+                src_socket: None,
+                dst_socket: None,
+                ty,
+                qos,
+                when: when.map(BoolStore::new),
+                src_key,
+                dst_key,
+            }
+            .into()
         }
-        .into(),
-        LinkCfg::Service(link_cfg) => ServiceLinkCtx {
-            key,
-            config: link_cfg,
-            listen: None,
-            connect: None,
+        LinkCfg::Service(link_cfg) => {
+            let ServiceLinkCfg {
+                ty,
+                listen,
+                connect,
+                when,
+            } = link_cfg;
+            let listen_key = KeyStore::new(listen);
+            let connect_key: Vec<_> = connect.into_iter().map(KeyStore::new).collect();
+
+            ServiceLinkCtx {
+                key,
+                listen_socket: None,
+                connect_socket: None,
+                ty,
+                when: when.map(BoolStore::new),
+                listen_key,
+                connect_key,
+            }
+            .into()
         }
-        .into(),
     }
 }
 
@@ -544,26 +619,48 @@ fn to_node_context(program: &mut Program, node_key: KeyOwned, node_cfg: NodeCfg)
     let param = node_cfg
         .param
         .iter()
-        .map(|(name, eval)| (name.clone(), ExprCtx::new(eval.clone())))
+        .map(|(name, eval)| (name.clone(), ValueStore::new(eval.clone())))
         .collect();
-    let socket: IndexMap<_, _> = node_cfg
-        .socket
-        .iter()
-        .map(|(name, socket_cfg)| {
-            let socket_key = &node_key / name;
-            let ctx = to_node_socket_context(socket_key, socket_cfg.clone());
-            let shared = program.node_socket_tab.insert(ctx);
-            (name.clone(), shared)
-        })
-        .collect();
+
+    let mut pub_map = IndexMap::new();
+    let mut sub_map = IndexMap::new();
+    let mut srv_map = IndexMap::new();
+    let mut cli_map = IndexMap::new();
+
+    for (name, socket_cfg) in node_cfg.socket.into_iter() {
+        let socket_key = &node_key / &name;
+        let ctx = to_node_socket_context(socket_key, socket_cfg.clone());
+
+        match ctx {
+            NodeSocketCtx::Pub(ctx) => {
+                let shared = program.node_pub_tab.insert(ctx);
+                pub_map.insert(name, shared);
+            }
+            NodeSocketCtx::Sub(ctx) => {
+                let shared = program.node_sub_tab.insert(ctx);
+                sub_map.insert(name, shared);
+            }
+            NodeSocketCtx::Srv(ctx) => {
+                let shared = program.node_srv_tab.insert(ctx);
+                srv_map.insert(name, shared);
+            }
+            NodeSocketCtx::Cli(ctx) => {
+                let shared = program.node_cli_tab.insert(ctx);
+                cli_map.insert(name, shared);
+            }
+        }
+    }
 
     NodeCtx {
         key: node_key,
-        pkg: node_cfg.pkg.map(TextOrExprCtx::new),
-        exec: node_cfg.exec.map(TextOrExprCtx::new),
-        plugin: node_cfg.plugin.map(TextOrExprCtx::new),
+        pkg: node_cfg.pkg.map(TextStore::new),
+        exec: node_cfg.exec.map(TextStore::new),
+        plugin: node_cfg.plugin.map(TextStore::new),
         param,
-        socket,
+        pub_: pub_map,
+        sub: sub_map,
+        srv: srv_map,
+        cli: cli_map,
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::{
-    context::plan_socket::{PlanCliCtx, PlanPubCtx, PlanSocketCtx, PlanSrvCtx, PlanSubCtx},
+    context::plan_socket::{PlanCliCtx, PlanPubCtx, PlanSrvCtx, PlanSubCtx},
     error::Error,
     program::Program,
     scope::{PlanScopeShared, ScopeRefExt, ScopeShared},
@@ -96,14 +96,38 @@ impl SocketResolver {
         let ResolveSocketJob { current } = job;
 
         current.with_read(|guard| {
-            // Resolve URIs in the socket_map
-            for socket_shared in guard.socket_map.values() {
+            for socket_shared in guard.pub_.values() {
                 socket_shared.with_write(|mut socket_guard| -> Result<_, Error> {
                     let visitor = Visitor::new(program, &current);
-                    visitor.visit_socket(&mut socket_guard)?;
+                    visitor.visit_pub_socket(&mut socket_guard)?;
                     Ok(())
                 })?;
             }
+
+            for socket_shared in guard.sub.values() {
+                socket_shared.with_write(|mut socket_guard| -> Result<_, Error> {
+                    let visitor = Visitor::new(program, &current);
+                    visitor.visit_sub_socket(&mut socket_guard)?;
+                    Ok(())
+                })?;
+            }
+
+            for socket_shared in guard.srv.values() {
+                socket_shared.with_write(|mut socket_guard| -> Result<_, Error> {
+                    let visitor = Visitor::new(program, &current);
+                    visitor.visit_srv_socket(&mut socket_guard)?;
+                    Ok(())
+                })?;
+            }
+
+            for socket_shared in guard.cli.values() {
+                socket_shared.with_write(|mut socket_guard| -> Result<_, Error> {
+                    let visitor = Visitor::new(program, &current);
+                    visitor.visit_cli_socket(&mut socket_guard)?;
+                    Ok(())
+                })?;
+            }
+
             Ok(())
         })
     }
@@ -119,16 +143,6 @@ impl<'a> Visitor<'a> {
         Self { program, current }
     }
 
-    pub fn visit_socket(&self, socket_ctx: &mut PlanSocketCtx) -> Result<(), Error> {
-        match socket_ctx {
-            PlanSocketCtx::Pub(pub_ctx) => self.visit_pub_socket(pub_ctx)?,
-            PlanSocketCtx::Sub(sub_ctx) => self.visit_sub_socket(sub_ctx)?,
-            PlanSocketCtx::Srv(srv_ctx) => self.visit_srv_socket(srv_ctx)?,
-            PlanSocketCtx::Cli(cli_ctx) => self.visit_cli_socket(cli_ctx)?,
-        }
-        Ok(())
-    }
-
     pub fn visit_pub_socket(&self, pub_: &mut PlanPubCtx) -> Result<(), Error> {
         let src: Result<Vec<_>, _> = pub_
             .config
@@ -137,7 +151,9 @@ impl<'a> Visitor<'a> {
             .map(|socket_key| {
                 self.program
                     .selector(&self.current.clone().into())
-                    .find_node_pub(socket_key)
+                    .find_plan_or_node_pub(socket_key)
+                    .ok_or(socket_key)?
+                    .to_node_pub()
                     .ok_or(socket_key)
             })
             .flatten_ok()
@@ -160,7 +176,9 @@ impl<'a> Visitor<'a> {
             .map(|socket_key| {
                 self.program
                     .selector(&self.current.clone().into())
-                    .find_node_pub(socket_key)
+                    .find_plan_or_node_sub(socket_key)
+                    .ok_or(socket_key)?
+                    .to_node_sub()
                     .ok_or(socket_key)
             })
             .flatten_ok()
@@ -177,10 +195,12 @@ impl<'a> Visitor<'a> {
 
     pub fn visit_srv_socket(&self, srv: &mut PlanSrvCtx) -> Result<(), Error> {
         let socket_key = &srv.config.listen;
-        let listen = self
-            .program
-            .selector(&self.current.clone().into())
-            .find_node_srv(socket_key);
+        let listen = (|| {
+            self.program
+                .selector(&self.current.clone().into())
+                .find_plan_or_node_srv(socket_key)?
+                .to_node_srv()
+        })();
         let Some(listen) = listen else {
             bail!(socket_key, "the key does not resolve to a server socket");
         };
@@ -197,7 +217,9 @@ impl<'a> Visitor<'a> {
             .map(|socket_key| {
                 self.program
                     .selector(&self.current.clone().into())
-                    .find_node_cli(socket_key)
+                    .find_plan_or_node_cli(socket_key)
+                    .ok_or(socket_key)?
+                    .to_node_cli()
                     .ok_or(socket_key)
             })
             .flatten_ok()

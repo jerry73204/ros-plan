@@ -1,4 +1,4 @@
-use super::expr::ExprCtx;
+use crate::eval::ValueStore;
 use ros_plan_format::{
     argument::ArgEntry,
     expr::{ValueOrExpr, ValueType},
@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 pub struct ArgCtx {
     pub ty: ValueType,
     pub help: Option<String>,
-    pub default: Option<ExprCtx>,
-    pub assign: Option<ExprCtx>,
+    pub default: Option<ValueStore>,
+    pub assign: Option<ValueStore>,
 }
 
 impl ArgCtx {
@@ -20,8 +20,8 @@ impl ArgCtx {
         Self {
             ty,
             help,
-            default: default.map(ExprCtx::new),
-            assign: assign.map(ExprCtx::new),
+            default: default.map(ValueStore::new),
+            assign: assign.map(ValueStore::new),
         }
     }
 }

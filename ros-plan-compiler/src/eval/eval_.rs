@@ -2,7 +2,7 @@ use super::lua::ValueFromLua;
 use crate::error::Error;
 use mlua::prelude::*;
 use ros_plan_format::{
-    expr::{Expr, KeyOrExpr, TextOrExpr, Value, ValueOrExpr},
+    expr::{BoolExpr, Expr, KeyOrExpr, TextOrExpr, Value, ValueOrExpr},
     key::KeyOwned,
 };
 
@@ -79,5 +79,19 @@ impl Eval for KeyOrExpr {
             }
         };
         Ok(value)
+    }
+}
+
+impl Eval for BoolExpr {
+    type Output = bool;
+
+    fn eval(&self, lua: &Lua) -> Result<Self::Output, Error> {
+        let value: LuaValue = lua.load(self.as_str()).eval()?;
+        let LuaValue::Boolean(yes) = value else {
+            return Err(Error::EvaluationError {
+                error: "expect a boolean value".to_string(),
+            });
+        };
+        Ok(yes)
     }
 }
