@@ -49,7 +49,7 @@ impl From<PlanPubCfg> for PlanSocketCfg {
 #[serde(deny_unknown_fields)]
 pub struct PlanPubCfg {
     #[serde(rename = "type")]
-    pub ty: InterfaceTypeOwned,
+    pub ty: Option<InterfaceTypeOwned>,
     pub qos: Option<QosRequirement>,
     pub src: Vec<KeyOrExpr>,
 }
@@ -58,7 +58,7 @@ pub struct PlanPubCfg {
 #[serde(deny_unknown_fields)]
 pub struct PlanSubCfg {
     #[serde(rename = "type")]
-    pub ty: InterfaceTypeOwned,
+    pub ty: Option<InterfaceTypeOwned>,
     pub qos: Option<QosRequirement>,
     pub dst: Vec<KeyOrExpr>,
 }
@@ -67,7 +67,7 @@ pub struct PlanSubCfg {
 #[serde(deny_unknown_fields)]
 pub struct PlanSrvCfg {
     #[serde(rename = "type")]
-    pub ty: InterfaceTypeOwned,
+    pub ty: Option<InterfaceTypeOwned>,
     pub listen: KeyOrExpr,
 }
 
@@ -75,6 +75,6 @@ pub struct PlanSrvCfg {
 #[serde(deny_unknown_fields)]
 pub struct PlanCliCfg {
     #[serde(rename = "type")]
-    pub ty: InterfaceTypeOwned,
+    pub ty: Option<InterfaceTypeOwned>,
     pub connect: Vec<KeyOrExpr>,
 }

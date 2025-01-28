@@ -41,43 +41,43 @@ impl SharedRefInitializer {
                 ..
             } = program;
 
-            for (_id, link) in pubsub_link_tab.read_inner().iter() {
+            for (_id, link) in pubsub_link_tab.read().iter() {
                 update_pubsub_link_context(program, &mut link.write())?;
             }
 
-            for (_id, link) in service_link_tab.read_inner().iter() {
+            for (_id, link) in service_link_tab.read().iter() {
                 update_service_link_context(program, &mut link.write())?;
             }
 
-            for (_id, socket) in plan_pub_tab.read_inner().iter() {
+            for (_id, socket) in plan_pub_tab.read().iter() {
                 update_plan_pub_context(program, &mut socket.write())?;
             }
 
-            for (_id, socket) in plan_sub_tab.read_inner().iter() {
+            for (_id, socket) in plan_sub_tab.read().iter() {
                 update_plan_sub_context(program, &mut socket.write())?;
             }
 
-            for (_id, socket) in plan_srv_tab.read_inner().iter() {
+            for (_id, socket) in plan_srv_tab.read().iter() {
                 update_plan_srv_context(program, &mut socket.write())?;
             }
 
-            for (_id, socket) in plan_cli_tab.read_inner().iter() {
+            for (_id, socket) in plan_cli_tab.read().iter() {
                 update_plan_cli_context(program, &mut socket.write())?;
             }
 
-            for (_id, socket) in node_pub_tab.read_inner().iter() {
+            for (_id, socket) in node_pub_tab.read().iter() {
                 update_node_pub_context(program, &mut socket.write())?;
             }
 
-            for (_id, socket) in node_sub_tab.read_inner().iter() {
+            for (_id, socket) in node_sub_tab.read().iter() {
                 update_node_sub_context(program, &mut socket.write())?;
             }
 
-            for (_id, socket) in node_srv_tab.read_inner().iter() {
+            for (_id, socket) in node_srv_tab.read().iter() {
                 update_node_srv_context(program, &mut socket.write())?;
             }
 
-            for (_id, socket) in node_cli_tab.read_inner().iter() {
+            for (_id, socket) in node_cli_tab.read().iter() {
                 update_node_cli_context(program, &mut socket.write())?;
             }
         }

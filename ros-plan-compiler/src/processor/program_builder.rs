@@ -5,10 +5,10 @@ use crate::{
     eval::{BoolStore, TextStore, ValueStore},
     program::Program,
     scope::{
-        IncludeCtx, IncludeLocation, IncludeShared, PkgFileLocation, PlanScopeShared, ScopeMutExt,
-        ScopeShared,
+        IncludeCtx, IncludeLocation, IncludeShared, PathLocation, PkgFileLocation, PlanScopeShared,
+        ScopeMutExt, ScopeShared,
     },
-    utils::{read_yaml_file, shared_table::SharedTable},
+    utils::read_yaml_file,
 };
 use convert::{to_group_scope, to_plan_scope, SubScopeList};
 use indexmap::IndexMap;
@@ -17,103 +17,62 @@ use ros_plan_format::{
     plan::Plan,
     subplan::GroupCfg,
 };
-use std::{
-    collections::VecDeque,
-    path::{Path, PathBuf},
-};
+use std::{collections::VecDeque, path::Path};
 
 #[derive(Debug, Default)]
-pub struct PlanVisitor {
+pub struct ProgramBuilder {
     queue: VecDeque<Job>,
+    deferred_include: Vec<IncludeShared>,
 }
 
-impl PlanVisitor {
-    pub fn traverse(&mut self, path: &Path) -> Result<Program, Error> {
-        let mut context = Program {
-            node_tab: SharedTable::default(),
-            pubsub_link_tab: SharedTable::default(),
-            service_link_tab: SharedTable::default(),
-            node_pub_tab: SharedTable::default(),
-            node_sub_tab: SharedTable::default(),
-            node_srv_tab: SharedTable::default(),
-            node_cli_tab: SharedTable::default(),
-            plan_pub_tab: SharedTable::default(),
-            plan_sub_tab: SharedTable::default(),
-            plan_srv_tab: SharedTable::default(),
-            plan_cli_tab: SharedTable::default(),
-            plan_tab: SharedTable::default(),
-            group_tab: SharedTable::default(),
-            include_tab: SharedTable::default(),
-        };
+impl ProgramBuilder {
+    pub fn load_root_include(&mut self, path: &Path) -> Result<(Program, IncludeShared), Error> {
+        let mut program = Program::default();
+        let root_include = create_root_include(&mut program, path)?;
+        Ok((program, root_include))
+    }
 
-        self.load_root_plan(&mut context, path)?;
+    pub fn expand_include(
+        &mut self,
+        program: &mut Program,
+        include: IncludeShared,
+    ) -> Result<Vec<IncludeShared>, Error> {
+        assert!(program.include_tab.contains(&include));
+
+        self.queue.push_back(LoadPlanFile { include }.into());
 
         while let Some(job) = self.queue.pop_front() {
             match job {
                 Job::InsertGroup(job) => {
-                    self.insert_group(&mut context, job)?;
+                    self.insert_group(program, job)?;
                 }
                 Job::LoadPlanFile(job) => {
-                    self.load_plan(&mut context, job)?;
+                    self.load_plan(program, job)?;
                 }
             }
         }
 
-        Ok(context)
-    }
+        let deferred_include = std::mem::take(&mut self.deferred_include);
 
-    fn load_root_plan(&mut self, program: &mut Program, plan_path: &Path) -> Result<(), Error> {
-        let scope_key = Key::root();
-
-        let Some(plan_dir) = plan_path.parent() else {
-            todo!();
-        };
-
-        // Read plan file
-        let plan: Plan = read_yaml_file(plan_path)?;
-
-        // Create the context for the inserted plan
-        let (plan_ctx, subscope) =
-            to_plan_scope(program, plan_path.to_path_buf(), scope_key, plan)?;
-
-        // Insert the plan context to the root node.
-        let plan_shared = program.plan_tab.insert(plan_ctx);
-
-        let include_ctx = IncludeCtx {
-            location: IncludeLocation::Path(plan_path.to_path_buf()),
-            when: None,
-            assign_arg: IndexMap::new(),
-            plan: Some(plan_shared.clone()),
-        };
-        let _include_shared = program.include_tab.insert(include_ctx);
-
-        // Schedule subscope insertion jobs
-        self.schedule_insertion_jobs(
-            program,
-            plan_dir,
-            plan_shared.clone(),
-            plan_shared.clone().into(),
-            Key::root(),
-            subscope,
-        )?;
-
-        Ok(())
+        Ok(deferred_include)
     }
 
     fn load_plan(&mut self, program: &mut Program, job: LoadPlanFile) -> Result<(), Error> {
         let LoadPlanFile {
-            cwd,
             include: include_shared,
-            prefix,
         } = job;
 
         // Resolve the included file location
-        let plan_path = include_shared.with_read(|include_guard| -> Result<_, Error> {
-            include_guard.location.resolve_plan(&cwd)
+        let (prefix, plan_path) = include_shared.with_read(|guard| -> Result<_, Error> {
+            assert!(guard.plan.is_none());
+            let prefix = guard.key.clone();
+            let plan_path = guard.location.resolve_absolute_path()?;
+            Ok((prefix, plan_path))
         })?;
 
-        // If the plan path cannot be resolved, defer the job.
+        // If the plan path cannot be resolved, push the include to the deferred set.
         let Some(plan_path) = plan_path else {
+            self.deferred_include.push(include_shared);
             return Ok(());
         };
 
@@ -128,9 +87,8 @@ impl PlanVisitor {
         });
 
         // Schedule scope insertion jobs for the newly created plan.
-        self.schedule_insertion_jobs(
+        self.schedule_jobs(
             program,
-            &cwd,
             plan_shared.clone(),
             plan_shared.into(),
             &prefix,
@@ -142,7 +100,6 @@ impl PlanVisitor {
 
     fn insert_group(&mut self, program: &mut Program, job: InsertGroup) -> Result<(), Error> {
         let InsertGroup {
-            cwd,
             plan: plan_parent,
             parent_scope: current,
             parent_prefix: current_prefix,
@@ -166,9 +123,8 @@ impl PlanVisitor {
             Ok(())
         })?;
 
-        self.schedule_insertion_jobs(
+        self.schedule_jobs(
             program,
-            &cwd,
             plan_parent.clone(),
             group_shared.clone().into(),
             &child_prefix,
@@ -178,16 +134,17 @@ impl PlanVisitor {
         Ok(())
     }
 
-    fn schedule_insertion_jobs(
+    fn schedule_jobs(
         &mut self,
         program: &mut Program,
-        cwd: &Path,
         plan_parent: PlanScopeShared,
-        current: ScopeShared,
-        current_prefix: &Key,
+        curr_scope: ScopeShared,
+        curr_prefix: &Key,
         subscope: SubScopeList,
     ) -> Result<(), Error> {
-        current.with_write(|mut plan_guard| -> Result<_, Error> {
+        let plan_dir = plan_parent.with_read(|guard| guard.path.parent().unwrap().to_path_buf());
+
+        curr_scope.with_write(|mut plan_guard| -> Result<_, Error> {
             let SubScopeList {
                 include: include_list,
                 group: group_list,
@@ -196,10 +153,9 @@ impl PlanVisitor {
             // Create group insertion jobs.
             for (suffix, group_cfg) in group_list {
                 let job = InsertGroup {
-                    cwd: cwd.to_path_buf(),
                     plan: plan_parent.clone(),
-                    parent_scope: current.clone(),
-                    parent_prefix: current_prefix.to_owned(),
+                    parent_scope: curr_scope.clone(),
+                    parent_prefix: curr_prefix.to_owned(),
                     insert_suffix: suffix.into(),
                     group_cfg,
                 };
@@ -208,11 +164,14 @@ impl PlanVisitor {
 
             // Schedule plan file inclusion jobs
             for (suffix, child_cfg) in include_list {
-                let child_prefix = (current_prefix / suffix.as_key()).unwrap();
+                let child_prefix = (curr_prefix / suffix.as_key()).unwrap();
 
                 let include_ctx = {
                     let location = match (child_cfg.path, child_cfg.pkg, child_cfg.file) {
-                        (Some(path), None, None) => IncludeLocation::Path(path),
+                        (Some(path), None, None) => IncludeLocation::Path(PathLocation {
+                            parent_dir: plan_dir.clone(),
+                            path,
+                        }),
                         (None, Some(pkg), Some(file)) => {
                             IncludeLocation::PkgFile(PkgFileLocation {
                                 pkg: TextStore::new(pkg),
@@ -229,6 +188,7 @@ impl PlanVisitor {
                         .collect();
 
                     IncludeCtx {
+                        key: child_prefix,
                         location,
                         when: child_cfg.when.map(BoolStore::new),
                         assign_arg: arg_assign,
@@ -244,9 +204,7 @@ impl PlanVisitor {
 
                 // Schedule the job that loads the included file.
                 let job = LoadPlanFile {
-                    cwd: cwd.to_path_buf(),
                     include: include_shared,
-                    prefix: child_prefix,
                 };
                 self.queue.push_back(job.into());
             }
@@ -276,7 +234,6 @@ impl From<InsertGroup> for Job {
 
 #[derive(Debug)]
 struct InsertGroup {
-    pub cwd: PathBuf,
     pub plan: PlanScopeShared,
     pub parent_scope: ScopeShared,
     pub parent_prefix: KeyOwned,
@@ -286,9 +243,26 @@ struct InsertGroup {
 
 #[derive(Debug)]
 struct LoadPlanFile {
-    pub cwd: PathBuf,
     pub include: IncludeShared,
-    pub prefix: KeyOwned,
+}
+
+fn create_root_include(program: &mut Program, plan_path: &Path) -> Result<IncludeShared, Error> {
+    // Read plan file
+    let cwd = std::env::current_dir().unwrap();
+
+    let include_ctx = IncludeCtx {
+        key: KeyOwned::new_root(),
+        location: IncludeLocation::Path(PathLocation {
+            parent_dir: cwd,
+            path: plan_path.to_path_buf(),
+        }),
+        when: None,
+        assign_arg: IndexMap::new(),
+        plan: None,
+    };
+    let include_shared = program.include_tab.insert(include_ctx);
+
+    Ok(include_shared)
 }
 
 // fn check_arg_assignment(

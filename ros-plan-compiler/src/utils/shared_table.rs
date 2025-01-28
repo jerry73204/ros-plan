@@ -5,12 +5,19 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stable_vec::StableVec;
 
 #[derive(Debug)]
-#[repr(transparent)]
 pub struct SharedTable<T> {
+    name: String,
     inner: ArcRwLock<StableVec<ArcRwLock<T>>>,
 }
 
 impl<T> SharedTable<T> {
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            inner: ArcRwLock::new(StableVec::new()),
+        }
+    }
+
     pub fn insert(&self, value: T) -> Shared<T> {
         let entry = ArcRwLock::new(value);
         let mut guard = self.inner.write();
@@ -31,16 +38,19 @@ impl<T> SharedTable<T> {
         })
     }
 
-    pub fn read_inner(&self) -> RwLockReadGuard<'_, StableVec<ArcRwLock<T>>> {
-        self.inner.read()
-    }
-}
-
-impl<T> Default for SharedTable<T> {
-    fn default() -> Self {
-        Self {
-            inner: ArcRwLock::new(StableVec::new()),
+    pub fn read(&self) -> SharedTableReadGuard<T> {
+        SharedTableReadGuard {
+            tab_guard: self.inner.read_arc(),
+            tab_arc: self.inner.clone(),
         }
+    }
+
+    pub fn contains(&self, value: &Shared<T>) -> bool {
+        if !std::ptr::eq(self.inner.as_ptr(), value.tab_weak.as_ptr()) {
+            return false;
+        }
+        let guard = self.inner.read();
+        guard.get(value.id).is_some()
     }
 }
 
@@ -70,6 +80,7 @@ where
         let map = IndexMap::<usize, T>::deserialize(deserializer)?;
         let Some(max_id) = map.keys().copied().max() else {
             return Ok(Self {
+                name: "TODO".to_string(),
                 inner: ArcRwLock::from(StableVec::new()),
             });
         };
@@ -79,6 +90,7 @@ where
             vec.insert(k, ArcRwLock::from(v));
         }
         Ok(Self {
+            name: "TODO".to_string(),
             inner: ArcRwLock::from(vec),
         })
     }
@@ -202,6 +214,26 @@ impl<'de, T> Deserialize<'de> for Shared<T> {
         Ok(Self {
             id,
             tab_weak: WeakRwLock::new_null(),
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct SharedTableReadGuard<T> {
+    tab_guard: ArcRwLockReadGuard<RawRwLock, StableVec<ArcRwLock<T>>>,
+    tab_arc: ArcRwLock<StableVec<ArcRwLock<T>>>,
+}
+
+impl<T> SharedTableReadGuard<T> {
+    pub fn iter(&self) -> impl Iterator<Item = (usize, Owned<T>)> + '_ {
+        self.tab_guard.iter().map(|(id, arc)| {
+            let owned = Owned {
+                id,
+                tab_weak: self.tab_arc.downgrade(),
+                entry_arc: arc.clone(),
+                _tab_guard: self.tab_arc.read_arc(),
+            };
+            (id, owned)
         })
     }
 }

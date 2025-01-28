@@ -85,6 +85,27 @@ impl Program {
     }
 }
 
+impl Default for Program {
+    fn default() -> Self {
+        Self {
+            plan_tab: SharedTable::new("plan"),
+            group_tab: SharedTable::new("group"),
+            include_tab: SharedTable::new("include"),
+            node_tab: SharedTable::new("node"),
+            pubsub_link_tab: SharedTable::new("pubsub_link"),
+            service_link_tab: SharedTable::new("service_link"),
+            plan_pub_tab: SharedTable::new("plan_pub"),
+            plan_sub_tab: SharedTable::new("plan_sub"),
+            plan_srv_tab: SharedTable::new("plan_srv"),
+            plan_cli_tab: SharedTable::new("plan_cli"),
+            node_pub_tab: SharedTable::new("node_pub"),
+            node_sub_tab: SharedTable::new("node_sub"),
+            node_srv_tab: SharedTable::new("node_srv"),
+            node_cli_tab: SharedTable::new("node_cli"),
+        }
+    }
+}
+
 impl Display for Program {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let yaml_text = serde_yaml::to_string(self).unwrap();

@@ -8,15 +8,16 @@ use crate::{
     },
 };
 use indexmap::IndexMap;
-use ros_plan_format::parameter::ParamName;
+use ros_plan_format::{key::KeyOwned, parameter::ParamName};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub type IncludeOwned = Owned<IncludeCtx>;
 pub type IncludeShared = Shared<IncludeCtx>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IncludeCtx {
+    pub key: KeyOwned,
     pub location: IncludeLocation,
     pub when: Option<BoolStore>,
     pub assign_arg: IndexMap<ParamName, ValueStore>,
@@ -26,23 +27,37 @@ pub struct IncludeCtx {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IncludeLocation {
-    Path(PathBuf),
+    Path(PathLocation),
     PkgFile(PkgFileLocation),
 }
 
 impl IncludeLocation {
-    pub fn resolve_plan(&self, cwd: &Path) -> Result<Option<PathBuf>, Error> {
+    pub fn resolve_absolute_path(&self) -> Result<Option<PathBuf>, Error> {
         match self {
-            IncludeLocation::Path(path) => {
-                let path = if path.is_relative() {
-                    cwd.join(path)
-                } else {
-                    path.to_owned()
-                };
+            IncludeLocation::Path(location) => {
+                let path = location.resolve_absolute_plan()?;
                 Ok(Some(path))
             }
-            IncludeLocation::PkgFile(location) => location.resolve_plan(),
+            IncludeLocation::PkgFile(location) => location.resolve_absolute_path(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PathLocation {
+    pub parent_dir: PathBuf,
+    pub path: PathBuf,
+}
+
+impl PathLocation {
+    pub fn resolve_absolute_plan(&self) -> Result<PathBuf, Error> {
+        let Self { parent_dir, path } = self;
+        let abs_path = if path.is_relative() {
+            parent_dir.join(path)
+        } else {
+            path.to_path_buf()
+        };
+        Ok(abs_path)
     }
 }
 
@@ -53,7 +68,7 @@ pub struct PkgFileLocation {
 }
 
 impl PkgFileLocation {
-    pub fn resolve_plan(&self) -> Result<Option<PathBuf>, Error> {
+    pub fn resolve_absolute_path(&self) -> Result<Option<PathBuf>, Error> {
         let (pkg, file) = match (self.pkg.get_stored(), self.file.get_stored()) {
             (Ok(pkg), Ok(file)) => (pkg, file),
             _ => return Ok(None),

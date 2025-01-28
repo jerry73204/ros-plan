@@ -14,7 +14,7 @@ use crate::{
 use indexmap::IndexMap;
 use mlua::prelude::*;
 use ros_plan_format::{
-    expr::Value, key::KeyOwned, link::LinkIdent, node::NodeIdent, node_socket::NodeSocketIdent,
+    key::KeyOwned, link::LinkIdent, node::NodeIdent, node_socket::NodeSocketIdent,
     parameter::ParamName, plan_socket::PlanSocketIdent,
 };
 use std::collections::VecDeque;
@@ -28,24 +28,24 @@ impl Evaluator {
     pub fn eval(
         &mut self,
         program: &mut Program,
-        args: IndexMap<ParamName, Value>,
+        include: IncludeShared,
+        // args: IndexMap<ParamName, Value>,
     ) -> Result<(), Error> {
         // Get the root include context.
-        let root_include = program.root_include();
+        // let root_include = program.root_include();
 
         // Assign arguments to the root include context
-        let assign_arg = args
-            .into_iter()
-            .map(|(name, value)| (name, ValueStore::new(value.into())))
-            .collect();
-        root_include.with_write(|mut guard| {
-            guard.assign_arg = assign_arg;
-        });
+        // let assign_arg = args
+        //     .into_iter()
+        //     .map(|(name, value)| (name, ValueStore::new(value.into())))
+        //     .collect();
+        // root_include.with_write(|mut guard| {
+        //     guard.assign_arg = assign_arg;
+        // });
 
         // Insert the root include to the job queue.
-        self.queue.push_back(Job::Include {
-            include: root_include,
-        });
+        assert!(program.include_tab.contains(&include));
+        self.queue.push_back(Job::Include { include });
 
         // Process jobs
         while let Some(job) = self.queue.pop_front() {
@@ -113,10 +113,7 @@ impl Evaluator {
         })?;
 
         // Schedule jobs to visit child scopes
-        plan.with_read(|guard| -> Result<_, Error> {
-            self.schedule_subplan_jobs(&lua, &*guard)?;
-            Ok(())
-        })?;
+        plan.with_read(|guard| self.schedule_subplan_jobs(&lua, &*guard))?;
 
         Ok(())
     }
@@ -147,11 +144,11 @@ impl Evaluator {
         Ok(())
     }
 
-    fn schedule_subplan_jobs<S>(&mut self, lua: &Lua, guard: &S) -> Result<(), Error>
+    fn schedule_subplan_jobs<S>(&mut self, lua: &Lua, scope: &S) -> Result<(), Error>
     where
         S: ScopeRef,
     {
-        for child in guard.group().values() {
+        for child in scope.group().values() {
             let job = Job::Group {
                 group: child.clone(),
                 lua: lua.clone(),
@@ -159,7 +156,7 @@ impl Evaluator {
             self.queue.push_back(job);
         }
 
-        for include in guard.include().values() {
+        for include in scope.include().values() {
             let job = Job::Include {
                 include: include.clone(),
             };

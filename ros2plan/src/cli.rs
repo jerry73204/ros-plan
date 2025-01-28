@@ -8,35 +8,23 @@ use std::{path::PathBuf, str::FromStr};
 
 #[derive(Debug, Clone, Parser)]
 pub enum Cli {
-    Start(StartArgs),
     Compile(CompileArgs),
-    Eval(EvalArgs),
 }
 
-#[derive(Debug, Clone, Parser)]
-pub struct StartArgs {
-    /// The ROS plan file.
-    pub plan_file: PathBuf,
+// #[derive(Debug, Clone, Parser)]
+// pub struct StartArgs {
+//     /// The ROS plan file.
+//     pub plan_file: PathBuf,
 
-    /// The execution environment configuration file.
-    #[clap(short = 'c', long)]
-    pub config: Option<PathBuf>,
-}
+//     /// The execution environment configuration file.
+//     #[clap(short = 'c', long)]
+//     pub config: Option<PathBuf>,
+// }
 
 #[derive(Debug, Clone, Parser)]
 pub struct CompileArgs {
     /// The ROS plan file.
     pub plan_file: PathBuf,
-
-    /// The path to the output file.
-    #[clap(short = 'o', long)]
-    pub output_file: Option<PathBuf>,
-}
-
-#[derive(Debug, Clone, Parser)]
-pub struct EvalArgs {
-    /// The plan program file.
-    pub program_file: PathBuf,
 
     /// The arguments passed to the program.
     pub args: Option<Vec<ArgAssign>>,

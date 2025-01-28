@@ -31,12 +31,9 @@ pub struct LinkResolver {
 impl LinkResolver {
     pub fn resolve(&mut self, program: &mut Program) -> Result<(), Error> {
         // Schedule the job to visit the root
-        self.queue.push_back(
-            Job {
-                current: program.root_scope().into(),
-            }
-            .into(),
-        );
+        self.queue.push_back(Job {
+            current: program.root_scope().into(),
+        });
 
         // Perform traversal
         while let Some(job) = self.queue.pop_front() {

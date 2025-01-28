@@ -2,50 +2,27 @@ mod cli;
 mod config;
 
 use clap::Parser;
-use cli::{ArgAssign, Cli, CompileArgs, EvalArgs, StartArgs};
+use cli::{ArgAssign, Cli, CompileArgs};
 use indexmap::IndexMap;
-use ros_plan_compiler::{Compiler, Program};
-use ros_plan_format::Plan;
+use ros_plan_compiler::Compiler;
 
 fn main() -> eyre::Result<()> {
     let cli = Cli::parse();
 
     match cli {
-        Cli::Start(args) => start(args)?,
         Cli::Compile(args) => compile(args)?,
-        Cli::Eval(args) => eval(args)?,
     }
 
     Ok(())
 }
 
-fn start(args: StartArgs) -> eyre::Result<()> {
-    todo!()
-}
-
-fn compile(args: CompileArgs) -> eyre::Result<()> {
-    let compiler = Compiler::new();
-    let program = compiler.compile(&args.plan_file)?;
-
-    let text = program.to_string();
-    if let Some(output_file) = args.output_file {
-        std::fs::write(&output_file, text)?;
-    } else {
-        print!("{text}");
-    }
-    Ok(())
-}
-
-fn eval(args: EvalArgs) -> eyre::Result<()> {
-    let EvalArgs {
-        program_file,
+fn compile(opts: CompileArgs) -> eyre::Result<()> {
+    let CompileArgs {
+        plan_file,
         args,
         output_file,
-    } = args;
+    } = opts;
 
-    let mut program = Program::load(&program_file)?;
-
-    let compiler = Compiler::new();
     let args: IndexMap<_, _> = match args {
         Some(args) => args
             .into_iter()
@@ -53,7 +30,9 @@ fn eval(args: EvalArgs) -> eyre::Result<()> {
             .collect(),
         None => IndexMap::new(),
     };
-    compiler.eval(&mut program, args)?;
+
+    let compiler = Compiler::new();
+    let program = compiler.compile(&plan_file, args)?;
 
     let text = program.to_string();
     if let Some(output_file) = output_file {
@@ -61,6 +40,5 @@ fn eval(args: EvalArgs) -> eyre::Result<()> {
     } else {
         print!("{text}");
     }
-
     Ok(())
 }

@@ -1,3 +1,4 @@
+use super::node_socket::{NodeCliShared, NodePubShared, NodeSrvShared, NodeSubShared};
 use crate::{
     eval::KeyStore,
     utils::shared_table::{Owned, Shared},
@@ -8,8 +9,6 @@ use ros_plan_format::{
     qos_requirement::QosRequirement,
 };
 use serde::{Deserialize, Serialize};
-
-use super::node_socket::{NodeCliShared, NodePubShared, NodeSrvShared, NodeSubShared};
 
 pub type PlanPubOwned = Owned<PlanPubCtx>;
 pub type PlanPubShared = Shared<PlanPubCtx>;
@@ -108,7 +107,7 @@ impl From<PlanPubCtx> for PlanSocketCtx {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanPubCtx {
     pub key: KeyOwned,
-    pub ty: InterfaceTypeOwned,
+    pub ty: Option<InterfaceTypeOwned>,
     pub qos: Option<QosRequirement>,
     pub src_key: Vec<KeyStore>,
     pub src: Option<Vec<NodePubShared>>,
@@ -117,7 +116,7 @@ pub struct PlanPubCtx {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanSubCtx {
     pub key: KeyOwned,
-    pub ty: InterfaceTypeOwned,
+    pub ty: Option<InterfaceTypeOwned>,
     pub qos: Option<QosRequirement>,
     pub dst_key: Vec<KeyStore>,
     pub dst: Option<Vec<NodeSubShared>>,
@@ -126,7 +125,7 @@ pub struct PlanSubCtx {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanSrvCtx {
     pub key: KeyOwned,
-    pub ty: InterfaceTypeOwned,
+    pub ty: Option<InterfaceTypeOwned>,
     pub listen_key: KeyStore,
     pub listen: Option<NodeSrvShared>,
 }
@@ -134,7 +133,7 @@ pub struct PlanSrvCtx {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanCliCtx {
     pub key: KeyOwned,
-    pub ty: InterfaceTypeOwned,
+    pub ty: Option<InterfaceTypeOwned>,
     pub connect_key: Vec<KeyStore>,
     pub connect: Option<Vec<NodeCliShared>>,
 }

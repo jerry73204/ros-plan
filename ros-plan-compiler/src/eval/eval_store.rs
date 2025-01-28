@@ -12,25 +12,21 @@ pub type BoolStore = EvalStore<BoolExpr>;
 pub struct EvalStore<D>
 where
     D: Eval,
-    D::Output: Clone,
+    D::Output: Clone + Serialize + for<'a> Deserialize<'a>,
 {
-    evaluable: D,
-
-    #[serde(skip)]
+    expr: D,
     override_: Option<D::Output>,
-
-    #[serde(skip)]
     result: Option<D::Output>,
 }
 
 impl<D> EvalStore<D>
 where
     D: Eval,
-    D::Output: Clone,
+    D::Output: Clone + Serialize + for<'de> Deserialize<'de>,
 {
-    pub fn new(default: D) -> Self {
+    pub fn new(expr: D) -> Self {
         Self {
-            evaluable: default,
+            expr,
             override_: None,
             result: None,
         }
@@ -38,7 +34,7 @@ where
 
     pub fn eval_and_store(&mut self, lua: &Lua) -> Result<&D::Output, Error> {
         let Self {
-            evaluable: ref default,
+            ref expr,
             ref override_,
             result,
         } = self;
@@ -46,7 +42,7 @@ where
         let value = if let Some(override_) = override_ {
             (*override_).clone()
         } else {
-            default.eval(lua)?
+            expr.eval(lua)?
         };
         let output = result.insert(value);
         Ok(output)
