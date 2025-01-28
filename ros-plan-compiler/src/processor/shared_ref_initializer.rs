@@ -42,43 +42,43 @@ impl SharedRefInitializer {
             } = program;
 
             for (_id, link) in pubsub_link_tab.read().iter() {
-                update_pubsub_link_context(program, &mut link.write())?;
+                link.with_write(|mut guard| update_pubsub_link_context(program, &mut guard))?;
             }
 
             for (_id, link) in service_link_tab.read().iter() {
-                update_service_link_context(program, &mut link.write())?;
+                link.with_write(|mut guard| update_service_link_context(program, &mut guard))?;
             }
 
             for (_id, socket) in plan_pub_tab.read().iter() {
-                update_plan_pub_context(program, &mut socket.write())?;
+                socket.with_write(|mut guard| update_plan_pub_context(program, &mut guard))?;
             }
 
             for (_id, socket) in plan_sub_tab.read().iter() {
-                update_plan_sub_context(program, &mut socket.write())?;
+                socket.with_write(|mut guard| update_plan_sub_context(program, &mut guard))?;
             }
 
             for (_id, socket) in plan_srv_tab.read().iter() {
-                update_plan_srv_context(program, &mut socket.write())?;
+                socket.with_write(|mut guard| update_plan_srv_context(program, &mut guard))?;
             }
 
             for (_id, socket) in plan_cli_tab.read().iter() {
-                update_plan_cli_context(program, &mut socket.write())?;
+                socket.with_write(|mut guard| update_plan_cli_context(program, &mut guard))?;
             }
 
             for (_id, socket) in node_pub_tab.read().iter() {
-                update_node_pub_context(program, &mut socket.write())?;
+                socket.with_write(|mut guard| update_node_pub_context(program, &mut guard))?;
             }
 
             for (_id, socket) in node_sub_tab.read().iter() {
-                update_node_sub_context(program, &mut socket.write())?;
+                socket.with_write(|mut guard| update_node_sub_context(program, &mut guard))?;
             }
 
             for (_id, socket) in node_srv_tab.read().iter() {
-                update_node_srv_context(program, &mut socket.write())?;
+                socket.with_write(|mut guard| update_node_srv_context(program, &mut guard))?;
             }
 
             for (_id, socket) in node_cli_tab.read().iter() {
-                update_node_cli_context(program, &mut socket.write())?;
+                socket.with_write(|mut guard| update_node_cli_context(program, &mut guard))?;
             }
         }
 
@@ -147,10 +147,7 @@ fn update_node_map(
     node_map: &mut IndexMap<NodeIdent, NodeShared>,
 ) -> Result<(), Error> {
     for shared in node_map.values_mut() {
-        let Some(owned) = program.node_tab.get(shared.id()) else {
-            todo!()
-        };
-        *shared = owned.downgrade();
+        program.node_tab.bind(shared);
     }
     Ok(())
 }
@@ -160,10 +157,7 @@ fn update_pubsub_link_map(
     link_map: &mut IndexMap<LinkIdent, PubSubLinkShared>,
 ) -> Result<(), Error> {
     for shared in link_map.values_mut() {
-        let Some(owned) = program.pubsub_link_tab.get(shared.id()) else {
-            todo!()
-        };
-        *shared = owned.downgrade();
+        program.pubsub_link_tab.bind(shared);
     }
     Ok(())
 }
@@ -173,10 +167,7 @@ fn update_service_link_map(
     link_map: &mut IndexMap<LinkIdent, ServiceLinkShared>,
 ) -> Result<(), Error> {
     for shared in link_map.values_mut() {
-        let Some(owned) = program.service_link_tab.get(shared.id()) else {
-            todo!()
-        };
-        *shared = owned.downgrade();
+        program.service_link_tab.bind(shared);
     }
     Ok(())
 }
@@ -186,10 +177,7 @@ fn update_pub_map(
     socket_map: &mut IndexMap<PlanSocketIdent, PlanPubShared>,
 ) -> Result<(), Error> {
     for shared in socket_map.values_mut() {
-        let Some(owned) = program.plan_pub_tab.get(shared.id()) else {
-            todo!()
-        };
-        *shared = owned.downgrade();
+        program.plan_pub_tab.bind(shared);
     }
     Ok(())
 }
@@ -199,10 +187,7 @@ fn update_sub_map(
     socket_map: &mut IndexMap<PlanSocketIdent, PlanSubShared>,
 ) -> Result<(), Error> {
     for shared in socket_map.values_mut() {
-        let Some(owned) = program.plan_sub_tab.get(shared.id()) else {
-            todo!()
-        };
-        *shared = owned.downgrade();
+        program.plan_sub_tab.bind(shared);
     }
     Ok(())
 }
@@ -212,10 +197,7 @@ fn update_srv_map(
     socket_map: &mut IndexMap<PlanSocketIdent, PlanSrvShared>,
 ) -> Result<(), Error> {
     for shared in socket_map.values_mut() {
-        let Some(owned) = program.plan_srv_tab.get(shared.id()) else {
-            todo!()
-        };
-        *shared = owned.downgrade();
+        program.plan_srv_tab.bind(shared);
     }
     Ok(())
 }
@@ -225,10 +207,7 @@ fn update_cli_map(
     socket_map: &mut IndexMap<PlanSocketIdent, PlanCliShared>,
 ) -> Result<(), Error> {
     for shared in socket_map.values_mut() {
-        let Some(owned) = program.plan_cli_tab.get(shared.id()) else {
-            todo!()
-        };
-        *shared = owned.downgrade();
+        program.plan_cli_tab.bind(shared);
     }
     Ok(())
 }
@@ -342,34 +321,22 @@ fn update_node_cli_context(program: &Program, socket: &mut NodeCliCtx) -> Result
 }
 
 fn initialize_node_pub_shared(program: &Program, shared: &mut NodePubShared) -> Result<(), Error> {
-    let Some(owned) = program.node_pub_tab.get(shared.id()) else {
-        todo!()
-    };
-    *shared = owned.downgrade();
+    program.node_pub_tab.bind(shared);
     Ok(())
 }
 
 fn initialize_node_sub_shared(program: &Program, shared: &mut NodeSubShared) -> Result<(), Error> {
-    let Some(owned) = program.node_sub_tab.get(shared.id()) else {
-        todo!()
-    };
-    *shared = owned.downgrade();
+    program.node_sub_tab.bind(shared);
     Ok(())
 }
 
 fn initialize_node_srv_shared(program: &Program, shared: &mut NodeSrvShared) -> Result<(), Error> {
-    let Some(owned) = program.node_srv_tab.get(shared.id()) else {
-        todo!()
-    };
-    *shared = owned.downgrade();
+    program.node_srv_tab.bind(shared);
     Ok(())
 }
 
 fn initialize_node_cli_shared(program: &Program, shared: &mut NodeCliShared) -> Result<(), Error> {
-    let Some(owned) = program.node_cli_tab.get(shared.id()) else {
-        todo!()
-    };
-    *shared = owned.downgrade();
+    program.node_cli_tab.bind(shared);
     Ok(())
 }
 
@@ -377,10 +344,7 @@ fn initialize_pubsub_link_shared(
     program: &Program,
     shared: &mut PubSubLinkShared,
 ) -> Result<(), Error> {
-    let Some(owned) = program.pubsub_link_tab.get(shared.id()) else {
-        todo!()
-    };
-    *shared = owned.downgrade();
+    program.pubsub_link_tab.bind(shared);
     Ok(())
 }
 
@@ -388,9 +352,6 @@ fn initialize_service_link_shared(
     program: &Program,
     shared: &mut ServiceLinkShared,
 ) -> Result<(), Error> {
-    let Some(owned) = program.service_link_tab.get(shared.id()) else {
-        todo!()
-    };
-    *shared = owned.downgrade();
+    program.service_link_tab.bind(shared);
     Ok(())
 }

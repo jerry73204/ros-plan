@@ -69,11 +69,11 @@ impl Program {
     }
 
     pub fn root_include(&self) -> IncludeShared {
-        self.include_tab.get(0).unwrap().downgrade()
+        self.include_tab.get(0).unwrap()
     }
 
     pub fn root_scope(&self) -> PlanScopeShared {
-        self.plan_tab.get(0).unwrap().downgrade()
+        self.plan_tab.get(0).unwrap()
     }
 
     pub fn absolute_selector(&self) -> AbsoluteSelector<'_> {
@@ -88,20 +88,20 @@ impl Program {
 impl Default for Program {
     fn default() -> Self {
         Self {
-            plan_tab: SharedTable::new("plan"),
-            group_tab: SharedTable::new("group"),
-            include_tab: SharedTable::new("include"),
-            node_tab: SharedTable::new("node"),
-            pubsub_link_tab: SharedTable::new("pubsub_link"),
-            service_link_tab: SharedTable::new("service_link"),
-            plan_pub_tab: SharedTable::new("plan_pub"),
-            plan_sub_tab: SharedTable::new("plan_sub"),
-            plan_srv_tab: SharedTable::new("plan_srv"),
-            plan_cli_tab: SharedTable::new("plan_cli"),
-            node_pub_tab: SharedTable::new("node_pub"),
-            node_sub_tab: SharedTable::new("node_sub"),
-            node_srv_tab: SharedTable::new("node_srv"),
-            node_cli_tab: SharedTable::new("node_cli"),
+            plan_tab: SharedTable::new("plan_tab"),
+            group_tab: SharedTable::new("group_tab"),
+            include_tab: SharedTable::new("include_tab"),
+            node_tab: SharedTable::new("node_tab"),
+            pubsub_link_tab: SharedTable::new("pubsub_link_tab"),
+            service_link_tab: SharedTable::new("service_link_tab"),
+            plan_pub_tab: SharedTable::new("plan_pub_tab"),
+            plan_sub_tab: SharedTable::new("plan_sub_tab"),
+            plan_srv_tab: SharedTable::new("plan_srv_tab"),
+            plan_cli_tab: SharedTable::new("plan_cli_tab"),
+            node_pub_tab: SharedTable::new("node_pub_tab"),
+            node_sub_tab: SharedTable::new("node_sub_tab"),
+            node_srv_tab: SharedTable::new("node_srv_tab"),
+            node_cli_tab: SharedTable::new("node_cli_tab"),
         }
     }
 }
