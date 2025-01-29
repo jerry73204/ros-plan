@@ -17,4 +17,4 @@ virtual = true
 dev-dependencies = []
 
 [tool.rye.workspace]
-members = ["launch2plan"]
+members = ["launch2dump"]

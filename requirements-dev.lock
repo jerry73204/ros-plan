@@ -9,13 +9,13 @@
 #   generate-hashes: false
 #   universal: false
 
--e file:launch2plan
+-e file:launch2dump
 lark==1.2.2
-    # via launch2plan
+    # via launch2dump
 packaging==24.2
-    # via launch2plan
+    # via launch2dump
 pyyaml==6.0.2
 ruamel-yaml==0.18.10
-    # via launch2plan
+    # via launch2dump
 ruamel-yaml-clib==0.2.12
     # via ruamel-yaml

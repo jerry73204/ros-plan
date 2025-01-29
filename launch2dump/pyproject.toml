@@ -1,5 +1,5 @@
 [project]
-name = "launch2plan"
+name = "launch2dump"
 version = "0.1.0"
 description = "Add your description here"
 authors = [
@@ -14,7 +14,7 @@ readme = "README.md"
 requires-python = ">= 3.8"
 
 [project.scripts]
-"launch2plan" = "launch2plan:main"
+"launch2dump" = "launch2dump:main"
 
 [build-system]
 requires = ["hatchling"]
