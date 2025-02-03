@@ -20,20 +20,20 @@ use std::{
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Program {
-    pub(crate) plan_tab: SharedTable<PlanScope>,
-    pub(crate) group_tab: SharedTable<GroupScope>,
-    pub(crate) include_tab: SharedTable<IncludeCtx>,
-    pub(crate) node_tab: SharedTable<NodeCtx>,
-    pub(crate) pubsub_link_tab: SharedTable<PubSubLinkCtx>,
-    pub(crate) service_link_tab: SharedTable<ServiceLinkCtx>,
-    pub(crate) plan_pub_tab: SharedTable<PlanPubCtx>,
-    pub(crate) plan_sub_tab: SharedTable<PlanSubCtx>,
-    pub(crate) plan_srv_tab: SharedTable<PlanSrvCtx>,
-    pub(crate) plan_cli_tab: SharedTable<PlanCliCtx>,
-    pub(crate) node_pub_tab: SharedTable<NodePubCtx>,
-    pub(crate) node_sub_tab: SharedTable<NodeSubCtx>,
-    pub(crate) node_srv_tab: SharedTable<NodeSrvCtx>,
-    pub(crate) node_cli_tab: SharedTable<NodeCliCtx>,
+    pub plan_tab: SharedTable<PlanScope>,
+    pub group_tab: SharedTable<GroupScope>,
+    pub include_tab: SharedTable<IncludeCtx>,
+    pub node_tab: SharedTable<NodeCtx>,
+    pub pubsub_link_tab: SharedTable<PubSubLinkCtx>,
+    pub service_link_tab: SharedTable<ServiceLinkCtx>,
+    pub plan_pub_tab: SharedTable<PlanPubCtx>,
+    pub plan_sub_tab: SharedTable<PlanSubCtx>,
+    pub plan_srv_tab: SharedTable<PlanSrvCtx>,
+    pub plan_cli_tab: SharedTable<PlanCliCtx>,
+    pub node_pub_tab: SharedTable<NodePubCtx>,
+    pub node_sub_tab: SharedTable<NodeSubCtx>,
+    pub node_srv_tab: SharedTable<NodeSrvCtx>,
+    pub node_cli_tab: SharedTable<NodeCliCtx>,
 }
 
 impl Program {

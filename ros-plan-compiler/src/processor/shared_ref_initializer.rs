@@ -248,9 +248,9 @@ fn update_service_link_context(program: &Program, link: &mut ServiceLinkCtx) -> 
 }
 
 fn update_plan_pub_context(program: &Program, socket: &mut PlanPubCtx) -> Result<(), Error> {
-    let PlanPubCtx { src, .. } = socket;
+    let PlanPubCtx { src_socket, .. } = socket;
 
-    for uri in src.iter_mut().flatten() {
+    for uri in src_socket.iter_mut().flatten() {
         initialize_node_pub_shared(program, uri)?;
     }
 
@@ -258,9 +258,9 @@ fn update_plan_pub_context(program: &Program, socket: &mut PlanPubCtx) -> Result
 }
 
 fn update_plan_sub_context(program: &Program, socket: &mut PlanSubCtx) -> Result<(), Error> {
-    let PlanSubCtx { dst, .. } = socket;
+    let PlanSubCtx { dst_socket, .. } = socket;
 
-    for uri in dst.iter_mut().flatten() {
+    for uri in dst_socket.iter_mut().flatten() {
         initialize_node_sub_shared(program, uri)?;
     }
 
@@ -268,9 +268,9 @@ fn update_plan_sub_context(program: &Program, socket: &mut PlanSubCtx) -> Result
 }
 
 fn update_plan_srv_context(program: &Program, socket: &mut PlanSrvCtx) -> Result<(), Error> {
-    let PlanSrvCtx { listen, .. } = socket;
+    let PlanSrvCtx { listen_socket, .. } = socket;
 
-    if let Some(uri) = listen {
+    if let Some(uri) = listen_socket {
         initialize_node_srv_shared(program, uri)?;
     }
 
@@ -278,9 +278,9 @@ fn update_plan_srv_context(program: &Program, socket: &mut PlanSrvCtx) -> Result
 }
 
 fn update_plan_cli_context(program: &Program, socket: &mut PlanCliCtx) -> Result<(), Error> {
-    let PlanCliCtx { connect, .. } = socket;
+    let PlanCliCtx { connect_socket, .. } = socket;
 
-    for uri in connect.iter_mut().flatten() {
+    for uri in connect_socket.iter_mut().flatten() {
         initialize_node_cli_shared(program, uri)?;
     }
 

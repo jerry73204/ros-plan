@@ -14,6 +14,10 @@ impl Expr {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    pub fn from_code(code: &str) -> Self {
+        Self(code.to_string())
+    }
 }
 
 impl AsRef<str> for Expr {

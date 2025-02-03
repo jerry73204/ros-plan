@@ -7,7 +7,7 @@ edition = "2021"
 by_address = "1.2.1"
 indexmap = { version = "2.7.0", features = ["serde"] }
 itertools = "0.13.0"
-mlua = { version = "0.10.2", features = ["luau"] }
+mlua.workspace = true
 parking_lot = "0.12.3"
 ros-plan-format = { version = "0.1.0", path = "../ros-plan-format" }
 serde.workspace = true

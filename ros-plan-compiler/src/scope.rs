@@ -1,7 +1,7 @@
 mod entity_enum;
 mod group;
 mod include;
-mod plan_file;
+mod plan;
 mod scope_enum;
 mod traits;
 
@@ -10,6 +10,6 @@ pub use group::{GroupScope, GroupScopeOwned, GroupScopeShared};
 pub use include::{
     IncludeCtx, IncludeLocation, IncludeOwned, IncludeShared, PathLocation, PkgFileLocation,
 };
-pub use plan_file::{PlanScope, PlanScopeOwned, PlanScopeShared};
+pub use plan::{PlanScope, PlanScopeOwned, PlanScopeShared};
 pub use scope_enum::{ScopeOwned, ScopeShared};
 pub use traits::{KeyKind, ScopeEntry, ScopeMut, ScopeMutExt, ScopeRef, ScopeRefExt};

@@ -11,3 +11,4 @@ members = [
 serde = { version = "1.0.217", features = ["derive"] }
 thiserror = "2.0.9"
 indexmap = { version = "2.7.0", features = ["serde"] }
+mlua = { version = "0.10.2", features = ["luau"] }

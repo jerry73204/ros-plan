@@ -107,33 +107,37 @@ impl From<PlanPubCtx> for PlanSocketCtx {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanPubCtx {
     pub key: KeyOwned,
+    #[serde(rename = "type")]
     pub ty: Option<InterfaceTypeOwned>,
     pub qos: Option<QosRequirement>,
     pub src_key: Vec<KeyStore>,
-    pub src: Option<Vec<NodePubShared>>,
+    pub src_socket: Option<Vec<NodePubShared>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanSubCtx {
     pub key: KeyOwned,
+    #[serde(rename = "type")]
     pub ty: Option<InterfaceTypeOwned>,
     pub qos: Option<QosRequirement>,
     pub dst_key: Vec<KeyStore>,
-    pub dst: Option<Vec<NodeSubShared>>,
+    pub dst_socket: Option<Vec<NodeSubShared>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanSrvCtx {
     pub key: KeyOwned,
+    #[serde(rename = "type")]
     pub ty: Option<InterfaceTypeOwned>,
     pub listen_key: KeyStore,
-    pub listen: Option<NodeSrvShared>,
+    pub listen_socket: Option<NodeSrvShared>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanCliCtx {
     pub key: KeyOwned,
+    #[serde(rename = "type")]
     pub ty: Option<InterfaceTypeOwned>,
     pub connect_key: Vec<KeyStore>,
-    pub connect: Option<Vec<NodeCliShared>>,
+    pub connect_socket: Option<Vec<NodeCliShared>>,
 }

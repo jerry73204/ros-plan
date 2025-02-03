@@ -182,7 +182,7 @@ impl<'a> Visitor<'a> {
                 bail!(bad_key, "the key does not resolve to a publication socket");
             }
         };
-        set_or_panic!(pub_.src, src);
+        set_or_panic!(pub_.src_socket, src);
         Ok(())
     }
 
@@ -206,7 +206,7 @@ impl<'a> Visitor<'a> {
                 bail!(bad_key, "the key does not resolve to a publication socket");
             }
         };
-        set_or_panic!(sub.dst, dst);
+        set_or_panic!(sub.dst_socket, dst);
         Ok(())
     }
 
@@ -222,7 +222,7 @@ impl<'a> Visitor<'a> {
             bail!(socket_key, "the key does not resolve to a server socket");
         };
 
-        set_or_panic!(srv.listen, listen);
+        set_or_panic!(srv.listen_socket, listen);
         Ok(())
     }
 
@@ -247,7 +247,7 @@ impl<'a> Visitor<'a> {
             }
         };
 
-        set_or_panic!(cli.connect, connect);
+        set_or_panic!(cli.connect_socket, connect);
         Ok(())
     }
 }

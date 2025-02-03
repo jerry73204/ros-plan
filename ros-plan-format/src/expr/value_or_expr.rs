@@ -81,6 +81,54 @@ impl ValueOrExpr {
     }
 }
 
+impl From<bool> for ValueOrExpr {
+    fn from(value: bool) -> Self {
+        Value::from(value).into()
+    }
+}
+
+impl From<i64> for ValueOrExpr {
+    fn from(value: i64) -> Self {
+        Value::from(value).into()
+    }
+}
+
+impl From<f64> for ValueOrExpr {
+    fn from(value: f64) -> Self {
+        Value::from(value).into()
+    }
+}
+
+impl From<String> for ValueOrExpr {
+    fn from(value: String) -> Self {
+        Value::from(value).into()
+    }
+}
+
+impl From<Vec<bool>> for ValueOrExpr {
+    fn from(vec: Vec<bool>) -> Self {
+        Value::from(vec).into()
+    }
+}
+
+impl From<Vec<i64>> for ValueOrExpr {
+    fn from(vec: Vec<i64>) -> Self {
+        Value::from(vec).into()
+    }
+}
+
+impl From<Vec<f64>> for ValueOrExpr {
+    fn from(vec: Vec<f64>) -> Self {
+        Value::from(vec).into()
+    }
+}
+
+impl From<Vec<String>> for ValueOrExpr {
+    fn from(vec: Vec<String>) -> Self {
+        Value::from(vec).into()
+    }
+}
+
 impl From<Value> for ValueOrExpr {
     fn from(v: Value) -> Self {
         Self::Value(v)

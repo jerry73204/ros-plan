@@ -179,7 +179,7 @@ pub fn to_socket_context(key: KeyOwned, socket_ctx: PlanSocketCfg) -> PlanSocket
                 ty: config.ty,
                 qos: config.qos,
                 src_key,
-                src: None,
+                src_socket: None,
             }
             .into()
         }
@@ -190,7 +190,7 @@ pub fn to_socket_context(key: KeyOwned, socket_ctx: PlanSocketCfg) -> PlanSocket
                 ty: config.ty,
                 qos: config.qos,
                 dst_key,
-                dst: None,
+                dst_socket: None,
             }
             .into()
         }
@@ -200,7 +200,7 @@ pub fn to_socket_context(key: KeyOwned, socket_ctx: PlanSocketCfg) -> PlanSocket
                 key,
                 ty: config.ty,
                 listen_key,
-                listen: None,
+                listen_socket: None,
             }
             .into()
         }
@@ -211,7 +211,7 @@ pub fn to_socket_context(key: KeyOwned, socket_ctx: PlanSocketCfg) -> PlanSocket
                 key,
                 ty: config.ty,
                 connect_key,
-                connect: None,
+                connect_socket: None,
             }
             .into()
         }

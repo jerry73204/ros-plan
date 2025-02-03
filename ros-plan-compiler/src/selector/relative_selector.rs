@@ -221,7 +221,9 @@ impl PlanOrNodePub {
     pub fn to_node_pub(&self) -> Option<Vec<NodePubShared>> {
         Some(match self {
             PlanOrNodePub::Node(node_pub) => vec![node_pub.clone()],
-            PlanOrNodePub::Plan(plan_pub) => plan_pub.with_read(|plan_pub| plan_pub.src.clone())?,
+            PlanOrNodePub::Plan(plan_pub) => {
+                plan_pub.with_read(|plan_pub| plan_pub.src_socket.clone())?
+            }
         })
     }
 }
@@ -248,7 +250,9 @@ impl PlanOrNodeSub {
     pub fn to_node_sub(&self) -> Option<Vec<NodeSubShared>> {
         Some(match self {
             PlanOrNodeSub::Node(node_sub) => vec![node_sub.clone()],
-            PlanOrNodeSub::Plan(plan_pub) => plan_pub.with_read(|plan_pub| plan_pub.dst.clone())?,
+            PlanOrNodeSub::Plan(plan_pub) => {
+                plan_pub.with_read(|plan_pub| plan_pub.dst_socket.clone())?
+            }
         })
     }
 }
@@ -276,7 +280,7 @@ impl PlanOrNodeSrv {
         Some(match self {
             PlanOrNodeSrv::Node(node_srv) => node_srv.clone(),
             PlanOrNodeSrv::Plan(plan_pub) => {
-                plan_pub.with_read(|plan_pub| plan_pub.listen.clone())?
+                plan_pub.with_read(|plan_pub| plan_pub.listen_socket.clone())?
             }
         })
     }
@@ -305,7 +309,7 @@ impl PlanOrNodeCli {
         Some(match self {
             PlanOrNodeCli::Node(node_cli) => vec![node_cli.clone()],
             PlanOrNodeCli::Plan(plan_pub) => {
-                plan_pub.with_read(|plan_pub| plan_pub.connect.clone())?
+                plan_pub.with_read(|plan_pub| plan_pub.connect_socket.clone())?
             }
         })
     }

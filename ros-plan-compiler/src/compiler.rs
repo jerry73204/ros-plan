@@ -1,8 +1,3 @@
-use std::{collections::VecDeque, marker::PhantomData, path::Path};
-
-use indexmap::IndexMap;
-use ros_plan_format::{expr::Value, parameter::ParamName};
-
 use crate::{
     error::Error,
     eval::ValueStore,
@@ -12,6 +7,9 @@ use crate::{
     },
     Program,
 };
+use indexmap::IndexMap;
+use ros_plan_format::{expr::Value, parameter::ParamName};
+use std::{collections::VecDeque, marker::PhantomData, path::Path};
 
 #[derive(Debug)]
 pub struct Compiler {
@@ -45,11 +43,11 @@ impl Compiler {
                 .collect();
         });
 
-        let mut deferred_includes: VecDeque<_> = [root_include].into();
+        let mut queue: VecDeque<_> = [root_include].into();
 
-        while let Some(include) = deferred_includes.pop_front() {
+        while let Some(include) = queue.pop_front() {
             let deferred = builder.expand_include(&mut program, include.clone())?;
-            deferred_includes.extend(deferred);
+            queue.extend(deferred);
             evaluator.eval(&mut program, include)?;
         }
 
