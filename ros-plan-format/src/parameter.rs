@@ -1,4 +1,5 @@
 use crate::error::ParseParamDefError;
+use pomsky_macro::pomsky;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -8,7 +9,10 @@ use std::{
 };
 
 pub static RE_PARAM_NAME: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new("^[[:alpha:]]([[:alnum:]]|-|_)*$").expect("invalid regex for parameter name")
+    let rule = pomsky! {
+        ^ [ascii_word '.' '/']* $
+    };
+    Regex::new(rule).expect("invalid regex for parameter name")
 });
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
