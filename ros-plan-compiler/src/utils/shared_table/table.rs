@@ -84,6 +84,16 @@ impl<T> SharedTable<T> {
         );
         *inner_weak = Some(Arc::downgrade(&self.inner));
     }
+
+    pub fn with_iter<R, F>(&self, mut f: F) -> R
+    where
+        F: FnMut(
+            stable_vec::iter::Iter<'_, ArcRwLock<T>, stable_vec::core::DefaultCore<ArcRwLock<T>>>,
+        ) -> R,
+    {
+        let guard = self.inner.table.read();
+        f(guard.iter())
+    }
 }
 
 impl<T> Serialize for SharedTable<T>

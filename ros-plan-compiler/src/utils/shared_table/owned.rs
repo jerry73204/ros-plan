@@ -24,6 +24,22 @@ impl<T> Owned<T> {
         self.entry_arc.write()
     }
 
+    pub fn with_read<R, F>(&self, f: F) -> R
+    where
+        F: FnOnce(&T) -> R,
+    {
+        let guard = self.entry_arc.read();
+        f(&guard)
+    }
+
+    pub fn with_write<R, F>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut T) -> R,
+    {
+        let mut guard = self.entry_arc.write();
+        f(&mut guard)
+    }
+
     pub fn downgrade(&self) -> Shared<T> {
         Shared {
             id: self.id,

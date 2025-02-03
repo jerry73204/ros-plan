@@ -45,6 +45,22 @@ impl<T> ArcRwLock<T> {
     pub fn as_ptr(&self) -> *const RwLock<T> {
         Arc::as_ptr(&self.ref_)
     }
+
+    pub fn with_read<R, F>(&self, f: F) -> R
+    where
+        F: FnOnce(&T) -> R,
+    {
+        let guard = self.ref_.read();
+        f(&guard)
+    }
+
+    pub fn with_write<R, F>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut T) -> R,
+    {
+        let mut guard = self.ref_.write();
+        f(&mut guard)
+    }
 }
 
 impl<T> Clone for ArcRwLock<T> {
@@ -71,8 +87,7 @@ where
     where
         S: Serializer,
     {
-        let guard = self.read();
-        guard.serialize(serializer)
+        self.with_read(|guard| guard.serialize(serializer))
         // let addr = Arc::as_ptr(&self.ref_) as usize;
         // let addr_text = format!("arc@{addr:x}");
 
