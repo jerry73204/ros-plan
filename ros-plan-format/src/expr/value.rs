@@ -5,7 +5,10 @@ use crate::{
 };
 use base64::prelude::{BASE64_STANDARD, *};
 use serde::{Deserialize, Serialize};
-use std::fmt::{self, Debug, Display};
+use std::{
+    fmt::{self, Debug, Display},
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Value {
@@ -23,6 +26,9 @@ pub enum Value {
 
     #[serde(rename = "key")]
     Key(KeyOwned),
+
+    #[serde(rename = "path")]
+    Path(PathBuf),
 
     #[serde(rename = "bool_list")]
     BoolList(Vec<bool>),
@@ -48,6 +54,7 @@ impl Display for Value {
             Value::F64(val) => Debug::fmt(val, f),
             Value::String(val) => Debug::fmt(val, f),
             Value::Key(val) => Debug::fmt(val, f),
+            Value::Path(val) => Debug::fmt(val, f),
             Value::BoolList(vec) => Debug::fmt(vec, f),
             Value::I64List(vec) => Debug::fmt(vec, f),
             Value::F64List(vec) => Debug::fmt(vec, f),
@@ -114,6 +121,12 @@ impl From<bool> for Value {
 impl From<KeyOwned> for Value {
     fn from(v: KeyOwned) -> Self {
         Self::Key(v)
+    }
+}
+
+impl From<PathBuf> for Value {
+    fn from(v: PathBuf) -> Self {
+        Self::Path(v)
     }
 }
 
@@ -214,6 +227,7 @@ impl Value {
             Value::F64(_) => ValueType::F64,
             Value::String(_) => ValueType::String,
             Value::Key(_) => ValueType::Key,
+            Value::Path(_) => ValueType::Path,
             Value::BoolList(_) => ValueType::BoolList,
             Value::Binary { .. } => ValueType::Binary,
             Value::I64List(_) => ValueType::I64List,
@@ -256,6 +270,14 @@ impl Value {
 
     pub fn as_key(&self) -> Option<&Key> {
         if let Self::Key(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_path(&self) -> Option<&Path> {
+        if let Self::Path(v) = self {
             Some(v)
         } else {
             None
@@ -328,6 +350,11 @@ impl Value {
     }
 
     #[must_use]
+    pub fn is_path(&self) -> bool {
+        matches!(self, Self::Path(..))
+    }
+
+    #[must_use]
     pub fn is_bool_list(&self) -> bool {
         matches!(self, Self::BoolList(..))
     }
@@ -362,6 +389,14 @@ impl Value {
 
     pub fn try_into_key(self) -> Result<KeyOwned, Self> {
         if let Self::Key(v) = self {
+            Ok(v)
+        } else {
+            Err(self)
+        }
+    }
+
+    pub fn try_into_path(self) -> Result<PathBuf, Self> {
+        if let Self::Path(v) = self {
             Ok(v)
         } else {
             Err(self)
