@@ -2,13 +2,11 @@ use super::PlanScopeShared;
 use crate::{
     error::Error,
     eval::{BoolStore, TextStore, ValueStore},
-    utils::{
-        find_pkg_dir,
-        shared_table::{Owned, Shared},
-    },
+    utils::shared_table::{Owned, Shared},
 };
 use indexmap::IndexMap;
 use ros_plan_format::{key::KeyOwned, parameter::ParamName};
+use ros_utils::find_pkg_dir;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 

@@ -10,6 +10,7 @@ itertools = "0.13.0"
 mlua.workspace = true
 parking_lot = "0.12.3"
 ros-plan-format = { version = "0.1.0", path = "../ros-plan-format" }
+ros-utils = { version = "0.1.0", path = "../ros-utils" }
 serde.workspace = true
 serde_yaml = "0.9.34"
 stable-vec = "0.4.1"

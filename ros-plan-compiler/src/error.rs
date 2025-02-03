@@ -1,4 +1,5 @@
 use ros_plan_format::{expr::ValueType, key::KeyOwned, parameter::ParamName};
+use ros_utils::PackageResolutionError;
 use std::{io, path::PathBuf};
 
 #[derive(Debug, thiserror::Error)]
@@ -33,8 +34,8 @@ pub enum Error {
     #[error("invalid subplan name `{key}`: {reason}")]
     InvalidSubplanName { key: KeyOwned, reason: String },
 
-    #[error("unable to resolve directory for package `{pkg}`: {message}")]
-    PackageResolutionError { pkg: String, message: String },
+    #[error("{0}")]
+    PackageResolutionError(#[from] PackageResolutionError),
 
     #[error("unable to resolve plan file `{file}` in package `{pkg}`: {message}")]
     PlanFileResolutionError {

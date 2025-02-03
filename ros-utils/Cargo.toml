@@ -1,0 +1,12 @@
+[package]
+name = "ros-utils"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+indexmap.workspace = true
+itertools = "0.14.0"
+ros-plan-format = { version = "0.1.0", path = "../ros-plan-format" }
+serde.workspace = true
+shell-quote = "0.7.2"
+thiserror.workspace = true

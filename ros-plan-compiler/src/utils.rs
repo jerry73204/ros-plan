@@ -4,13 +4,7 @@ pub mod shared_table;
 
 use crate::error::Error;
 use serde::Deserialize;
-use std::{
-    ffi::OsString,
-    fs,
-    os::unix::ffi::OsStringExt,
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::{fs, path::Path};
 
 pub fn read_yaml_file<T, P>(path: P) -> Result<T, Error>
 where
@@ -27,33 +21,4 @@ where
         error,
     })?;
     Ok(data)
-}
-
-pub fn find_pkg_dir(pkg: &str) -> Result<PathBuf, Error> {
-    let output = match Command::new("ros2").args(["pkg", "prefix", pkg]).output() {
-        Ok(path) => path,
-        Err(err) => {
-            return Err(Error::PackageResolutionError {
-                pkg: pkg.to_string(),
-                message: format!("{err}"),
-            })
-        }
-    };
-
-    if !output.status.success() {
-        let err = String::from_utf8_lossy(&output.stderr);
-        return Err(Error::PackageResolutionError {
-            pkg: pkg.to_string(),
-            message: format!("Command `ros2 prefix {pkg}` failed with message: {err}"),
-        });
-    }
-
-    // TODO: This line only works on UNIX.
-    let pkg_dir: PathBuf = {
-        let mut out = output.stdout;
-        assert_eq!(out.pop(), Some(b'\n'));
-        OsString::from_vec(out.to_vec()).into()
-    };
-
-    Ok(pkg_dir)
 }

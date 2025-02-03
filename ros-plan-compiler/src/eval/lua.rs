@@ -4,8 +4,9 @@ mod value_to_lua;
 pub use value_from_lua::ValueFromLua;
 pub use value_to_lua::ValueToLua;
 
-use crate::{error::Error, utils::find_pkg_dir};
+use crate::error::Error;
 use mlua::prelude::*;
+use ros_utils::find_pkg_dir;
 
 pub fn add_function<A, R, F>(lua: &Lua, fn_name: &str, f: F) -> LuaResult<()>
 where

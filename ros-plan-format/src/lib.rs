@@ -8,6 +8,7 @@ pub mod link;
 pub mod node;
 pub mod node_socket;
 pub mod parameter;
+pub mod params_file;
 pub mod plan;
 pub mod plan_socket;
 pub mod qos;

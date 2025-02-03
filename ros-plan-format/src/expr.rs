@@ -1,7 +1,8 @@
 mod binary;
 mod bool_expr;
 mod expr_;
-pub mod key_or_expr;
+mod key_or_expr;
+mod path_or_expr;
 mod text_or_expr;
 mod value;
 mod value_or_expr;
@@ -11,6 +12,7 @@ pub use binary::Base64String;
 pub use bool_expr::BoolExpr;
 pub use expr_::Expr;
 pub use key_or_expr::KeyOrExpr;
+pub use path_or_expr::PathOrExpr;
 pub use text_or_expr::TextOrExpr;
 pub use value::Value;
 pub use value_or_expr::ValueOrExpr;

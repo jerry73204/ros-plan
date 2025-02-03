@@ -5,6 +5,7 @@ members = [
   "ros-plan-compiler",
   "ros2plan",
   "dump2plan",
+  "ros-utils",
 ]
 
 [workspace.dependencies]
