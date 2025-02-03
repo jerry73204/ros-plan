@@ -1,0 +1,9 @@
+socket:
+  input: !sub
+    type: sensor_msgs/msg/Image
+    dst: [image_processor/input]
+
+node:
+  image_processor:
+    socket:
+      input: !sub

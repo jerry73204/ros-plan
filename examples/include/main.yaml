@@ -1,0 +1,24 @@
+arg:
+  fps:
+    default: !i64 30
+  width:
+    default: !i64 800
+  height:
+    default: !i64 600
+
+include:
+  driver: !file
+    path: driver.yaml
+    arg:
+      fps: !i64 $ fps $
+      width: !i64 $ width $
+      height: !i64 $ height $
+      
+  processor: !file
+    path: processor.yaml
+
+link:
+  image_link: !pubsub
+    type: sensor_msgs/msg/Image
+    src: [driver/output]
+    dst: [processor/input]

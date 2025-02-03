@@ -1,0 +1,38 @@
+arg:
+  age:
+    type: "i64"
+    default: !i64 $3$
+    
+  height:
+    default: !key /a/a
+
+var:
+  a: !str_list $ {"a", "b", "c"} $
+  b: !f64 $ 3/2 $
+  c: !f64 $ b / 2 $
+  d: !i64 $ 1 + 2 $
+  e: !i64 $ d / 3 $
+  f: !i64 $ age / 3 $
+
+node:
+  talker:
+    pkg: $ "a" .. b $
+    exec: talker
+    param:
+      freq: !i64 $e$
+    socket:
+      output: !pub
+
+  listener:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        
+link:
+  chatter: !pubsub
+    type: a/msg/Msg
+    src:
+      - talker/output
+    dst:
+      - listener/input

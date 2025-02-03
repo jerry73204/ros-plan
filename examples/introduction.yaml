@@ -1,0 +1,18 @@
+node:
+  talker:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      output: !pub
+  listener:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+link:
+  chatter: !pubsub
+    type: a/msg/Msg
+    src:
+      - "talker/output"
+    dst:
+      - "listener/input"

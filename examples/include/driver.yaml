@@ -1,0 +1,17 @@
+arg:
+  fps:
+    type: i64
+  width:
+    type: i64
+  height:
+    type: i64
+
+socket:
+  output: !pub
+    type: sensor_msgs/msg/Image
+    src: [camera_driver/output]
+
+node:
+  camera_driver:
+    socket:
+      output: !pub
