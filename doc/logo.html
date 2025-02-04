@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script type="text/javascript" src="paper-full.min.js"></script>
+
+        <script type="text/javascript">
+         paper.install(window);
+         
+         var downloadAsSVG = function (fileName) {
+             if(!fileName) {
+                 fileName = "paperjs_example.svg"
+             }
+             var url = "data:image/svg+xml;utf8," + encodeURIComponent(paper.project.exportSVG({asString:true}));
+             var link = document.createElement("a");
+             link.download = fileName;
+             link.href = url;
+             link.click();
+         }
+         
+         var t;
+         window.onload = function() {
+             // Setup directly from canvas id:
+             /* paper.setup('myCanvas');      
+              * paper.view.update(); */
+             t = new Tool();
+             
+             //Listen for SHIFT-P to save content as SVG file.
+             t.onKeyUp = function(event) {
+                 if(event.character == "P") {
+                     downloadAsSVG();
+                 }
+             }
+         }
+        </script>
+        
+        <script type="text/paperscript" canvas="myCanvas">
+         var CENTER_X = 40;
+         var CENTER_Y = 40;
+         var RADIUS1 = 32;
+         var RADIUS2 = 26;
+         var RADIUS3 = 18;
+         var RADIUS4 = 5;
+         var CENTER = new Point(CENTER_X, CENTER_Y);
+         
+         function hexagon_points(radius) {
+             var points = [];
+             
+             for (var step = 0; step < 6; step += 1) {
+                 var angle = (step / 3 + 1 / 6) * Math.PI;
+                 var x = CENTER_X + radius * Math.cos(angle);
+                 var y = CENTER_Y + radius * Math.sin(angle);
+                 points.push(new Point(x, y));
+             }
+             
+             return points;
+         }
+         
+	 var path = new Path();
+	 path.fillColor = 'black';
+         path.closed = true;
+         
+         var poly1 = new Path.RegularPolygon(CENTER, 6, RADIUS1);
+         poly1.fillColor = '#ffffff';
+         
+         var poly2 = new Path.RegularPolygon(CENTER, 6, RADIUS1);
+         poly2.strokeColor = '#000000';
+         poly2.strokeWidth = 1;
+         
+         var poly3 = new Path.RegularPolygon(CENTER, 6, RADIUS2);
+         poly3.fillColor = '#dddddd';
+         
+         var poly4 = new Path.RegularPolygon(CENTER, 6, RADIUS2);
+         poly4.strokeColor = '#000000';
+         poly4.strokeWidth = 1;
+
+         {
+             var points = hexagon_points(RADIUS3);
+             
+             for (var ix in points) {
+                 var pt = points[ix];
+	         var line = new Path();
+	         line.strokeColor = 'black';
+	         line.strokeWidth = 4;
+                 line.add(CENTER);
+                 line.add(pt);
+             }
+
+             for (var ix in points) {
+                 var pt1 = points[ix];
+                 var pt2 = points[(ix + 1) % 6];
+	         var line = new Path();
+	         line.strokeColor = 'black';
+	         line.strokeWidth = 3;
+                 line.add(pt1);
+                 line.add(pt2);
+             }
+
+             
+             for (var ix in points) {
+                 var pt = points[ix];
+	         var line = new Path();
+	         line.strokeColor = 'white';
+	         line.strokeWidth = 1;
+                 line.add(CENTER);
+                 line.add(pt);
+             }
+             
+             for (var ix in points) {
+                 var pt = points[ix];
+                 var circle = new Path.Circle(pt, 4);
+                 circle.fillColor = 'white';
+                 circle.strokeColor = 'black';
+                 circle.strokeWidth = 2;
+             }
+         }
+         
+         var poly5 = new Path.RegularPolygon(CENTER, 6, RADIUS4);
+         poly5.fillColor = '#ffffff';
+         poly5.strokeColor = '#000000';
+         poly5.strokeWidth = 2;
+
+         var text = new PointText(new Point(CENTER_X - 20, CENTER_Y + 50));
+         text.justification = 'center';
+         text.fillColor = 'black';
+         text.fontFamily = 'sans-serif';
+         text.fontWeight = 600;
+         text.fontSize = 15;
+         text.content = 'ROS';
+
+         var text2 = new PointText(new Point(CENTER_X + 20, CENTER_Y + 50));
+         text2.justification = 'center';
+         text2.fillColor = 'black';
+         text2.fontFamily = 'sans-serif';
+         text2.fontWeight = 900;
+         text2.fontSize = 15;
+         text2.content = 'PLAN';
+        </script>
+    </head>
+    <body>
+	<canvas id="myCanvas" resize></canvas>
+    </body>
+</html>
