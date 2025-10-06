@@ -1,0 +1,24 @@
+# F16: Test referencing a non-existent socket
+# Should fail with KeyResolutionError
+
+node:
+  sensor:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      data: !pub
+        type: std_msgs/msg/String
+
+  processor:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+
+link:
+  bad_socket: !pubsub
+    type: std_msgs/msg/String
+    # 'output' socket doesn't exist on sensor node
+    src: [sensor/output]
+    dst: [processor/input]

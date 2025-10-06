@@ -188,9 +188,11 @@ impl ProgramBuilder {
                         .collect();
 
                     IncludeCtx {
-                        key: child_prefix,
+                        key: child_prefix.clone(),
+                        namespace: Some(child_prefix.as_str().to_string()), // Namespace = include path
                         location,
                         when: child_cfg.when.map(BoolStore::new),
+                        transparent: child_cfg.transparent,
                         assign_arg: arg_assign,
                         plan: None,
                     }
@@ -252,11 +254,13 @@ fn create_root_include(program: &mut Program, plan_path: &Path) -> Result<Includ
 
     let include_ctx = IncludeCtx {
         key: KeyOwned::new_root(),
+        namespace: Some("/".to_string()), // Root namespace
         location: IncludeLocation::Path(PathLocation {
             parent_dir: cwd,
             path: plan_path.to_path_buf(),
         }),
         when: None,
+        transparent: None, // Root include has no transparency
         assign_arg: IndexMap::new(),
         plan: None,
     };

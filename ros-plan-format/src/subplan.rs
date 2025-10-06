@@ -16,6 +16,7 @@ pub struct IncludeCfg {
     pub pkg: Option<TextOrExpr>,
     pub file: Option<TextOrExpr>,
     pub path: Option<PathBuf>,
+    pub transparent: Option<bool>,
 
     #[serde(default)]
     pub arg: IndexMap<ParamName, ValueOrExpr>,
@@ -37,4 +38,70 @@ pub struct GroupCfg {
 
     #[serde(default)]
     pub group: IndexMap<RelativeKeyOwned, GroupCfg>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_include_with_transparent_true() {
+        let yaml = r#"
+path: subplan.yaml
+transparent: true
+"#;
+        let result: Result<IncludeCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert_eq!(cfg.transparent, Some(true));
+    }
+
+    #[test]
+    fn parse_include_with_transparent_false() {
+        let yaml = r#"
+path: subplan.yaml
+transparent: false
+"#;
+        let result: Result<IncludeCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert_eq!(cfg.transparent, Some(false));
+    }
+
+    #[test]
+    fn parse_include_without_transparent() {
+        let yaml = r#"
+path: subplan.yaml
+"#;
+        let result: Result<IncludeCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert_eq!(cfg.transparent, None);
+    }
+
+    #[test]
+    fn parse_include_with_all_fields() {
+        let yaml = r#"
+path: subplan.yaml
+transparent: true
+arg:
+  param1: !i64 42
+"#;
+        let result: Result<IncludeCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert_eq!(cfg.transparent, Some(true));
+        assert_eq!(cfg.arg.len(), 1);
+    }
+
+    #[test]
+    fn include_roundtrip_serialization() {
+        let yaml = r#"path: test.yaml
+transparent: true
+"#;
+        let cfg: IncludeCfg = serde_yaml::from_str(yaml).unwrap();
+        let serialized = serde_yaml::to_string(&cfg).unwrap();
+        let deserialized: IncludeCfg = serde_yaml::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.transparent, Some(true));
+    }
 }

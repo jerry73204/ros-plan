@@ -47,6 +47,14 @@ impl Key {
         !self.0.contains('/')
     }
 
+    pub fn segment_count(&self) -> usize {
+        if self.is_root() || self.is_private_root() {
+            0
+        } else {
+            self.0.matches('/').count() + 1
+        }
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }

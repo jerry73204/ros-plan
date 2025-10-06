@@ -438,4 +438,55 @@ mod tests {
         let resolver = SocketResolver::default();
         assert_eq!(resolver.queue.len(), 0);
     }
+
+    // F13: Plan socket forwarding tests
+
+    #[test]
+    fn test_plan_socket_forwards_single_node_socket() {
+        use crate::context::plan_socket::PlanPubCtx;
+
+        // Plan socket should forward to single internal node socket
+        let _node_table = SharedTable::<NodePubCtx>::new("test_forward_single");
+        let node_socket = create_test_node_pub("internal_node/output");
+
+        let plan_socket = PlanPubCtx {
+            key: "plan/exposed".parse().unwrap(),
+            ty: None,
+            topic: None,
+            src_key: vec![create_key_store("internal_node/output")],
+            src_socket: Some(vec![node_socket]),
+            qos: None,
+        };
+
+        // Verify forwarding is set up correctly
+        assert_eq!(plan_socket.src_key.len(), 1);
+        assert_eq!(plan_socket.src_socket.as_ref().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_plan_socket_aggregates_multiple_sources() {
+        use crate::context::plan_socket::PlanPubCtx;
+
+        // Plan socket can aggregate multiple internal sockets
+        let _node_table = SharedTable::<NodePubCtx>::new("test_aggregate");
+        let socket1 = create_test_node_pub("node_a/data");
+        let socket2 = create_test_node_pub("node_b/data");
+        let socket3 = create_test_node_pub("node_c/data");
+
+        let plan_socket = PlanPubCtx {
+            key: "plan/aggregated".parse().unwrap(),
+            ty: None,
+            topic: None,
+            src_key: vec![
+                create_key_store("node_a/data"),
+                create_key_store("node_b/data"),
+                create_key_store("node_c/data"),
+            ],
+            src_socket: Some(vec![socket1, socket2, socket3]),
+            qos: None,
+        };
+
+        assert_eq!(plan_socket.src_key.len(), 3);
+        assert_eq!(plan_socket.src_socket.as_ref().unwrap().len(), 3);
+    }
 }

@@ -1,0 +1,17 @@
+# F16: Test referencing a non-existent entity (node or plan)
+# Should fail with KeyResolutionError
+
+node:
+  processor:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+
+link:
+  bad_entity: !pubsub
+    type: std_msgs/msg/String
+    # 'nonexistent' entity doesn't exist
+    src: [nonexistent/data]
+    dst: [processor/input]

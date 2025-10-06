@@ -50,6 +50,19 @@ pub enum Error {
     #[error("link `{link}` has {source_count} sources but no explicit 'topic' attribute\n  Links with multiple sources must specify a topic name.\n\n  Suggestion: Add a topic field like:\n    link:\n      {link}: !pubsub\n        topic: /shared_topic  # Add this\n        src: [...]\n        dst: [...]")]
     MultipleSourcesRequireExplicitTopic { link: KeyOwned, source_count: usize },
 
+    #[error("cannot reference '{key}' - socket references can only be 2 levels deep: 'entity/socket'\n  {hint}")]
+    SocketReferenceTooDeep { key: KeyOwned, hint: String },
+
+    #[error("entity '{entity}' not found\n  Available entities: {available}")]
+    EntityNotFound { entity: String, available: String },
+
+    #[error("socket '{socket}' not found on entity '{entity}'\n  Available sockets: {available}")]
+    SocketNotFound {
+        entity: String,
+        socket: String,
+        available: String,
+    },
+
     #[error("the argument `{name}` is required but is not assigned")]
     RequiredArgumentNotAssigned { name: ParamName },
 

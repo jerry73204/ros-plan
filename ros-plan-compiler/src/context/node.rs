@@ -13,6 +13,7 @@ pub type NodeShared = Shared<NodeCtx>;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeCtx {
     pub key: KeyOwned,
+    pub namespace: Option<String>,
     pub pkg: Option<TextStore>,
     pub exec: Option<TextStore>,
     pub plugin: Option<TextStore>,

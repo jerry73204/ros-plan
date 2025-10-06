@@ -16,8 +16,10 @@ pub type IncludeShared = Shared<IncludeCtx>;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IncludeCtx {
     pub key: KeyOwned,
+    pub namespace: Option<String>,
     pub location: IncludeLocation,
     pub when: Option<BoolStore>,
+    pub transparent: Option<bool>,
     pub assign_arg: IndexMap<ParamName, ValueStore>,
     pub plan: Option<PlanScopeShared>,
 }

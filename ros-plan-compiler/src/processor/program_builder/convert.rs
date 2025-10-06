@@ -308,7 +308,8 @@ pub fn to_node_context(program: &mut Program, node_key: KeyOwned, node_cfg: Node
     }
 
     NodeCtx {
-        key: node_key,
+        key: node_key.clone(),
+        namespace: Some(node_key.as_str().to_string()), // Namespace = full key path
         pkg: node_cfg.pkg.map(TextStore::new),
         exec: node_cfg.exec.map(TextStore::new),
         plugin: node_cfg.plugin.map(TextStore::new),

@@ -1,0 +1,18 @@
+# F11: Test socket reference that's too deep (3+ levels)
+# Should fail with SocketReferenceTooDeep error
+
+node:
+  processor:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+
+link:
+  invalid_deep: !pubsub
+    type: std_msgs/msg/String
+    # This reference is 3 levels deep: subplan/camera/output
+    # Should trigger validation error
+    src: [subplan/camera/output]
+    dst: [processor/input]
