@@ -16,3 +16,6 @@ serde_yaml = "0.9.34"
 stable-vec = "0.4.1"
 thiserror.workspace = true
 toml = { version = "0.8.19", features = ["indexmap"] }
+
+[dev-dependencies]
+eyre = "0.6.12"

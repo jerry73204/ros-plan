@@ -447,6 +447,7 @@ name = "ros-plan-compiler"
 version = "0.1.0"
 dependencies = [
  "by_address",
+ "eyre",
  "indexmap",
  "itertools 0.13.0",
  "mlua",
@@ -482,6 +483,7 @@ dependencies = [
 name = "ros-utils"
 version = "0.1.0"
 dependencies = [
+ "eyre",
  "indexmap",
  "itertools 0.14.0",
  "ros-plan-format",
