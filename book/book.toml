@@ -1,0 +1,5 @@
+[book]
+authors = ["aeon"]
+language = "en"
+src = "src"
+title = "ros2plan Developer Guide"
