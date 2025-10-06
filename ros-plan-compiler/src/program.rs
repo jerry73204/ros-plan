@@ -121,3 +121,101 @@ impl FromStr for Program {
         Ok(program)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn program_default_creates_instance() {
+        let program = Program::default();
+        // Verify tables exist by checking they can iterate (even if empty)
+        program
+            .plan_tab
+            .with_iter(|iter| assert_eq!(iter.count(), 0));
+        program
+            .group_tab
+            .with_iter(|iter| assert_eq!(iter.count(), 0));
+        program
+            .include_tab
+            .with_iter(|iter| assert_eq!(iter.count(), 0));
+        program
+            .node_tab
+            .with_iter(|iter| assert_eq!(iter.count(), 0));
+    }
+
+    #[test]
+    fn program_to_string_produces_yaml() {
+        let program = Program::default();
+        let yaml = program.to_string();
+        assert!(yaml.contains("plan_tab"));
+        assert!(yaml.contains("node_tab"));
+        assert!(yaml.contains("group_tab"));
+    }
+
+    #[test]
+    fn program_roundtrip_serialization() {
+        let program = Program::default();
+        let yaml = program.to_string();
+        let parsed: Result<Program, _> = yaml.parse();
+        assert!(parsed.is_ok());
+    }
+
+    #[test]
+    fn program_from_str_parses_yaml() {
+        let yaml = r#"
+plan_tab:
+  name: plan_tab
+  table: {}
+group_tab:
+  name: group_tab
+  table: {}
+include_tab:
+  name: include_tab
+  table: {}
+node_tab:
+  name: node_tab
+  table: {}
+pubsub_link_tab:
+  name: pubsub_link_tab
+  table: {}
+service_link_tab:
+  name: service_link_tab
+  table: {}
+plan_pub_tab:
+  name: plan_pub_tab
+  table: {}
+plan_sub_tab:
+  name: plan_sub_tab
+  table: {}
+plan_srv_tab:
+  name: plan_srv_tab
+  table: {}
+plan_cli_tab:
+  name: plan_cli_tab
+  table: {}
+node_pub_tab:
+  name: node_pub_tab
+  table: {}
+node_sub_tab:
+  name: node_sub_tab
+  table: {}
+node_srv_tab:
+  name: node_srv_tab
+  table: {}
+node_cli_tab:
+  name: node_cli_tab
+  table: {}
+"#;
+        let result: Result<Program, _> = yaml.parse();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn program_table_names_are_set() {
+        let program = Program::default();
+        // Verify table names are properly initialized
+        assert!(format!("{:?}", program.plan_tab).contains("plan_tab"));
+        assert!(format!("{:?}", program.node_tab).contains("node_tab"));
+    }
+}
