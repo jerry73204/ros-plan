@@ -1,0 +1,24 @@
+# F3: Test plan socket with explicit topic field (single source)
+# F10: Test plan socket topic resolution
+
+node:
+  camera:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      image: !pub
+        type: sensor_msgs/msg/Image
+
+  processor:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: sensor_msgs/msg/Image
+
+link:
+  camera_link: !pubsub
+    type: sensor_msgs/msg/Image
+    topic: /camera/image_raw
+    src: [camera/image]
+    dst: [processor/input]

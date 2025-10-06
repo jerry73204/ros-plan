@@ -1,0 +1,20 @@
+# F10: Main plan that uses subplan with plan socket topic
+
+include:
+  camera: !file
+    path: plan_socket_with_topic.yaml
+
+node:
+  image_processor:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: sensor_msgs/msg/Image
+
+link:
+  camera_to_processor: !pubsub
+    type: sensor_msgs/msg/Image
+    # No explicit topic here - should use plan socket's topic from subplan
+    src: [camera/camera_output]
+    dst: [image_processor/input]

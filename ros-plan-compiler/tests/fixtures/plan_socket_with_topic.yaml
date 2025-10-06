@@ -1,0 +1,15 @@
+# Subplan for F10 test - defines a plan socket with topic
+
+socket:
+  camera_output: !pub
+    type: sensor_msgs/msg/Image
+    topic: /sensors/camera/image  # F10: Plan socket with explicit topic
+    src: [camera_driver/image]
+
+node:
+  camera_driver:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      image: !pub
+        type: sensor_msgs/msg/Image

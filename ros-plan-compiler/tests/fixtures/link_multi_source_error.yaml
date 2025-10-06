@@ -1,0 +1,30 @@
+# F7/F15: Test multi-source link without explicit topic (should fail)
+
+node:
+  sensor1:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      data: !pub
+        type: std_msgs/msg/String
+
+  sensor2:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      data: !pub
+        type: std_msgs/msg/String
+
+  processor:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+
+link:
+  sensor_fusion: !pubsub
+    type: std_msgs/msg/String
+    # Missing topic field - should trigger error
+    src: [sensor1/data, sensor2/data]
+    dst: [processor/input]

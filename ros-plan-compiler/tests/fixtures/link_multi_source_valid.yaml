@@ -1,0 +1,37 @@
+# F7/F15: Test multi-source link with explicit topic (should succeed)
+
+node:
+  camera1:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      tf: !pub
+        type: tf2_msgs/msg/TFMessage
+
+  camera2:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      tf: !pub
+        type: tf2_msgs/msg/TFMessage
+
+  lidar:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      tf: !pub
+        type: tf2_msgs/msg/TFMessage
+
+  processor:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      tf_in: !sub
+        type: tf2_msgs/msg/TFMessage
+
+link:
+  tf_aggregation: !pubsub
+    type: tf2_msgs/msg/TFMessage
+    topic: /tf  # Required for multi-source
+    src: [camera1/tf, camera2/tf, lidar/tf]
+    dst: [processor/tf_in]
