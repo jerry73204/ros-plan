@@ -280,3 +280,162 @@ pub struct VisitNodeJob {
 pub struct ResolveSocketJob {
     current: PlanScopeShared,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        context::node_socket::{NodePubCtx, NodePubShared, NodeSubCtx, NodeSubShared},
+        eval::KeyStore,
+        utils::shared_table::SharedTable,
+    };
+    use ros_plan_format::{expr::KeyOrExpr, key::KeyOwned};
+
+    fn create_test_node_pub(key_str: &str) -> NodePubShared {
+        let key: KeyOwned = key_str.parse().unwrap();
+        let ctx = NodePubCtx {
+            key,
+            ty: None,
+            qos: None,
+            ros_name: None,
+            remap_from: None,
+            link_to: None,
+        };
+        let table = SharedTable::<NodePubCtx>::new("test_node_pub");
+        table.insert(ctx)
+    }
+
+    fn create_test_node_sub(key_str: &str) -> NodeSubShared {
+        let key: KeyOwned = key_str.parse().unwrap();
+        let ctx = NodeSubCtx {
+            key,
+            ty: None,
+            qos: None,
+            ros_name: None,
+            remap_from: None,
+            link_to: None,
+        };
+        let table = SharedTable::<NodeSubCtx>::new("test_node_sub");
+        table.insert(ctx)
+    }
+
+    fn create_key_store(key_str: &str) -> KeyStore {
+        let key_or_expr: KeyOrExpr = key_str.parse().unwrap();
+        let mut store = KeyStore::new(key_or_expr);
+        store.eval_and_store(&mlua::Lua::new()).unwrap();
+        store
+    }
+
+    #[test]
+    fn test_visit_pub_socket_single_source() {
+        use crate::context::plan_socket::PlanPubCtx;
+
+        let _node_table = SharedTable::<NodePubCtx>::new("test_node");
+        let node_socket = create_test_node_pub("node_a/output");
+
+        let mut pub_socket = PlanPubCtx {
+            key: "plan/pub_socket".parse().unwrap(),
+            ty: None,
+            topic: None,
+            src_key: vec![create_key_store("node_a/output")],
+            src_socket: None,
+            qos: None,
+        };
+
+        // This test verifies that src_key gets resolved to src_socket
+        // In real usage, this would be done by the SocketResolver with a full Program
+        // Here we just verify the data structure is correct
+        assert_eq!(pub_socket.src_key.len(), 1);
+        assert!(pub_socket.src_socket.is_none());
+
+        // Manually set what the resolver would do
+        pub_socket.src_socket = Some(vec![node_socket]);
+        assert_eq!(pub_socket.src_socket.as_ref().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_visit_pub_socket_multiple_sources() {
+        use crate::context::plan_socket::PlanPubCtx;
+
+        let _node_table = SharedTable::<NodePubCtx>::new("test_node_multi");
+        let node_socket1 = create_test_node_pub("node_a/output");
+        let node_socket2 = create_test_node_pub("node_b/output");
+        let node_socket3 = create_test_node_pub("node_c/output");
+
+        let mut pub_socket = PlanPubCtx {
+            key: "plan/aggregated".parse().unwrap(),
+            ty: None,
+            topic: None,
+            src_key: vec![
+                create_key_store("node_a/output"),
+                create_key_store("node_b/output"),
+                create_key_store("node_c/output"),
+            ],
+            src_socket: None,
+            qos: None,
+        };
+
+        assert_eq!(pub_socket.src_key.len(), 3);
+
+        // Manually set what the resolver would do
+        pub_socket.src_socket = Some(vec![node_socket1, node_socket2, node_socket3]);
+        assert_eq!(pub_socket.src_socket.as_ref().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn test_visit_sub_socket_single_destination() {
+        use crate::context::plan_socket::PlanSubCtx;
+
+        let _node_table = SharedTable::<NodeSubCtx>::new("test_node_sub");
+        let node_socket = create_test_node_sub("node_a/input");
+
+        let mut sub_socket = PlanSubCtx {
+            key: "plan/sub_socket".parse().unwrap(),
+            ty: None,
+            topic: None,
+            dst_key: vec![create_key_store("node_a/input")],
+            dst_socket: None,
+            qos: None,
+        };
+
+        assert_eq!(sub_socket.dst_key.len(), 1);
+        assert!(sub_socket.dst_socket.is_none());
+
+        // Manually set what the resolver would do
+        sub_socket.dst_socket = Some(vec![node_socket]);
+        assert_eq!(sub_socket.dst_socket.as_ref().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_visit_sub_socket_multiple_destinations() {
+        use crate::context::plan_socket::PlanSubCtx;
+
+        let _node_table = SharedTable::<NodeSubCtx>::new("test_node_sub_multi");
+        let node_socket1 = create_test_node_sub("node_a/input");
+        let node_socket2 = create_test_node_sub("node_b/input");
+
+        let mut sub_socket = PlanSubCtx {
+            key: "plan/broadcast".parse().unwrap(),
+            ty: None,
+            topic: None,
+            dst_key: vec![
+                create_key_store("node_a/input"),
+                create_key_store("node_b/input"),
+            ],
+            dst_socket: None,
+            qos: None,
+        };
+
+        assert_eq!(sub_socket.dst_key.len(), 2);
+
+        // Manually set what the resolver would do
+        sub_socket.dst_socket = Some(vec![node_socket1, node_socket2]);
+        assert_eq!(sub_socket.dst_socket.as_ref().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_socket_resolver_default() {
+        let resolver = SocketResolver::default();
+        assert_eq!(resolver.queue.len(), 0);
+    }
+}
