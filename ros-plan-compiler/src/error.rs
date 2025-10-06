@@ -47,6 +47,9 @@ pub enum Error {
     #[error("unable to resolve key `{key}`: {reason}")]
     KeyResolutionError { key: KeyOwned, reason: String },
 
+    #[error("link `{link}` has {source_count} sources but no explicit 'topic' attribute\n  Links with multiple sources must specify a topic name.\n\n  Suggestion: Add a topic field like:\n    link:\n      {link}: !pubsub\n        topic: /shared_topic  # Add this\n        src: [...]\n        dst: [...]")]
+    MultipleSourcesRequireExplicitTopic { link: KeyOwned, source_count: usize },
+
     #[error("the argument `{name}` is required but is not assigned")]
     RequiredArgumentNotAssigned { name: ParamName },
 

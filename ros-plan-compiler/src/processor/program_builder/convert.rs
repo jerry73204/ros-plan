@@ -178,6 +178,7 @@ pub fn to_socket_context(key: KeyOwned, socket_ctx: PlanSocketCfg) -> PlanSocket
                 key,
                 ty: config.ty,
                 qos: config.qos,
+                topic: config.topic.map(TextStore::new),
                 src_key,
                 src_socket: None,
             }
@@ -189,6 +190,7 @@ pub fn to_socket_context(key: KeyOwned, socket_ctx: PlanSocketCfg) -> PlanSocket
                 key,
                 ty: config.ty,
                 qos: config.qos,
+                topic: config.topic.map(TextStore::new),
                 dst_key,
                 dst_socket: None,
             }

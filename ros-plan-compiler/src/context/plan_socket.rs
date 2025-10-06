@@ -1,6 +1,6 @@
 use super::node_socket::{NodeCliShared, NodePubShared, NodeSrvShared, NodeSubShared};
 use crate::{
-    eval::KeyStore,
+    eval::{KeyStore, TextStore},
     utils::shared_table::{Owned, Shared},
 };
 use ros_plan_format::{
@@ -110,6 +110,7 @@ pub struct PlanPubCtx {
     #[serde(rename = "type")]
     pub ty: Option<InterfaceTypeOwned>,
     pub qos: Option<QosRequirement>,
+    pub topic: Option<TextStore>,
     pub src_key: Vec<KeyStore>,
     pub src_socket: Option<Vec<NodePubShared>>,
 }
@@ -120,6 +121,7 @@ pub struct PlanSubCtx {
     #[serde(rename = "type")]
     pub ty: Option<InterfaceTypeOwned>,
     pub qos: Option<QosRequirement>,
+    pub topic: Option<TextStore>,
     pub dst_key: Vec<KeyStore>,
     pub dst_socket: Option<Vec<NodeSubShared>>,
 }
