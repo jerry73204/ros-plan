@@ -15,6 +15,7 @@ impl IntoLua for ValueToLua<'_> {
             Value::I64(val) => val.into_lua(lua),
             Value::F64(val) => val.into_lua(lua),
             Value::String(val) => val.as_str().into_lua(lua),
+            Value::Path(_) => todo!(),
             Value::Key(val) => val.as_str().into_lua(lua),
             Value::Binary(bytes) => {
                 let buffer = lua.create_buffer(bytes.as_slice())?;
