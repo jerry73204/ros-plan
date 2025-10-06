@@ -158,22 +158,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
 
 [[package]]
-name = "dump2plan"
-version = "0.1.0"
-dependencies = [
- "clap",
- "eyre",
- "indexmap",
- "itertools 0.14.0",
- "luau-ast-rs",
- "mlua",
- "ros-plan-format",
- "serde",
- "serde_yaml",
- "thiserror 2.0.11",
-]
-
-[[package]]
 name = "either"
 version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -261,12 +245,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d75a2a4b1b190afb6f5425f10f6a8f959d2ea0b9c2b1d79553551850539e4674"
 
 [[package]]
-name = "lazy_static"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
-
-[[package]]
 name = "libc"
 version = "0.2.169"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -290,29 +268,6 @@ checksum = "07af8b9cdd281b7915f413fa73f29ebd5d55d0d3f0155584dade1ff18cea1b17"
 dependencies = [
  "autocfg",
  "scopeguard",
-]
-
-[[package]]
-name = "luau-ast-rs"
-version = "0.1.29"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1db96243b58d3e1a389fd911c0dfc2ab720ee995cab64d8f3a2e1f8012a28cfb"
-dependencies = [
- "lazy_static",
- "luau-ast-rs-grammar",
- "stacker",
- "thiserror 1.0.69",
- "tree-sitter",
-]
-
-[[package]]
-name = "luau-ast-rs-grammar"
-version = "0.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12b62ceeca91165646cb08c9506eafc42c1d4f433ecb07559e5f8a6b5013f387"
-dependencies = [
- "cc",
- "tree-sitter",
 ]
 
 [[package]]
@@ -441,15 +396,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "psm"
-version = "0.1.24"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "200b9ff220857e53e184257720a14553b2f4aa02577d2ed9842d45d4b9654810"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "quote"
 version = "1.0.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -510,7 +456,7 @@ dependencies = [
  "serde",
  "serde_yaml",
  "stable-vec",
- "thiserror 2.0.11",
+ "thiserror",
  "toml",
 ]
 
@@ -528,7 +474,7 @@ dependencies = [
  "serde",
  "serde_yaml",
  "strum",
- "thiserror 2.0.11",
+ "thiserror",
  "toml",
 ]
 
@@ -541,7 +487,7 @@ dependencies = [
  "ros-plan-format",
  "serde",
  "shell-quote",
- "thiserror 2.0.11",
+ "thiserror",
 ]
 
 [[package]]
@@ -655,19 +601,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "stacker"
-version = "0.1.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "799c883d55abdb5e98af1a7b3f23b9b6de8ecada0ecac058672d7635eb48ca7b"
-dependencies = [
- "cc",
- "cfg-if",
- "libc",
- "psm",
- "windows-sys",
-]
-
-[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -708,31 +641,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.69"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
-dependencies = [
- "thiserror-impl 1.0.69",
-]
-
-[[package]]
-name = "thiserror"
 version = "2.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d452f284b73e6d76dd36758a0c8684b1d5be31f92b89d07fd5822175732206fc"
 dependencies = [
- "thiserror-impl 2.0.11",
-]
-
-[[package]]
-name = "thiserror-impl"
-version = "1.0.69"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
+ "thiserror-impl",
 ]
 
 [[package]]
@@ -779,16 +692,6 @@ dependencies = [
  "serde_spanned",
  "toml_datetime",
  "winnow",
-]
-
-[[package]]
-name = "tree-sitter"
-version = "0.20.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e747b1f9b7b931ed39a548c1fae149101497de3c1fc8d9e18c62c1a66c683d3d"
-dependencies = [
- "cc",
- "regex",
 ]
 
 [[package]]

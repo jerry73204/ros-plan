@@ -4,7 +4,6 @@ members = [
   "ros-plan-format",
   "ros-plan-compiler",
   "ros2plan",
-  "dump2plan",
   "ros-utils",
 ]
 
