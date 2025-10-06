@@ -285,6 +285,7 @@ fn eval_service_link_map(
 fn eval_pubsub_link(lua: &Lua, link: &mut PubSubLinkCtx) -> Result<(), Error> {
     let PubSubLinkCtx {
         when,
+        topic,
         src_key,
         dst_key,
         ..
@@ -293,6 +294,10 @@ fn eval_pubsub_link(lua: &Lua, link: &mut PubSubLinkCtx) -> Result<(), Error> {
     if let Some(when) = when {
         when.eval_and_store(lua)?;
     };
+
+    if let Some(topic) = topic {
+        topic.eval_and_store(lua)?;
+    }
 
     for key in src_key {
         key.eval_and_store(lua)?;

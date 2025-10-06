@@ -1,5 +1,7 @@
 use crate::{
-    expr::KeyOrExpr, ident::IdentOwned, interface_type::InterfaceTypeOwned,
+    expr::{KeyOrExpr, TextOrExpr},
+    ident::IdentOwned,
+    interface_type::InterfaceTypeOwned,
     qos_requirement::QosRequirement,
 };
 use serde::{Deserialize, Serialize};
@@ -53,6 +55,7 @@ pub struct NodePubCfg {
     pub ty: Option<InterfaceTypeOwned>,
     pub qos: Option<QosRequirement>,
     pub from: Option<KeyOrExpr>,
+    pub ros_name: Option<TextOrExpr>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,6 +65,7 @@ pub struct NodeSubCfg {
     pub ty: Option<InterfaceTypeOwned>,
     pub qos: Option<QosRequirement>,
     pub from: Option<KeyOrExpr>,
+    pub ros_name: Option<TextOrExpr>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,6 +74,7 @@ pub struct NodeSrvCfg {
     #[serde(rename = "type")]
     pub ty: Option<InterfaceTypeOwned>,
     pub from: Option<KeyOrExpr>,
+    pub ros_name: Option<TextOrExpr>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,4 +83,117 @@ pub struct NodeCliCfg {
     #[serde(rename = "type")]
     pub ty: Option<InterfaceTypeOwned>,
     pub from: Option<KeyOrExpr>,
+    pub ros_name: Option<TextOrExpr>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn node_pub_cfg_with_ros_name_literal() {
+        let yaml = r#"
+type: std_msgs/msg/String
+ros_name: custom_topic
+"#;
+        let result: Result<NodePubCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert!(cfg.ros_name.is_some());
+    }
+
+    #[test]
+    fn node_pub_cfg_with_ros_name_expr() {
+        let yaml = r#"
+type: std_msgs/msg/String
+ros_name: $ "topic_" .. robot_id $
+"#;
+        let result: Result<NodePubCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert!(cfg.ros_name.is_some());
+    }
+
+    #[test]
+    fn node_sub_cfg_with_ros_name_literal() {
+        let yaml = r#"
+type: std_msgs/msg/String
+ros_name: custom_topic
+"#;
+        let result: Result<NodeSubCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert!(cfg.ros_name.is_some());
+    }
+
+    #[test]
+    fn node_sub_cfg_with_ros_name_expr() {
+        let yaml = r#"
+type: std_msgs/msg/String
+ros_name: $ "topic_" .. robot_id $
+"#;
+        let result: Result<NodeSubCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert!(cfg.ros_name.is_some());
+    }
+
+    #[test]
+    fn node_srv_cfg_with_ros_name_literal() {
+        let yaml = r#"
+type: std_srvs/srv/Trigger
+ros_name: custom_service
+"#;
+        let result: Result<NodeSrvCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert!(cfg.ros_name.is_some());
+    }
+
+    #[test]
+    fn node_srv_cfg_with_ros_name_expr() {
+        let yaml = r#"
+type: std_srvs/srv/Trigger
+ros_name: $ "service_" .. robot_id $
+"#;
+        let result: Result<NodeSrvCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert!(cfg.ros_name.is_some());
+    }
+
+    #[test]
+    fn node_cli_cfg_with_ros_name_literal() {
+        let yaml = r#"
+type: std_srvs/srv/Trigger
+ros_name: custom_service
+"#;
+        let result: Result<NodeCliCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert!(cfg.ros_name.is_some());
+    }
+
+    #[test]
+    fn node_cli_cfg_with_ros_name_expr() {
+        let yaml = r#"
+type: std_srvs/srv/Trigger
+ros_name: $ "service_" .. robot_id $
+"#;
+        let result: Result<NodeCliCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert!(cfg.ros_name.is_some());
+    }
+
+    #[test]
+    fn node_pub_cfg_without_ros_name() {
+        let yaml = r#"
+type: std_msgs/msg/String
+"#;
+        let result: Result<NodePubCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert!(cfg.ros_name.is_none());
+    }
 }

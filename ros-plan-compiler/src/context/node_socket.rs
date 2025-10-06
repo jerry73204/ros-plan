@@ -1,6 +1,6 @@
 use super::link::{PubSubLinkShared, ServiceLinkShared};
 use crate::{
-    eval::KeyStore,
+    eval::{KeyStore, TextStore},
     utils::shared_table::{Owned, Shared},
 };
 use ros_plan_format::{
@@ -161,6 +161,7 @@ pub struct NodePubCtx {
     pub key: KeyOwned,
     pub ty: Option<InterfaceTypeOwned>,
     pub qos: Option<QosRequirement>,
+    pub ros_name: Option<TextStore>,
     pub remap_from: Option<KeyStore>,
     pub link_to: Option<PubSubLinkShared>,
 }
@@ -170,6 +171,7 @@ pub struct NodeSubCtx {
     pub key: KeyOwned,
     pub ty: Option<InterfaceTypeOwned>,
     pub qos: Option<QosRequirement>,
+    pub ros_name: Option<TextStore>,
     pub remap_from: Option<KeyStore>,
     pub link_to: Option<PubSubLinkShared>,
 }
@@ -178,6 +180,7 @@ pub struct NodeSubCtx {
 pub struct NodeSrvCtx {
     pub key: KeyOwned,
     pub ty: Option<InterfaceTypeOwned>,
+    pub ros_name: Option<TextStore>,
     pub remap_from: Option<KeyStore>,
     pub link_to: Option<ServiceLinkShared>,
 }
@@ -186,6 +189,7 @@ pub struct NodeSrvCtx {
 pub struct NodeCliCtx {
     pub key: KeyOwned,
     pub ty: Option<InterfaceTypeOwned>,
+    pub ros_name: Option<TextStore>,
     pub remap_from: Option<KeyStore>,
     pub link_to: Option<ServiceLinkShared>,
 }

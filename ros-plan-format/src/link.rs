@@ -1,5 +1,5 @@
 use crate::{
-    expr::{BoolExpr, KeyOrExpr},
+    expr::{BoolExpr, KeyOrExpr, TextOrExpr},
     ident::IdentOwned,
     interface_type::InterfaceTypeOwned,
     qos::Qos,
@@ -40,6 +40,7 @@ pub struct PubSubLinkCfg {
     #[serde(default)]
     pub qos: Qos,
 
+    pub topic: Option<TextOrExpr>,
     pub src: Vec<KeyOrExpr>,
     pub dst: Vec<KeyOrExpr>,
 }
@@ -206,5 +207,109 @@ connect: [client/service]
         let result: Result<LinkCfg, _> = serde_yaml::from_str(yaml);
         assert!(result.is_ok());
         assert!(matches!(result.unwrap(), LinkCfg::Service(_)));
+    }
+
+    #[test]
+    fn parse_pubsub_link_with_topic_literal() {
+        let yaml = r#"
+type: std_msgs/msg/String
+topic: /custom/topic
+src: [node_a/output]
+dst: [node_b/input]
+"#;
+        let result: Result<PubSubLinkCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let link = result.unwrap();
+        assert!(link.topic.is_some());
+    }
+
+    #[test]
+    fn parse_pubsub_link_with_topic_expr() {
+        let yaml = r#"
+type: std_msgs/msg/String
+topic: $ "/robot_" .. robot_id .. "/data" $
+src: [node_a/output]
+dst: [node_b/input]
+"#;
+        let result: Result<PubSubLinkCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let link = result.unwrap();
+        assert!(link.topic.is_some());
+    }
+
+    #[test]
+    fn parse_pubsub_link_without_topic() {
+        let yaml = r#"
+type: std_msgs/msg/String
+src: [node_a/output]
+dst: [node_b/input]
+"#;
+        let result: Result<PubSubLinkCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let link = result.unwrap();
+        assert!(link.topic.is_none());
+    }
+
+    #[test]
+    fn parse_pubsub_link_topic_with_qos() {
+        let yaml = r#"
+type: sensor_msgs/msg/LaserScan
+topic: /scan
+src: [lidar/scan]
+dst: [slam/scan]
+qos: !profile
+  reliability: reliable
+  depth: 10
+"#;
+        let result: Result<PubSubLinkCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let link = result.unwrap();
+        assert!(link.topic.is_some());
+    }
+
+    #[test]
+    fn parse_pubsub_link_topic_with_when() {
+        let yaml = r#"
+type: std_msgs/msg/String
+topic: /debug_topic
+src: [node_a/out]
+dst: [node_b/in]
+when: $ enable_debug $
+"#;
+        let result: Result<PubSubLinkCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let link = result.unwrap();
+        assert!(link.topic.is_some());
+        assert!(link.when.is_some());
+    }
+
+    #[test]
+    fn parse_pubsub_link_topic_multi_source() {
+        let yaml = r#"
+type: std_msgs/msg/String
+topic: /shared_topic
+src: [node_a/out, node_b/out, node_c/out]
+dst: [processor/input]
+"#;
+        let result: Result<PubSubLinkCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let link = result.unwrap();
+        assert!(link.topic.is_some());
+        assert_eq!(link.src.len(), 3);
+    }
+
+    #[test]
+    fn parse_pubsub_link_topic_multi_destination() {
+        let yaml = r#"
+type: sensor_msgs/msg/Image
+topic: /camera/image_raw
+src: [camera/output]
+dst: [viewer/input, recorder/input, processor/input]
+"#;
+        let result: Result<PubSubLinkCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let link = result.unwrap();
+        assert!(link.topic.is_some());
+        assert_eq!(link.dst.len(), 3);
     }
 }

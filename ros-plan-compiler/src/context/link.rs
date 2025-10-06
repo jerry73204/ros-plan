@@ -1,6 +1,6 @@
 use super::node_socket::{NodeCliShared, NodePubShared, NodeSrvShared, NodeSubShared};
 use crate::{
-    eval::{BoolStore, KeyStore},
+    eval::{BoolStore, KeyStore, TextStore},
     utils::shared_table::{Owned, Shared},
 };
 use ros_plan_format::{
@@ -49,10 +49,12 @@ pub struct PubSubLinkCtx {
     pub ty: InterfaceTypeOwned,
     pub qos: Qos,
     pub when: Option<BoolStore>,
+    pub topic: Option<TextStore>,
     pub src_key: Vec<KeyStore>,
     pub dst_key: Vec<KeyStore>,
     pub src_socket: Option<Vec<NodePubShared>>,
     pub dst_socket: Option<Vec<NodeSubShared>>,
+    pub derived_topic: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -224,6 +224,7 @@ pub fn to_link_context(key: KeyOwned, link_cfg: LinkCfg) -> LinkCtx {
             let PubSubLinkCfg {
                 ty,
                 qos,
+                topic,
                 src,
                 dst,
                 when,
@@ -237,8 +238,10 @@ pub fn to_link_context(key: KeyOwned, link_cfg: LinkCfg) -> LinkCtx {
                 ty,
                 qos,
                 when: when.map(BoolStore::new),
+                topic: topic.map(TextStore::new),
                 src_key,
                 dst_key,
+                derived_topic: None,
             }
             .into()
         }
@@ -321,6 +324,7 @@ pub fn to_node_socket_context(key: KeyOwned, cfg: NodeSocketCfg) -> NodeSocketCt
             key,
             ty: cfg.ty,
             qos: cfg.qos,
+            ros_name: cfg.ros_name.map(TextStore::new),
             remap_from: cfg.from.map(KeyStore::new),
             link_to: None,
         }
@@ -329,6 +333,7 @@ pub fn to_node_socket_context(key: KeyOwned, cfg: NodeSocketCfg) -> NodeSocketCt
             key,
             ty: cfg.ty,
             qos: cfg.qos,
+            ros_name: cfg.ros_name.map(TextStore::new),
             remap_from: cfg.from.map(KeyStore::new),
             link_to: None,
         }
@@ -336,6 +341,7 @@ pub fn to_node_socket_context(key: KeyOwned, cfg: NodeSocketCfg) -> NodeSocketCt
         NodeSocketCfg::Srv(cfg) => NodeSrvCtx {
             key,
             ty: cfg.ty,
+            ros_name: cfg.ros_name.map(TextStore::new),
             remap_from: cfg.from.map(KeyStore::new),
             link_to: None,
         }
@@ -343,6 +349,7 @@ pub fn to_node_socket_context(key: KeyOwned, cfg: NodeSocketCfg) -> NodeSocketCt
         NodeSocketCfg::Cli(cfg) => NodeCliCtx {
             key,
             ty: cfg.ty,
+            ros_name: cfg.ros_name.map(TextStore::new),
             remap_from: cfg.from.map(KeyStore::new),
             link_to: None,
         }
