@@ -8,5 +8,4 @@ pub mod scope;
 pub mod selector;
 pub mod utils;
 
-pub use crate::{compiler::Compiler, program::Program};
-pub use crate::error::Error;
+pub use crate::{compiler::Compiler, error::Error, program::Program};

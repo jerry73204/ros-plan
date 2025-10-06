@@ -4,8 +4,7 @@ pub mod node_cmdline;
 pub use crate::error::PackageResolutionError;
 pub use node_cmdline::NodeCommandLine;
 
-use std::os::unix::ffi::OsStringExt;
-use std::{ffi::OsString, path::PathBuf, process::Command};
+use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::PathBuf, process::Command};
 
 pub fn find_pkg_dir(pkg: &str) -> Result<PathBuf, PackageResolutionError> {
     let output = match Command::new("ros2").args(["pkg", "prefix", pkg]).output() {

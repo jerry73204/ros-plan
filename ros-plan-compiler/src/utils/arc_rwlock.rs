@@ -16,7 +16,7 @@ impl<T> ArcRwLock<T> {
         }
     }
 
-    pub fn read(&self) -> RwLockReadGuard<T> {
+    pub fn read(&self) -> RwLockReadGuard<'_, T> {
         self.ref_.read()
     }
 
@@ -24,7 +24,7 @@ impl<T> ArcRwLock<T> {
         RwLock::read_arc(&self.ref_)
     }
 
-    pub fn write(&self) -> RwLockWriteGuard<T> {
+    pub fn write(&self) -> RwLockWriteGuard<'_, T> {
         self.ref_.write()
     }
 

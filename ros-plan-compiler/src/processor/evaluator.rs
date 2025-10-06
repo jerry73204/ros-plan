@@ -124,12 +124,12 @@ impl Evaluator {
             eval_node_map(lua, &mut guard.node)?;
 
             // Evaluate the link table
-            eval_pubsub_link_map(&lua, &mut guard.pubsub_link)?;
-            eval_service_link_map(&lua, &mut guard.service_link)?;
+            eval_pubsub_link_map(lua, &mut guard.pubsub_link)?;
+            eval_service_link_map(lua, &mut guard.service_link)?;
 
             // Evaluate assigned arguments and `when` condition on
             // subscopes
-            eval_include_table(lua, &mut guard.include)?;
+            eval_include_table(lua, &guard.include)?;
             eval_group_table(lua, &guard.group)?;
 
             Ok(())

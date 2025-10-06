@@ -44,7 +44,7 @@ impl<T> SharedTable<T> {
         })
     }
 
-    pub fn read(&self) -> SharedTableReadGuard<T> {
+    pub fn read(&self) -> SharedTableReadGuard<'_, T> {
         SharedTableReadGuard {
             tab_guard: self.inner.table.read(),
             inner_arc: self.inner.clone(),

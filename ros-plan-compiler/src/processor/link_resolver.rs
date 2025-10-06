@@ -62,12 +62,9 @@ impl LinkResolver {
             // Schedule a job to resolve links if the node has a plan
             // or a group
             for (_suffix, group) in guard.group() {
-                self.queue.push_back(
-                    Job {
-                        current: group.clone().into(),
-                    }
-                    .into(),
-                );
+                self.queue.push_back(Job {
+                    current: group.clone().into(),
+                });
             }
 
             for include in guard.include().values() {
@@ -76,12 +73,9 @@ impl LinkResolver {
                         todo!();
                     };
 
-                    self.queue.push_back(
-                        Job {
-                            current: plan.clone().into(),
-                        }
-                        .into(),
-                    );
+                    self.queue.push_back(Job {
+                        current: plan.clone().into(),
+                    });
                 });
             }
 

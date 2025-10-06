@@ -41,7 +41,7 @@ impl NodeCommandLine {
         }
 
         let (command, user_args, ros_args) = {
-            let mut iter = cmdline.into_iter();
+            let mut iter = cmdline.iter();
             let Some(command) = iter.next() else {
                 bail!("the command line must not be empty");
             };

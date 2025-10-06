@@ -16,11 +16,11 @@ pub struct Owned<T> {
 }
 
 impl<T> Owned<T> {
-    pub fn read(&self) -> RwLockReadGuard<T> {
+    pub fn read(&self) -> RwLockReadGuard<'_, T> {
         self.entry_arc.read()
     }
 
-    pub fn write(&self) -> RwLockWriteGuard<T> {
+    pub fn write(&self) -> RwLockWriteGuard<'_, T> {
         self.entry_arc.write()
     }
 

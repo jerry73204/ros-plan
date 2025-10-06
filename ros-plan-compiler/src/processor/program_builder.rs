@@ -44,7 +44,7 @@ impl ProgramBuilder {
         while let Some(job) = self.queue.pop_front() {
             match job {
                 Job::InsertGroup(job) => {
-                    self.insert_group(program, job)?;
+                    self.insert_group(program, *job)?;
                 }
                 Job::LoadPlanFile(job) => {
                     self.load_plan(program, job)?;
@@ -216,7 +216,7 @@ impl ProgramBuilder {
 
 #[derive(Debug)]
 enum Job {
-    InsertGroup(InsertGroup),
+    InsertGroup(Box<InsertGroup>),
     LoadPlanFile(LoadPlanFile),
 }
 
@@ -228,7 +228,7 @@ impl From<LoadPlanFile> for Job {
 
 impl From<InsertGroup> for Job {
     fn from(v: InsertGroup) -> Self {
-        Self::InsertGroup(v)
+        Self::InsertGroup(Box::new(v))
     }
 }
 
