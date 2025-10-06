@@ -80,3 +80,100 @@ impl<'de> Deserialize<'de> for TextOrExpr {
         Ok(text_or_expr)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_plain_text() {
+        let text = "hello world";
+        let result: Result<TextOrExpr, _> = text.parse();
+        assert!(result.is_ok());
+        let text_or_expr = result.unwrap();
+        assert!(matches!(text_or_expr, TextOrExpr::Text(_)));
+    }
+
+    #[test]
+    fn parse_expr() {
+        let text = "$ robot_name .. \"/cmd_vel\" $";
+        let result: Result<TextOrExpr, _> = text.parse();
+        assert!(result.is_ok());
+        let text_or_expr = result.unwrap();
+        assert!(matches!(text_or_expr, TextOrExpr::Expr(_)));
+    }
+
+    #[test]
+    fn parse_escaped_dollar() {
+        let text = "\\$not_an_expr";
+        let result: Result<TextOrExpr, _> = text.parse();
+        assert!(result.is_ok());
+        let text_or_expr = result.unwrap();
+        if let TextOrExpr::Text(s) = text_or_expr {
+            assert_eq!(s, "$not_an_expr");
+        } else {
+            panic!("Expected Text variant");
+        }
+    }
+
+    #[test]
+    fn display_plain_text() {
+        let text_or_expr = TextOrExpr::Text("hello".to_string());
+        let formatted = text_or_expr.to_string();
+        assert_eq!(formatted, "hello");
+    }
+
+    #[test]
+    fn display_text_starting_with_dollar() {
+        let text_or_expr = TextOrExpr::Text("$special".to_string());
+        let formatted = text_or_expr.to_string();
+        assert_eq!(formatted, "\\$special");
+    }
+
+    #[test]
+    fn display_expr() {
+        let expr = Expr::from_code("a + b");
+        let text_or_expr = TextOrExpr::Expr(expr);
+        let formatted = text_or_expr.to_string();
+        assert_eq!(formatted, "$a + b$");
+    }
+
+    #[test]
+    fn roundtrip_plain_text() {
+        let original = "hello world";
+        let text_or_expr: TextOrExpr = original.parse().unwrap();
+        let serialized = text_or_expr.to_string();
+        let reparsed: TextOrExpr = serialized.parse().unwrap();
+        assert!(matches!(reparsed, TextOrExpr::Text(_)));
+    }
+
+    #[test]
+    fn roundtrip_expr() {
+        let original = "$ x + 1 $";
+        let text_or_expr: TextOrExpr = original.parse().unwrap();
+        let serialized = text_or_expr.to_string();
+        let reparsed: TextOrExpr = serialized.parse().unwrap();
+        assert!(matches!(reparsed, TextOrExpr::Expr(_)));
+    }
+
+    #[test]
+    fn from_string() {
+        let text_or_expr: TextOrExpr = "test".to_string().into();
+        assert!(matches!(text_or_expr, TextOrExpr::Text(_)));
+    }
+
+    #[test]
+    fn from_expr() {
+        let expr = Expr::from_code("code");
+        let text_or_expr: TextOrExpr = expr.into();
+        assert!(matches!(text_or_expr, TextOrExpr::Expr(_)));
+    }
+
+    #[test]
+    fn deserialize_from_yaml() {
+        let yaml = "$ value $";
+        let result: Result<TextOrExpr, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), TextOrExpr::Expr(_)));
+    }
+}

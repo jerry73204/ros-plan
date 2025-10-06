@@ -443,3 +443,261 @@ impl Value {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn value_type_checking() {
+        let val_bool = Value::Bool(true);
+        assert!(val_bool.is_bool());
+        assert!(!val_bool.is_i64());
+        assert_eq!(val_bool.ty(), ValueType::Bool);
+
+        let val_i64 = Value::I64(42);
+        assert!(val_i64.is_i64());
+        assert!(!val_i64.is_bool());
+        assert_eq!(val_i64.ty(), ValueType::I64);
+
+        let val_f64 = Value::F64(2.5);
+        assert!(val_f64.is_f64());
+        assert!(!val_f64.is_i64());
+        assert_eq!(val_f64.ty(), ValueType::F64);
+
+        let val_string = Value::String("test".to_string());
+        assert!(val_string.is_string());
+        assert!(!val_string.is_key());
+        assert_eq!(val_string.ty(), ValueType::String);
+    }
+
+    #[test]
+    fn value_conversions_success() {
+        let val_bool = Value::Bool(true);
+        assert_eq!(val_bool.to_bool(), Some(true));
+
+        let val_i64 = Value::I64(42);
+        assert_eq!(val_i64.to_i64(), Some(42));
+
+        let val_f64 = Value::F64(2.5);
+        assert_eq!(val_f64.to_f64(), Some(2.5));
+
+        let val_string = Value::String("hello".to_string());
+        assert_eq!(val_string.as_str(), Some("hello"));
+    }
+
+    #[test]
+    fn value_conversions_failure() {
+        let val_bool = Value::Bool(true);
+        assert_eq!(val_bool.to_i64(), None);
+        assert_eq!(val_bool.to_f64(), None);
+        assert_eq!(val_bool.as_str(), None);
+
+        let val_i64 = Value::I64(42);
+        assert_eq!(val_i64.to_bool(), None);
+        assert_eq!(val_i64.to_f64(), None);
+    }
+
+    #[test]
+    fn value_list_checking() {
+        let bool_list = Value::BoolList(vec![true, false]);
+        assert!(bool_list.is_bool_list());
+        assert!(!bool_list.is_i64_list());
+        assert_eq!(bool_list.ty(), ValueType::BoolList);
+
+        let i64_list = Value::I64List(vec![1, 2, 3]);
+        assert!(i64_list.is_i64_list());
+        assert!(!i64_list.is_f64_list());
+        assert_eq!(i64_list.ty(), ValueType::I64List);
+
+        let f64_list = Value::F64List(vec![1.0, 2.0, 3.0]);
+        assert!(f64_list.is_f64_list());
+        assert!(!f64_list.is_string_list());
+        assert_eq!(f64_list.ty(), ValueType::F64List);
+
+        let string_list = Value::StringList(vec!["a".to_string(), "b".to_string()]);
+        assert!(string_list.is_string_list());
+        assert!(!string_list.is_bool_list());
+        assert_eq!(string_list.ty(), ValueType::StringList);
+    }
+
+    #[test]
+    fn value_list_conversions() {
+        let bool_list = Value::BoolList(vec![true, false, true]);
+        assert_eq!(bool_list.as_bool_slice(), Some(&[true, false, true][..]));
+
+        let i64_list = Value::I64List(vec![1, 2, 3]);
+        assert_eq!(i64_list.as_i64_slice(), Some(&[1, 2, 3][..]));
+
+        let f64_list = Value::F64List(vec![1.5, 2.5]);
+        assert_eq!(f64_list.as_f64_slice(), Some(&[1.5, 2.5][..]));
+
+        let string_list = Value::StringList(vec!["x".to_string(), "y".to_string()]);
+        let expected = ["x".to_string(), "y".to_string()];
+        assert_eq!(string_list.as_string_slice(), Some(&expected[..]));
+    }
+
+    #[test]
+    fn value_from_primitives() {
+        let from_bool: Value = true.into();
+        assert!(from_bool.is_bool());
+        assert_eq!(from_bool.to_bool(), Some(true));
+
+        let from_i64: Value = 42i64.into();
+        assert!(from_i64.is_i64());
+        assert_eq!(from_i64.to_i64(), Some(42));
+
+        let from_f64: Value = 2.5f64.into();
+        assert!(from_f64.is_f64());
+        assert_eq!(from_f64.to_f64(), Some(2.5));
+
+        let from_string: Value = "test".to_string().into();
+        assert!(from_string.is_string());
+        assert_eq!(from_string.as_str(), Some("test"));
+    }
+
+    #[test]
+    fn value_from_vecs() {
+        let from_bool_vec: Value = vec![true, false].into();
+        assert!(from_bool_vec.is_bool_list());
+
+        let from_i64_vec: Value = vec![1i64, 2, 3].into();
+        assert!(from_i64_vec.is_i64_list());
+
+        let from_f64_vec: Value = vec![1.0f64, 2.0].into();
+        assert!(from_f64_vec.is_f64_list());
+
+        let from_string_vec: Value = vec!["a".to_string(), "b".to_string()].into();
+        assert!(from_string_vec.is_string_list());
+
+        let from_bytes: Value = vec![0u8, 1, 2].into();
+        assert!(from_bytes.is_bytes());
+    }
+
+    #[test]
+    fn value_try_into_success() {
+        let val_string = Value::String("hello".to_string());
+        let result = val_string.try_into_string();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "hello".to_string());
+
+        let val_i64_list = Value::I64List(vec![1, 2, 3]);
+        let result = val_i64_list.try_into_i64_vec();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), vec![1, 2, 3]);
+
+        let val_bool_list = Value::BoolList(vec![true, false]);
+        let result = val_bool_list.try_into_bool_vec();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), vec![true, false]);
+    }
+
+    #[test]
+    fn value_try_into_failure() {
+        let val_bool = Value::Bool(true);
+        assert!(val_bool.clone().try_into_string().is_err());
+        assert!(val_bool.try_into_i64_vec().is_err());
+
+        let val_i64 = Value::I64(42);
+        assert!(val_i64.try_into_bool_vec().is_err());
+    }
+
+    #[test]
+    fn value_deserialize_bool() {
+        let yaml = "!bool true";
+        let result: Result<Value, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value = result.unwrap();
+        assert_eq!(value.to_bool(), Some(true));
+    }
+
+    #[test]
+    fn value_deserialize_i64() {
+        let yaml = "!i64 42";
+        let result: Result<Value, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value = result.unwrap();
+        assert_eq!(value.to_i64(), Some(42));
+    }
+
+    #[test]
+    fn value_deserialize_f64() {
+        let yaml = "!f64 2.5";
+        let result: Result<Value, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value = result.unwrap();
+        assert_eq!(value.to_f64(), Some(2.5));
+    }
+
+    #[test]
+    fn value_deserialize_string() {
+        let yaml = "!str \"hello world\"";
+        let result: Result<Value, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value = result.unwrap();
+        assert_eq!(value.as_str(), Some("hello world"));
+    }
+
+    #[test]
+    fn value_deserialize_i64_list() {
+        let yaml = "!i64_list [1, 2, 3]";
+        let result: Result<Value, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value = result.unwrap();
+        assert_eq!(value.as_i64_slice(), Some(&[1, 2, 3][..]));
+    }
+
+    #[test]
+    fn value_deserialize_string_list() {
+        let yaml = "!str_list [\"a\", \"b\", \"c\"]";
+        let result: Result<Value, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value = result.unwrap();
+        let expected = ["a".to_string(), "b".to_string(), "c".to_string()];
+        assert_eq!(value.as_string_slice(), Some(&expected[..]));
+    }
+
+    #[test]
+    fn value_display_primitives() {
+        assert_eq!(Value::Bool(true).to_string(), "true");
+        assert_eq!(Value::I64(42).to_string(), "42");
+        assert_eq!(Value::F64(2.5).to_string(), "2.5");
+        assert_eq!(Value::String("test".to_string()).to_string(), "\"test\"");
+    }
+
+    #[test]
+    fn value_display_lists() {
+        let bool_list = Value::BoolList(vec![true, false]);
+        assert_eq!(bool_list.to_string(), "[true, false]");
+
+        let i64_list = Value::I64List(vec![1, 2, 3]);
+        assert_eq!(i64_list.to_string(), "[1, 2, 3]");
+    }
+
+    #[test]
+    fn value_key_type() {
+        let key: KeyOwned = "node/topic".parse().unwrap();
+        let val_key: Value = key.into();
+        assert!(val_key.is_key());
+        assert_eq!(val_key.ty(), ValueType::Key);
+        assert!(val_key.as_key().is_some());
+    }
+
+    #[test]
+    fn value_path_type() {
+        let path = PathBuf::from("/tmp/test");
+        let val_path: Value = path.into();
+        assert!(val_path.is_path());
+        assert_eq!(val_path.ty(), ValueType::Path);
+        assert!(val_path.as_path().is_some());
+    }
+
+    #[test]
+    fn value_binary_type() {
+        let bytes = vec![0u8, 1, 2, 3];
+        let val_binary: Value = bytes.clone().into();
+        assert!(val_binary.is_bytes());
+        assert_eq!(val_binary.ty(), ValueType::Binary);
+        assert_eq!(val_binary.as_bytes(), Some(&bytes[..]));
+    }
+}

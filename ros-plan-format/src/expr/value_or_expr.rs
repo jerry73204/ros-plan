@@ -222,3 +222,138 @@ impl From<ValueOrExpr> for TaggedValue {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_i64_value() {
+        let yaml = "!i64 42";
+        let result: Result<ValueOrExpr, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value_or_expr = result.unwrap();
+        assert_eq!(value_or_expr.to_i64(), Some(42));
+        assert_eq!(value_or_expr.ty(), ValueType::I64);
+    }
+
+    #[test]
+    fn parse_i64_expr() {
+        let yaml = "!i64 $ 1 + 2 $";
+        let result: Result<ValueOrExpr, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value_or_expr = result.unwrap();
+        assert!(value_or_expr.as_expr().is_some());
+        let (ty, expr) = value_or_expr.as_expr().unwrap();
+        assert_eq!(ty, ValueType::I64);
+        assert_eq!(expr.as_str(), " 1 + 2 ");
+    }
+
+    #[test]
+    fn parse_f64_value() {
+        let yaml = "!f64 2.5";
+        let result: Result<ValueOrExpr, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value_or_expr = result.unwrap();
+        assert_eq!(value_or_expr.to_f64(), Some(2.5));
+    }
+
+    #[test]
+    fn parse_f64_expr() {
+        let yaml = "!f64 $ rate / 2.0 $";
+        let result: Result<ValueOrExpr, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value_or_expr = result.unwrap();
+        assert!(value_or_expr.as_expr().is_some());
+    }
+
+    #[test]
+    fn parse_bool_value() {
+        let yaml = "!bool true";
+        let result: Result<ValueOrExpr, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value_or_expr = result.unwrap();
+        assert_eq!(value_or_expr.to_bool(), Some(true));
+    }
+
+    #[test]
+    fn parse_bool_expr() {
+        let yaml = "!bool $ enable_feature $";
+        let result: Result<ValueOrExpr, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value_or_expr = result.unwrap();
+        assert!(value_or_expr.as_expr().is_some());
+    }
+
+    #[test]
+    fn parse_str_value() {
+        let yaml = "!str \"hello world\"";
+        let result: Result<ValueOrExpr, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value_or_expr = result.unwrap();
+        assert_eq!(value_or_expr.as_str(), Some("hello world"));
+    }
+
+    #[test]
+    fn parse_str_expr() {
+        let yaml = "!str $ \"/robot/\" .. robot_id $";
+        let result: Result<ValueOrExpr, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value_or_expr = result.unwrap();
+        assert!(value_or_expr.as_expr().is_some());
+    }
+
+    #[test]
+    fn parse_i64_list_value() {
+        let yaml = "!i64_list [1, 2, 3]";
+        let result: Result<ValueOrExpr, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value_or_expr = result.unwrap();
+        assert_eq!(value_or_expr.as_i64_slice(), Some(&[1, 2, 3][..]));
+    }
+
+    #[test]
+    fn parse_i64_list_expr() {
+        let yaml = "!i64_list $ {1, 2, 3} $";
+        let result: Result<ValueOrExpr, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value_or_expr = result.unwrap();
+        assert!(value_or_expr.as_expr().is_some());
+    }
+
+    #[test]
+    fn parse_str_list_value() {
+        let yaml = "!str_list [\"a\", \"b\", \"c\"]";
+        let result: Result<ValueOrExpr, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let value_or_expr = result.unwrap();
+        let expected = ["a".to_string(), "b".to_string(), "c".to_string()];
+        assert_eq!(value_or_expr.as_string_slice(), Some(&expected[..]));
+    }
+
+    #[test]
+    fn value_or_expr_type() {
+        let yaml_i64 = "!i64 $ count $";
+        let result: Result<ValueOrExpr, _> = serde_yaml::from_str(yaml_i64);
+        assert_eq!(result.unwrap().ty(), ValueType::I64);
+
+        let yaml_str = "!str $ name $";
+        let result: Result<ValueOrExpr, _> = serde_yaml::from_str(yaml_str);
+        assert_eq!(result.unwrap().ty(), ValueType::String);
+    }
+
+    #[test]
+    fn from_primitives() {
+        let from_bool: ValueOrExpr = true.into();
+        assert_eq!(from_bool.to_bool(), Some(true));
+
+        let from_i64: ValueOrExpr = 42i64.into();
+        assert_eq!(from_i64.to_i64(), Some(42));
+
+        let from_f64: ValueOrExpr = 2.5f64.into();
+        assert_eq!(from_f64.to_f64(), Some(2.5));
+
+        let from_string: ValueOrExpr = "hello".to_string().into();
+        assert_eq!(from_string.as_str(), Some("hello"));
+    }
+}

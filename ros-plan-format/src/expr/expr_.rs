@@ -101,3 +101,139 @@ impl<'de> Deserialize<'de> for Expr {
         Ok(expr)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_single_line_expr() {
+        let text = "$ a + b $";
+        let result: Result<Expr, _> = text.parse();
+        assert!(result.is_ok());
+        let expr = result.unwrap();
+        assert_eq!(expr.as_str(), " a + b ");
+    }
+
+    #[test]
+    fn parse_single_line_expr_no_spaces() {
+        let text = "$a+b$";
+        let result: Result<Expr, _> = text.parse();
+        assert!(result.is_ok());
+        let expr = result.unwrap();
+        assert_eq!(expr.as_str(), "a+b");
+    }
+
+    #[test]
+    fn parse_single_line_expr_complex() {
+        let text = "$ robot_name .. \"/cmd_vel\" $";
+        let result: Result<Expr, _> = text.parse();
+        assert!(result.is_ok());
+        let expr = result.unwrap();
+        assert_eq!(expr.as_str(), " robot_name .. \"/cmd_vel\" ");
+    }
+
+    #[test]
+    fn parse_multi_line_expr() {
+        let text = "$$$\nlocal x = 1\nreturn x\n$$$\n";
+        let result: Result<Expr, _> = text.parse();
+        assert!(result.is_ok());
+        let expr = result.unwrap();
+        assert_eq!(expr.as_str(), "local x = 1\nreturn x\n");
+    }
+
+    #[test]
+    fn parse_multi_line_expr_empty() {
+        let text = "$$$\n$$$\n";
+        let result: Result<Expr, _> = text.parse();
+        assert!(result.is_ok());
+        let expr = result.unwrap();
+        assert_eq!(expr.as_str(), "");
+    }
+
+    #[test]
+    fn parse_multi_line_expr_single_line() {
+        let text = "$$$\nreturn 42\n$$$\n";
+        let result: Result<Expr, _> = text.parse();
+        assert!(result.is_ok());
+        let expr = result.unwrap();
+        assert_eq!(expr.as_str(), "return 42\n");
+    }
+
+    #[test]
+    fn reject_single_line_with_newline() {
+        let text = "$ a\nb $";
+        let result: Result<Expr, _> = text.parse();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.reason.contains("multi-line"));
+    }
+
+    #[test]
+    fn reject_multi_line_without_trailing_newline() {
+        let text = "$$$\nreturn 42$$$\n";
+        let result: Result<Expr, _> = text.parse();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.reason.contains("line break"));
+    }
+
+    #[test]
+    fn reject_imbalanced_single_dollar() {
+        let text = "$ a + b";
+        let result: Result<Expr, _> = text.parse();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.reason.contains("imbalanced"));
+    }
+
+    #[test]
+    fn reject_imbalanced_triple_dollar() {
+        let text = "$$$\nreturn 42\n";
+        let result: Result<Expr, _> = text.parse();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.reason.contains("imbalanced"));
+    }
+
+    #[test]
+    fn reject_no_delimiters() {
+        let text = "just text";
+        let result: Result<Expr, _> = text.parse();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.reason.contains("wrapped"));
+    }
+
+    #[test]
+    fn roundtrip_single_line() {
+        let original = "$ a + b $";
+        let expr: Expr = original.parse().unwrap();
+        let serialized = expr.to_string();
+        let reparsed: Expr = serialized.parse().unwrap();
+        assert_eq!(expr.as_str(), reparsed.as_str());
+    }
+
+    #[test]
+    fn roundtrip_multi_line() {
+        let original = "$$$\nlocal x = 1\nreturn x\n$$$\n";
+        let expr: Expr = original.parse().unwrap();
+        let serialized = expr.to_string();
+        let reparsed: Expr = serialized.parse().unwrap();
+        assert_eq!(expr.as_str(), reparsed.as_str());
+    }
+
+    #[test]
+    fn display_format_single_line() {
+        let expr = Expr::from_code("a + b");
+        let formatted = expr.to_string();
+        assert_eq!(formatted, "$a + b$");
+    }
+
+    #[test]
+    fn display_format_multi_line() {
+        let expr = Expr::from_code("local x = 1\nreturn x\n");
+        let formatted = expr.to_string();
+        assert_eq!(formatted, "$$$\nlocal x = 1\nreturn x\n$$$\n");
+    }
+}
