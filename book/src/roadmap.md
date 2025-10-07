@@ -1819,3 +1819,1300 @@ All tests must:
 - Run on every commit
 - Complete in reasonable time (<5 minutes total)
 - Provide clear failure messages
+
+---
+
+## Phase 6: ROS Launch Compatibility Layer
+
+**Status**: 🔴 Not Started
+**Timeline**: 3-4 weeks (15-19 days)
+**Dependencies**: Phases 1-5 complete
+
+### Overview
+
+Phase 6 adds support for including ROS 2 Python launch files within plan files. This enables gradual migration from ROS 2 launch to ros-plan by allowing hybrid systems where launch files and plan files work together.
+
+The implementation reuses the existing `launch2dump` project architecture, which uses custom visitors and Python name mangling to extract node metadata from launch files without executing processes. The key insight is to intercept launch actions (Node, ComposableNodeContainer, etc.) and extract their configuration instead of spawning processes.
+
+**Design Principles**:
+1. **No Process Execution**: Walk launch file trees and extract metadata without spawning processes
+2. **Parameter Propagation**: Pass plan parameters to included launch files
+3. **Runtime Reloading**: Support changing parameters at runtime and reloading launch files
+4. **Extensive Reuse**: Leverage ROS 2 launch code via custom visitors and name mangling
+5. **Rust Integration**: Embed Python loader in Rust compiler using PyO3
+
+### Phase 6.1: Migrate launch2dump to UV Workspace
+
+**Timeline**: 2 days
+**Status**: 🔴 Not Started
+
+#### F32: UV Workspace Conversion
+
+**Description**: Convert launch2dump from Rye to UV package manager for better performance and modern Python tooling.
+
+**Work Items**:
+
+1. **Remove Rye Configuration**
+   - Delete `[tool.rye]` section from `pyproject.toml`
+   - Remove `.python-version` if present
+   - Remove `requirements.lock` and `requirements-dev.lock`
+
+2. **Add UV Configuration**
+   - Create `uv.lock` with `uv lock`
+   - Update `pyproject.toml` with UV-compatible settings:
+   ```toml
+   [project]
+   name = "launch2dump"
+   version = "0.1.0"
+   requires-python = ">=3.10"
+   dependencies = [
+       "ruamel-yaml>=0.18.6",
+       "lark>=1.2.2",
+       "packaging>=24.1",
+   ]
+
+   [build-system]
+   requires = ["hatchling"]
+   build-backend = "hatchling.build"
+   ```
+
+3. **Update Development Scripts**
+   - Replace `rye run` with `uv run` in documentation
+   - Update any CI/CD scripts that reference Rye
+   - Add `.venv/` to `.gitignore` if not present
+
+4. **Verify Migration**
+   - Test `uv sync` to install dependencies
+   - Test `uv run python -m launch2dump` to verify execution
+   - Verify all imports work correctly
+
+**Test Cases**:
+- [ ] `uv sync` successfully installs all dependencies
+- [ ] `uv run python -m launch2dump --help` displays help text
+- [ ] All existing launch2dump functionality works with UV
+- [ ] UV lock file is reproducible (`uv lock` produces same output)
+
+**Files Modified**:
+- `launch2dump/pyproject.toml`
+- `.gitignore` (add `.venv/`)
+
+**Files Removed**:
+- `launch2dump/requirements*.lock` (if present)
+- `launch2dump/.python-version` (if present)
+
+**Files Added**:
+- `launch2dump/uv.lock`
+
+---
+
+### Phase 6.2: Launch Loader API
+
+**Timeline**: 4-5 days
+**Status**: 🔴 Not Started
+
+#### F33: Launch File Walker with Visitor Pattern
+
+**Description**: Create Python API that walks launch file trees using custom visitors to extract node metadata without process execution.
+
+**Work Items**:
+
+1. **Create launch2plan Module Structure**
+   ```
+   launch2dump/src/launch2plan/
+   ├── __init__.py          # Public API exports
+   ├── loader.py            # Main LaunchLoader class
+   ├── inspector.py         # Custom LaunchInspector (from launch2dump)
+   ├── visitor/
+   │   ├── __init__.py
+   │   ├── action.py        # Action visitor dispatcher
+   │   ├── node.py          # Node visitor
+   │   ├── container.py     # Container visitor
+   │   └── lifecycle.py     # Lifecycle node visitor
+   └── result.py            # LaunchResult data structures
+   ```
+
+2. **Implement LaunchLoader Class** (`loader.py`)
+   ```python
+   class LaunchLoader:
+       """Loads ROS 2 launch files and extracts node metadata."""
+
+       def __init__(self):
+           self.inspector = LaunchInspector()
+
+       def load_launch_file(
+           self,
+           launch_file_path: str,
+           launch_arguments: Dict[str, str] = None
+       ) -> LaunchResult:
+           """
+           Load a launch file and extract all nodes.
+
+           Args:
+               launch_file_path: Path to .launch.py file
+               launch_arguments: Arguments to pass to launch file
+
+           Returns:
+               LaunchResult containing nodes, containers, etc.
+           """
+           # Implementation uses LaunchInspector to visit entities
+           pass
+   ```
+
+3. **Implement LaunchResult Data Structures** (`result.py`)
+   ```python
+   @dataclass
+   class NodeInfo:
+       """Metadata for a regular ROS 2 node."""
+       package: str
+       executable: str
+       name: Optional[str]
+       namespace: Optional[str]
+       parameters: List[Dict[str, Any]]
+       remappings: List[Tuple[str, str]]
+       arguments: List[str]
+       env_vars: Dict[str, str]
+
+   @dataclass
+   class ComposableNodeInfo:
+       """Metadata for a composable node."""
+       plugin: str
+       name: str
+       namespace: Optional[str]
+       parameters: List[Dict[str, Any]]
+       remappings: List[Tuple[str, str]]
+       extra_arguments: List[str]
+
+   @dataclass
+   class ContainerInfo:
+       """Metadata for a composable node container."""
+       package: str
+       executable: str
+       name: str
+       namespace: Optional[str]
+       composable_nodes: List[ComposableNodeInfo]
+
+   @dataclass
+   class LaunchResult:
+       """Result of loading a launch file."""
+       nodes: List[NodeInfo]
+       containers: List[ContainerInfo]
+       lifecycle_nodes: List[NodeInfo]
+       errors: List[str]
+   ```
+
+4. **Adapt launch2dump Visitors**
+   - Copy and refactor visitor code from launch2dump
+   - Use Python name mangling to access private members:
+     ```python
+     def extract_node_info(node: Node, context) -> NodeInfo:
+         node._perform_substitutions(context)
+         return NodeInfo(
+             package=str(node._Node__package),
+             executable=str(node._Node__node_executable),
+             name=str(node._Node__node_name) if node._Node__node_name else None,
+             namespace=str(node._Node__node_namespace) if node._Node__node_namespace else None,
+             parameters=extract_parameters(node._Node__parameters),
+             remappings=extract_remappings(node._Node__remappings),
+             arguments=extract_arguments(node._Node__arguments),
+             env_vars=extract_env_vars(node._Node__env),
+         )
+     ```
+
+5. **Handle Launch Arguments**
+   - Create LaunchContext with provided arguments
+   - Resolve substitutions with argument values
+   - Support default argument values from launch file
+
+**Test Cases**:
+- [ ] Load simple launch file with single node
+- [ ] Load launch file with multiple nodes
+- [ ] Load launch file with composable node container
+- [ ] Load launch file with lifecycle nodes
+- [ ] Pass launch arguments and verify substitution resolution
+- [ ] Load launch file that includes other launch files (recursive)
+- [ ] Handle launch file with conditionals (GroupAction with condition)
+- [ ] Handle launch file with DeclareLaunchArgument
+- [ ] Extract node parameters (YAML files, dicts, individual params)
+- [ ] Extract node remappings
+- [ ] Extract node environment variables
+- [ ] Error handling for missing launch file
+- [ ] Error handling for invalid launch file syntax
+- [ ] Verify no processes are spawned during loading
+
+**Files Added**:
+- `launch2dump/src/launch2plan/__init__.py`
+- `launch2dump/src/launch2plan/loader.py`
+- `launch2dump/src/launch2plan/inspector.py`
+- `launch2dump/src/launch2plan/visitor/*.py`
+- `launch2dump/src/launch2plan/result.py`
+- `launch2dump/tests/test_loader.py`
+
+---
+
+#### F34: Parameter Dependency Tracking
+
+**Description**: Track which launch file inclusions depend on which plan parameters, enabling efficient reloading when parameters change.
+
+**Work Items**:
+
+1. **Extend LaunchResult with Parameter Dependencies**
+   ```python
+   @dataclass
+   class LaunchResult:
+       nodes: List[NodeInfo]
+       containers: List[ContainerInfo]
+       lifecycle_nodes: List[NodeInfo]
+       errors: List[str]
+       parameter_dependencies: Set[str]  # NEW: Parameters used in this launch
+   ```
+
+2. **Track Substitutions During Visitor Traversal**
+   - Identify which LaunchConfiguration substitutions were resolved
+   - Record parameter names that were accessed
+   - Handle nested substitutions (e.g., PathJoinSubstitution with LaunchConfiguration)
+
+3. **Implement Dependency Tracking Visitor**
+   ```python
+   class SubstitutionTracker:
+       """Tracks which launch arguments are accessed during evaluation."""
+
+       def __init__(self):
+           self.accessed_parameters = set()
+
+       def track_substitutions(self, substitution):
+           """Recursively track LaunchConfiguration accesses."""
+           if isinstance(substitution, LaunchConfiguration):
+               self.accessed_parameters.add(substitution.variable_name)
+           elif hasattr(substitution, '__iter__'):
+               for sub in substitution:
+                   self.track_substitutions(sub)
+   ```
+
+4. **Integrate Tracking into LaunchLoader**
+   - Run SubstitutionTracker during entity visitation
+   - Include parameter dependencies in LaunchResult
+   - Document which parameters affect which launch files
+
+**Test Cases**:
+- [ ] Track single parameter dependency
+- [ ] Track multiple parameter dependencies
+- [ ] Track nested substitution dependencies (PathJoinSubstitution)
+- [ ] Handle launch file with no parameter dependencies
+- [ ] Handle same parameter used multiple times (deduplicate)
+- [ ] Track dependencies through included launch files
+
+**Files Modified**:
+- `launch2dump/src/launch2plan/result.py`
+- `launch2dump/src/launch2plan/loader.py`
+- `launch2dump/src/launch2plan/visitor/action.py`
+
+**Files Added**:
+- `launch2dump/src/launch2plan/tracker.py`
+- `launch2dump/tests/test_dependency_tracking.py`
+
+---
+
+### Phase 6.3: Rust Integration with PyO3
+
+**Timeline**: 4-5 days
+**Status**: 🔴 Not Started
+
+#### F35: PyO3 Embedded Python Loader
+
+**Description**: Embed the Python launch loader in the Rust compiler using PyO3 FFI bindings.
+
+**Work Items**:
+
+1. **Add PyO3 Dependency to ros-plan-compiler**
+   ```toml
+   # ros-plan-compiler/Cargo.toml
+   [dependencies]
+   pyo3 = { version = "0.22", features = ["auto-initialize"] }
+   ```
+
+2. **Create Python FFI Module** (`ros-plan-compiler/src/launch_loader.rs`)
+   ```rust
+   use pyo3::prelude::*;
+   use pyo3::types::{PyDict, PyList};
+   use std::collections::HashMap;
+   use std::path::Path;
+
+   /// Result from loading a launch file
+   #[derive(Debug, Clone)]
+   pub struct LaunchLoadResult {
+       pub nodes: Vec<NodeInfo>,
+       pub containers: Vec<ContainerInfo>,
+       pub errors: Vec<String>,
+       pub parameter_dependencies: Vec<String>,
+   }
+
+   #[derive(Debug, Clone)]
+   pub struct NodeInfo {
+       pub package: String,
+       pub executable: String,
+       pub name: Option<String>,
+       pub namespace: Option<String>,
+       pub parameters: Vec<HashMap<String, String>>,
+       pub remappings: Vec<(String, String)>,
+   }
+
+   #[derive(Debug, Clone)]
+   pub struct ContainerInfo {
+       pub package: String,
+       pub executable: String,
+       pub name: String,
+       pub namespace: Option<String>,
+       pub composable_nodes: Vec<ComposableNodeInfo>,
+   }
+
+   #[derive(Debug, Clone)]
+   pub struct ComposableNodeInfo {
+       pub plugin: String,
+       pub name: String,
+       pub namespace: Option<String>,
+       pub parameters: Vec<HashMap<String, String>>,
+   }
+
+   /// Load a ROS 2 launch file using Python loader
+   pub fn load_launch_file(
+       launch_file: &Path,
+       arguments: HashMap<String, String>,
+   ) -> Result<LaunchLoadResult, String> {
+       Python::with_gil(|py| {
+           // Import launch2plan module
+           let launch2plan = py.import_bound("launch2plan")
+               .map_err(|e| format!("Failed to import launch2plan: {}", e))?;
+
+           // Create loader
+           let loader = launch2plan.getattr("LaunchLoader")
+               .map_err(|e| format!("Failed to get LaunchLoader: {}", e))?
+               .call0()
+               .map_err(|e| format!("Failed to create LaunchLoader: {}", e))?;
+
+           // Prepare arguments
+           let py_args = PyDict::new_bound(py);
+           for (key, value) in arguments {
+               py_args.set_item(key, value)
+                   .map_err(|e| format!("Failed to set argument: {}", e))?;
+           }
+
+           // Call load_launch_file
+           let result = loader
+               .call_method1(
+                   "load_launch_file",
+                   (launch_file.to_str().unwrap(), py_args)
+               )
+               .map_err(|e| format!("Failed to load launch file: {}", e))?;
+
+           // Convert Python result to Rust structures
+           convert_launch_result(result)
+       })
+   }
+
+   fn convert_launch_result(py_result: Bound<PyAny>) -> Result<LaunchLoadResult, String> {
+       // Extract nodes, containers, errors from Python object
+       // Convert to Rust data structures
+       todo!()
+   }
+   ```
+
+3. **Initialize Python Interpreter in Compiler**
+   - Initialize Python interpreter on first use
+   - Set Python path to include launch2plan module
+   - Handle Python initialization errors gracefully
+
+4. **Add PYTHONPATH Configuration**
+   - Detect launch2dump installation location
+   - Add to PYTHONPATH before importing launch2plan
+   - Support both development (source) and installed modes
+
+5. **Error Handling**
+   - Convert Python exceptions to Rust Result types
+   - Provide clear error messages for common failures:
+     - Python not available
+     - launch2plan module not found
+     - Launch file syntax errors
+     - Missing launch arguments
+
+**Test Cases**:
+- [ ] Initialize Python interpreter successfully
+- [ ] Import launch2plan module
+- [ ] Call LaunchLoader.load_launch_file from Rust
+- [ ] Convert Python NodeInfo to Rust NodeInfo
+- [ ] Convert Python ContainerInfo to Rust ContainerInfo
+- [ ] Handle Python exception and convert to Rust error
+- [ ] Load launch file with arguments from Rust
+- [ ] Verify no memory leaks (Python GIL handling)
+- [ ] Support multiple load_launch_file calls in same process
+- [ ] Handle launch2plan module not found error
+
+**Files Added**:
+- `ros-plan-compiler/src/launch_loader.rs`
+- `ros-plan-compiler/tests/launch_loader_tests.rs`
+
+**Files Modified**:
+- `ros-plan-compiler/Cargo.toml` (add pyo3 dependency)
+- `ros-plan-compiler/src/lib.rs` (add module declaration)
+
+---
+
+#### F36: Plan Format Extension for Launch Includes
+
+**Description**: Extend plan YAML format to support including ROS 2 launch files with parameter passing.
+
+**Work Items**:
+
+1. **Add Include Directive to Plan Format** (`ros-plan-format/src/plan.rs`)
+   ```rust
+   #[derive(Debug, Clone, Serialize, Deserialize)]
+   pub struct Plan {
+       #[serde(default)]
+       pub include: IndexMap<String, LaunchInclude>,
+
+       #[serde(default)]
+       pub node: IndexMap<String, Node>,
+
+       #[serde(default)]
+       pub link: IndexMap<String, Link>,
+
+       // ... existing fields
+   }
+
+   #[derive(Debug, Clone, Serialize, Deserialize)]
+   pub struct LaunchInclude {
+       /// Path to .launch.py file
+       pub file: String,
+
+       /// Arguments to pass to launch file
+       #[serde(default)]
+       pub args: IndexMap<String, Value>,
+
+       /// Namespace prefix for included nodes (optional)
+       pub namespace: Option<String>,
+
+       /// Conditional inclusion (optional)
+       #[serde(default)]
+       pub when: Option<String>,
+   }
+   ```
+
+2. **Update YAML Schema Examples**
+   ```yaml
+   include:
+     camera_launch:
+       file: /path/to/camera.launch.py
+       args:
+         camera_name: front_camera
+         fps: 30
+       namespace: /sensors
+       when: ${use_camera}
+
+   node:
+     image_processor:
+       pkg: image_processing
+       exec: processor
+       # ... rest of node definition
+   ```
+
+3. **Add Validation Rules**
+   - Verify launch file exists and is readable
+   - Validate argument types match launch file expectations
+   - Check for circular includes (include A includes B includes A)
+   - Validate namespace syntax
+
+4. **Support Value Substitution in Include Args**
+   - Allow `${param}` syntax in include arguments
+   - Resolve from plan parameters
+   - Support Lua expressions in include arguments
+
+**Test Cases**:
+- [ ] Parse plan with single launch include
+- [ ] Parse plan with multiple launch includes
+- [ ] Parse plan with include arguments
+- [ ] Parse plan with include namespace prefix
+- [ ] Parse plan with conditional include (when clause)
+- [ ] Validate launch file path exists
+- [ ] Detect circular includes and report error
+- [ ] Substitute plan parameters in include arguments
+- [ ] Include without arguments (empty args)
+- [ ] Include with namespace prefix applied to nodes
+
+**Files Modified**:
+- `ros-plan-format/src/plan.rs`
+- `ros-plan-format/src/lib.rs`
+
+**Files Added**:
+- `ros-plan-format/tests/include_tests.rs`
+- `ros-plan-compiler/tests/fixtures/includes/*.yaml` (test fixtures)
+
+---
+
+#### F37: Compiler Integration and Node Merging
+
+**Description**: Integrate launch loader into compiler pipeline and merge loaded nodes with plan-defined nodes.
+
+**Work Items**:
+
+1. **Add Launch Processing to Compiler Pipeline** (`ros-plan-compiler/src/compiler.rs`)
+   ```rust
+   impl Compiler {
+       pub fn compile(&self, plan_file: &Path, args: IndexMap<String, String>)
+           -> Result<Program, CompileError>
+       {
+           // 1. Parse plan file
+           let mut plan = self.parse_plan(plan_file)?;
+
+           // 2. Evaluate expressions with args
+           let evaluated_plan = self.evaluate_plan(plan, args)?;
+
+           // 3. Process launch includes (NEW)
+           let expanded_plan = self.process_launch_includes(evaluated_plan)?;
+
+           // 4. Resolve links
+           let resolved_plan = self.resolve_links(expanded_plan)?;
+
+           // 5. Generate program
+           let program = self.generate_program(resolved_plan)?;
+
+           Ok(program)
+       }
+
+       fn process_launch_includes(&self, plan: Plan) -> Result<Plan, CompileError> {
+           let mut expanded_plan = plan.clone();
+
+           for (include_name, include) in &plan.include {
+               // Evaluate when condition
+               if let Some(when) = &include.when {
+                   if !self.evaluate_condition(when)? {
+                       continue; // Skip this include
+                   }
+               }
+
+               // Resolve arguments from plan parameters
+               let args = self.resolve_include_arguments(&include.args)?;
+
+               // Load launch file
+               let result = load_launch_file(
+                   Path::new(&include.file),
+                   args
+               )?;
+
+               // Convert loaded nodes to plan nodes
+               let nodes = self.convert_loaded_nodes(
+                   result,
+                   include.namespace.as_deref()
+               )?;
+
+               // Merge into plan
+               for (node_name, node) in nodes {
+                   expanded_plan.node.insert(node_name, node);
+               }
+           }
+
+           Ok(expanded_plan)
+       }
+   }
+   ```
+
+2. **Implement Node Conversion**
+   ```rust
+   fn convert_loaded_nodes(
+       &self,
+       result: LaunchLoadResult,
+       namespace_prefix: Option<&str>
+   ) -> Result<IndexMap<String, Node>, CompileError> {
+       let mut nodes = IndexMap::new();
+
+       for node_info in result.nodes {
+           let node_name = self.generate_node_name(&node_info, namespace_prefix);
+           let node = Node {
+               pkg: node_info.package,
+               exec: node_info.executable,
+               name: node_info.name,
+               namespace: self.merge_namespaces(
+                   namespace_prefix,
+                   node_info.namespace.as_deref()
+               ),
+               param: self.convert_parameters(node_info.parameters),
+               remap: self.convert_remappings(node_info.remappings),
+               // ... other fields
+           };
+           nodes.insert(node_name, node);
+       }
+
+       Ok(nodes)
+   }
+   ```
+
+3. **Handle Name Conflicts**
+   - Detect when loaded node name conflicts with plan-defined node
+   - Strategy: Prefix included node names with include name
+   - Example: `camera_launch/camera_node` for node from `camera_launch` include
+   - Allow user to override with explicit naming
+
+4. **Apply Namespace Prefixes**
+   - Prepend namespace from include to node namespaces
+   - Handle absolute vs relative namespace paths
+   - Preserve node-level namespace settings
+
+5. **Error Reporting**
+   - Report errors from launch file loading
+   - Include context: which include caused the error
+   - Line numbers from plan file for include directive
+
+**Test Cases**:
+- [ ] Compile plan with single launch include
+- [ ] Compile plan with multiple launch includes
+- [ ] Merge loaded nodes with plan nodes (no conflicts)
+- [ ] Handle node name conflict with prefixing
+- [ ] Apply namespace prefix to included nodes
+- [ ] Skip include when `when` condition is false
+- [ ] Resolve plan parameters in include arguments
+- [ ] Load composable nodes from container
+- [ ] Handle launch file loading error gracefully
+- [ ] Verify expanded plan has all nodes (plan + included)
+- [ ] Generate correct command lines for included nodes
+- [ ] Included nodes participate in link resolution
+
+**Files Modified**:
+- `ros-plan-compiler/src/compiler.rs`
+- `ros-plan-compiler/src/lib.rs`
+
+**Files Added**:
+- `ros-plan-compiler/src/launch_integration.rs`
+- `ros-plan-compiler/tests/include_compile_tests.rs`
+
+---
+
+### Phase 6.4: Runtime Parameter Updates
+
+**Timeline**: 3-4 days
+**Status**: 🔴 Not Started
+
+#### F38: Launch Include Cache and Reload
+
+**Description**: Implement caching and reloading of launch includes when parameters change at runtime.
+
+**Work Items**:
+
+1. **Create LaunchIncludeCache** (`ros-plan-compiler/src/launch_cache.rs`)
+   ```rust
+   use std::collections::HashMap;
+   use std::path::PathBuf;
+
+   pub struct LaunchIncludeCache {
+       /// Map from include name to loaded result
+       cache: HashMap<String, CachedLaunchInclude>,
+   }
+
+   struct CachedLaunchInclude {
+       /// Path to launch file
+       file: PathBuf,
+
+       /// Arguments used for loading
+       arguments: HashMap<String, String>,
+
+       /// Loaded nodes
+       result: LaunchLoadResult,
+
+       /// Which plan parameters this include depends on
+       parameter_dependencies: Vec<String>,
+   }
+
+   impl LaunchIncludeCache {
+       pub fn load_or_get(
+           &mut self,
+           include_name: &str,
+           launch_file: &Path,
+           arguments: HashMap<String, String>
+       ) -> Result<&LaunchLoadResult, String> {
+           // Check if cached and arguments match
+           if let Some(cached) = self.cache.get(include_name) {
+               if cached.file == launch_file && cached.arguments == arguments {
+                   return Ok(&cached.result);
+               }
+           }
+
+           // Load and cache
+           let result = load_launch_file(launch_file, arguments.clone())?;
+           let parameter_deps = result.parameter_dependencies.clone();
+
+           self.cache.insert(include_name.to_string(), CachedLaunchInclude {
+               file: launch_file.to_path_buf(),
+               arguments,
+               result,
+               parameter_dependencies: parameter_deps,
+           });
+
+           Ok(&self.cache.get(include_name).unwrap().result)
+       }
+
+       pub fn invalidate_for_parameter(&mut self, param_name: &str) -> Vec<String> {
+           let mut invalidated = Vec::new();
+
+           self.cache.retain(|include_name, cached| {
+               if cached.parameter_dependencies.contains(&param_name.to_string()) {
+                   invalidated.push(include_name.clone());
+                   false // Remove from cache
+               } else {
+                   true // Keep in cache
+               }
+           });
+
+           invalidated
+       }
+   }
+   ```
+
+2. **Add Reload API to Compiler**
+   ```rust
+   impl Compiler {
+       pub fn reload_for_parameter_change(
+           &mut self,
+           param_name: &str,
+           new_value: String
+       ) -> Result<ReloadResult, CompileError> {
+           // Invalidate affected includes
+           let invalidated = self.launch_cache.invalidate_for_parameter(param_name);
+
+           // Reload each invalidated include
+           let mut added_nodes = Vec::new();
+           let mut removed_nodes = Vec::new();
+
+           for include_name in invalidated {
+               let old_nodes = self.get_nodes_from_include(&include_name);
+
+               // Reload with new parameter value
+               let new_result = self.reload_include(&include_name)?;
+               let new_nodes = self.convert_loaded_nodes(new_result, None)?;
+
+               // Compute diff
+               let (added, removed) = self.diff_nodes(old_nodes, new_nodes);
+               added_nodes.extend(added);
+               removed_nodes.extend(removed);
+           }
+
+           Ok(ReloadResult {
+               nodes_to_start: added_nodes,
+               nodes_to_stop: removed_nodes,
+           })
+       }
+   }
+
+   pub struct ReloadResult {
+       pub nodes_to_start: Vec<NodeInfo>,
+       pub nodes_to_stop: Vec<String>, // Node names
+   }
+   ```
+
+3. **Implement Node Diffing**
+   ```rust
+   fn diff_nodes(
+       old: IndexMap<String, Node>,
+       new: IndexMap<String, Node>
+   ) -> (Vec<Node>, Vec<String>) {
+       let mut added = Vec::new();
+       let mut removed = Vec::new();
+
+       // Find added nodes
+       for (name, node) in &new {
+           if !old.contains_key(name) {
+               added.push(node.clone());
+           }
+       }
+
+       // Find removed nodes
+       for (name, _) in &old {
+           if !new.contains_key(name) {
+               removed.push(name.clone());
+           }
+       }
+
+       (added, removed)
+   }
+   ```
+
+4. **Handle Node Modifications**
+   - Detect when node configuration changes (same name, different config)
+   - Strategy: Stop old node and start new node
+   - Track which nodes came from which include
+
+**Test Cases**:
+- [ ] Load launch include and cache result
+- [ ] Reload include when cache miss
+- [ ] Return cached result when arguments match
+- [ ] Invalidate cache when dependent parameter changes
+- [ ] Reload include with new parameter value
+- [ ] Compute diff: detect added nodes
+- [ ] Compute diff: detect removed nodes
+- [ ] Compute diff: detect modified nodes
+- [ ] Multiple includes depending on same parameter
+- [ ] Parameter change affects subset of includes
+- [ ] No reload when unrelated parameter changes
+
+**Files Added**:
+- `ros-plan-compiler/src/launch_cache.rs`
+- `ros-plan-compiler/tests/launch_cache_tests.rs`
+
+**Files Modified**:
+- `ros-plan-compiler/src/compiler.rs`
+
+---
+
+#### F39: Runtime Node Lifecycle Management
+
+**Description**: Provide runtime API for starting and stopping nodes based on launch include changes.
+
+**Work Items**:
+
+1. **Define Runtime API** (`ros-plan-runtime/src/launch_runtime.rs`)
+   ```rust
+   pub struct LaunchRuntime {
+       compiler: Compiler,
+       running_nodes: HashMap<String, NodeHandle>,
+   }
+
+   pub struct NodeHandle {
+       name: String,
+       process: Child,
+       include_source: Option<String>, // Which include created this node
+   }
+
+   impl LaunchRuntime {
+       pub fn update_parameter(
+           &mut self,
+           param_name: &str,
+           new_value: String
+       ) -> Result<(), RuntimeError> {
+           // Reload affected includes
+           let reload_result = self.compiler.reload_for_parameter_change(
+               param_name,
+               new_value
+           )?;
+
+           // Stop removed nodes
+           for node_name in reload_result.nodes_to_stop {
+               self.stop_node(&node_name)?;
+           }
+
+           // Start added nodes
+           for node in reload_result.nodes_to_start {
+               self.start_node(node)?;
+           }
+
+           Ok(())
+       }
+
+       fn start_node(&mut self, node: Node) -> Result<(), RuntimeError> {
+           let process = self.spawn_node_process(&node)?;
+           let handle = NodeHandle {
+               name: node.name.clone().unwrap_or_default(),
+               process,
+               include_source: node.include_source.clone(),
+           };
+           self.running_nodes.insert(handle.name.clone(), handle);
+           Ok(())
+       }
+
+       fn stop_node(&mut self, node_name: &str) -> Result<(), RuntimeError> {
+           if let Some(handle) = self.running_nodes.remove(node_name) {
+               handle.process.kill()?;
+               handle.process.wait()?;
+           }
+           Ok(())
+       }
+   }
+   ```
+
+2. **Track Node Source**
+   - Record which include each node came from
+   - Store in NodeHandle for debugging
+   - Use for selective reloading
+
+3. **Implement Graceful Shutdown**
+   - Send SIGTERM before SIGKILL
+   - Wait for graceful shutdown timeout
+   - Handle zombie processes
+
+4. **Add Runtime Logging**
+   - Log when nodes start/stop due to parameter changes
+   - Include node name, reason, include source
+   - Support different log levels
+
+5. **Error Recovery**
+   - Handle node startup failures
+   - Revert to previous state on reload error
+   - Report which nodes failed to start
+
+**Test Cases**:
+- [ ] Start node successfully
+- [ ] Stop node successfully
+- [ ] Update parameter triggers node reload
+- [ ] Added nodes are started
+- [ ] Removed nodes are stopped
+- [ ] Modified nodes are restarted (stop old, start new)
+- [ ] Handle node startup failure gracefully
+- [ ] Revert on reload error
+- [ ] Multiple parameter updates in sequence
+- [ ] Track node source include correctly
+- [ ] Graceful shutdown with timeout
+- [ ] Handle zombie processes
+
+**Files Added**:
+- `ros-plan-runtime/src/launch_runtime.rs`
+- `ros-plan-runtime/tests/runtime_tests.rs`
+
+**Files Modified**:
+- `ros-plan-runtime/Cargo.toml` (new crate)
+- `Cargo.toml` (add to workspace)
+
+---
+
+### Phase 6.5: Testing and Documentation
+
+**Timeline**: 2-3 days
+**Status**: 🔴 Not Started
+
+#### F40: Integration Tests and Examples
+
+**Description**: Comprehensive integration tests and example plans demonstrating launch include functionality.
+
+**Work Items**:
+
+1. **Create Test Launch Files**
+   ```
+   ros-plan-compiler/tests/fixtures/launch/
+   ├── simple_talker.launch.py      # Single node
+   ├── talker_listener.launch.py    # Multiple nodes
+   ├── camera_driver.launch.py      # With parameters
+   ├── composable.launch.py         # Container with composable nodes
+   └── conditional.launch.py        # With conditionals
+   ```
+
+2. **Create Test Plan Files**
+   ```yaml
+   # tests/fixtures/includes/simple_include.yaml
+   include:
+     talker:
+       file: ${TEST_FIXTURES}/launch/simple_talker.launch.py
+
+   node:
+     listener:
+       pkg: demo_nodes_cpp
+       exec: listener
+
+   link:
+     chatter: !pubsub
+       type: std_msgs/msg/String
+       src: [talker/talker/chatter]
+       dst: [listener/chatter]
+   ```
+
+3. **Integration Test Scenarios**
+   - Simple include: Load single launch file
+   - Multiple includes: Load multiple launch files
+   - Include with arguments: Pass parameters to launch
+   - Include with namespace: Prefix node namespaces
+   - Conditional include: Skip when condition false
+   - Nested includes: Launch file includes another launch file
+   - Parameter reload: Change parameter, reload include
+   - Name conflict resolution: Handle duplicate node names
+   - Composable nodes: Load container with components
+   - Lifecycle nodes: Load lifecycle node from launch
+
+4. **Add Example Plans to Documentation**
+   ```
+   examples/launch_integration/
+   ├── simple_include.yaml          # Basic launch include
+   ├── camera_with_processing.yaml  # Include + custom nodes
+   ├── multi_robot.yaml             # Multiple includes with namespaces
+   └── runtime_reload.yaml          # Parameter-dependent include
+   ```
+
+5. **Performance Testing**
+   - Measure launch file loading time
+   - Measure reload time for parameter changes
+   - Verify no memory leaks in Python FFI
+   - Test with large launch files (100+ nodes)
+
+**Test Cases**:
+- [ ] End-to-end: Compile plan with include, run nodes
+- [ ] End-to-end: Reload on parameter change, verify new nodes
+- [ ] Performance: Load large launch file (<1s)
+- [ ] Performance: Reload on parameter change (<100ms)
+- [ ] Memory: No leaks after 1000 reload cycles
+- [ ] Compatibility: Works with ROS 2 Humble launch files
+- [ ] Compatibility: Works with ROS 2 Iron launch files
+- [ ] Compatibility: Works with ROS 2 Rolling launch files
+- [ ] Error handling: Invalid launch file path
+- [ ] Error handling: Launch file syntax error
+- [ ] Error handling: Missing required argument
+- [ ] Error handling: Circular include detection
+
+**Files Added**:
+- `ros-plan-compiler/tests/fixtures/launch/*.launch.py`
+- `ros-plan-compiler/tests/fixtures/includes/*.yaml`
+- `ros-plan-compiler/tests/integration/launch_include_tests.rs`
+- `examples/launch_integration/*.yaml`
+
+---
+
+#### F41: Documentation and Migration Guide
+
+**Description**: Complete documentation for launch include feature, including migration guide from ROS 2 launch.
+
+**Work Items**:
+
+1. **Add Launch Include Chapter to Book** (`book/src/launch_includes.md`)
+   ```markdown
+   # Launch File Includes
+
+   ROS-Plan supports including existing ROS 2 Python launch files within plan files.
+   This enables gradual migration from launch to plan format, and reuse of existing
+   launch files.
+
+   ## Basic Usage
+
+   ```yaml
+   include:
+     camera_launch:
+       file: /opt/ros/humble/share/camera_driver/launch/camera.launch.py
+       args:
+         camera_name: front_camera
+
+   node:
+     image_processor:
+       pkg: image_processing
+       exec: processor
+       socket:
+         input: !sub
+           type: sensor_msgs/msg/Image
+
+   link:
+     camera_images: !pubsub
+       type: sensor_msgs/msg/Image
+       src: [camera_launch/camera_node/image_raw]
+       dst: [image_processor/input]
+   ```
+
+   ## Features
+   - Pass arguments to launch files
+   - Namespace prefixing for included nodes
+   - Conditional includes with `when` clause
+   - Automatic parameter dependency tracking
+   - Runtime reloading on parameter changes
+
+   ## How It Works
+   - Launch files are loaded using Python launch API
+   - No processes are spawned during loading
+   - Node metadata is extracted using visitor pattern
+   - Included nodes merge with plan-defined nodes
+   - Links can connect plan and launch nodes
+   ```
+
+2. **Add API Documentation**
+   - Document LaunchLoader Python API
+   - Document launch_loader Rust API
+   - Document LaunchInclude format
+   - Document parameter dependency tracking
+
+3. **Create Migration Guide** (`book/src/migration_from_launch.md`)
+   ```markdown
+   # Migrating from ROS 2 Launch
+
+   This guide helps you migrate from ROS 2 launch files to ROS-Plan.
+
+   ## Strategy 1: Gradual Migration
+
+   Start by including your existing launch files, then gradually
+   convert nodes to plan format:
+
+   1. Create plan file that includes your launch file
+   2. Add new nodes in plan format
+   3. Convert one launch node at a time to plan format
+   4. Eventually remove the include when all nodes converted
+
+   ## Strategy 2: Hybrid Approach
+
+   Keep stable subsystems in launch format, use plan for top-level
+   coordination:
+
+   - Hardware drivers: Keep in launch files
+   - Application logic: Define in plan format
+   - System integration: Use plan links to connect
+
+   ## Conversion Reference
+
+   ### Node Definition
+
+   Launch:
+   ```python
+   Node(
+       package='demo_nodes_cpp',
+       executable='talker',
+       name='my_talker',
+       namespace='/demo',
+       parameters=[{'publish_rate': 10}],
+       remappings=[('chatter', 'my_topic')]
+   )
+   ```
+
+   Plan:
+   ```yaml
+   node:
+     my_talker:
+       pkg: demo_nodes_cpp
+       exec: talker
+       name: my_talker
+       namespace: /demo
+       param:
+         publish_rate: 10
+       remap:
+         chatter: my_topic
+   ```
+   ```
+
+4. **Add Troubleshooting Section**
+   - Common errors and solutions
+   - Debugging launch includes
+   - Python environment issues
+   - Performance tuning
+
+5. **Update README and Quick Start**
+   - Add launch include example to README
+   - Update quick start with include example
+   - Document Python dependencies
+
+**Documentation Sections**:
+- [ ] Launch includes chapter in book
+- [ ] API reference for LaunchLoader
+- [ ] Migration guide from ROS 2 launch
+- [ ] Troubleshooting guide
+- [ ] Example plans with includes
+- [ ] README updated with launch includes
+- [ ] Python dependency installation guide
+- [ ] Performance and limitations section
+
+**Files Added**:
+- `book/src/launch_includes.md`
+- `book/src/migration_from_launch.md`
+- `book/src/troubleshooting.md`
+
+**Files Modified**:
+- `book/src/SUMMARY.md` (add new chapters)
+- `README.md` (add launch include example)
+
+---
+
+## Phase 6 Testing Strategy
+
+### Unit Tests
+- [ ] LaunchLoader API (Python)
+- [ ] Visitor pattern (Python)
+- [ ] PyO3 FFI bindings (Rust)
+- [ ] LaunchInclude parsing (Rust)
+- [ ] Node conversion (Rust)
+- [ ] Launch cache (Rust)
+- [ ] Node diffing (Rust)
+
+### Integration Tests
+- [ ] Compile plan with include
+- [ ] Run nodes from included launch
+- [ ] Reload on parameter change
+- [ ] Name conflict resolution
+- [ ] Namespace prefixing
+- [ ] Composable node containers
+- [ ] Nested includes
+
+### End-to-End Tests
+- [ ] Full system: Include → Compile → Run
+- [ ] Runtime reload: Change param → Restart nodes
+- [ ] Multi-include: Multiple launch files
+- [ ] Hybrid: Plan nodes + launch nodes + links
+
+### Performance Tests
+- [ ] Load time for large launch files
+- [ ] Reload time on parameter change
+- [ ] Memory usage over 1000 reloads
+- [ ] Python GIL overhead
+
+### Compatibility Tests
+- [ ] ROS 2 Humble launch files
+- [ ] ROS 2 Iron launch files
+- [ ] ROS 2 Rolling launch files
+- [ ] Official ROS 2 example launch files
+
+---
+
+## Phase 6 Dependencies
+
+**External Dependencies**:
+- Python 3.10+
+- PyO3 0.22+
+- UV package manager
+- ROS 2 launch package (Python)
+- ruamel.yaml (Python)
+- lark (Python)
+- packaging (Python)
+
+**Internal Dependencies**:
+- Phase 1: Core compiler (F1-F10)
+- Phase 2: Lua evaluation (F11-F15)
+- Phase 3: Link resolution (F16-F17)
+- Phase 4: Code generation (F18-F25)
+- Phase 5: Testing infrastructure (F26-F31)
+
+**Sequential Dependencies Within Phase 6**:
+- F33 depends on F32 (need UV workspace before adding Python code)
+- F35 depends on F33 (need Python API before FFI bindings)
+- F36 parallel to F35 (format and FFI can develop concurrently)
+- F37 depends on F35, F36 (need FFI and format before compiler integration)
+- F38 depends on F37 (need compiler integration before caching)
+- F39 depends on F38 (need cache before runtime)
+- F40 depends on F37, F38, F39 (need all features for integration tests)
+- F41 depends on F40 (document after testing complete)
+
+---
+
+## Phase 6 Success Criteria
+
+- [ ] All 10 features (F32-F41) implemented and tested
+- [ ] UV workspace successfully replaces Rye
+- [ ] Python launch loader extracts node metadata without spawning processes
+- [ ] PyO3 integration works reliably with no memory leaks
+- [ ] Plan format supports launch includes with arguments
+- [ ] Compiler merges included nodes with plan nodes
+- [ ] Name conflicts resolved with prefixing
+- [ ] Namespace prefixing works correctly
+- [ ] Launch include cache speeds up reloads
+- [ ] Parameter dependency tracking detects affected includes
+- [ ] Runtime API starts/stops nodes on parameter changes
+- [ ] All integration tests pass
+- [ ] Performance meets targets (load <1s, reload <100ms)
+- [ ] Documentation complete with examples and migration guide
+- [ ] Compatible with ROS 2 Humble, Iron, and Rolling
+
+---
+
+## Phase 6 Known Limitations
+
+1. **Python Dependency**: Requires Python runtime and ROS 2 launch packages
+2. **Private API Usage**: Relies on Python name mangling to access private members (fragile across ROS versions)
+3. **No XML/YAML Launch**: Only supports Python launch files (not XML or YAML launch formats)
+4. **Limited Launch Features**: May not support all launch features (e.g., custom event handlers, complex substitutions)
+5. **Performance Overhead**: Python FFI adds startup latency compared to pure Rust
+6. **Version Compatibility**: May break when ROS 2 launch internals change in new releases
+
+---
+
+## Phase 6 Future Enhancements
+
+- **F42**: Support XML and YAML launch file formats
+- **F43**: Static analysis of launch files (detect issues before runtime)
+- **F44**: Launch file visualization (show node tree from launch)
+- **F45**: Automatic conversion tool (launch.py → plan.yaml)
+- **F46**: Native Rust launch parser (remove Python dependency)
+- **F47**: Launch file hot reload (watch file changes)
+- **F48**: Include from package:// URIs (resolve from ROS packages)
+- **F49**: Lazy loading (only load includes when needed)
+- **F50**: Parallel loading (load multiple includes concurrently)
