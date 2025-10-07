@@ -1,0 +1,20 @@
+node:
+  server:
+    pkg: demo_nodes_cpp
+    exec: add_two_ints_server
+    socket:
+      add: !srv
+        type: example_interfaces/srv/AddTwoInts
+
+  client:
+    pkg: demo_nodes_cpp
+    exec: add_two_ints_client
+    socket:
+      add: !cli
+        type: std_srvs/srv/SetBool  # Wrong type
+
+link:
+  add_service: !service
+    type: example_interfaces/srv/AddTwoInts  # F17: Type mismatch with client/add
+    listen: server/add
+    connect: [client/add]

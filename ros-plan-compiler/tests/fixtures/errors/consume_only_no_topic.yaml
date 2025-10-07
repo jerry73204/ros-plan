@@ -1,0 +1,13 @@
+node:
+  listener:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+
+link:
+  consume_link: !pubsub
+    type: std_msgs/msg/String
+    dst: [listener/input]
+    # F5: Empty src without explicit topic - should error

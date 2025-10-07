@@ -1,0 +1,13 @@
+node:
+  talker:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      output: !pub
+        type: std_msgs/msg/String
+
+link:
+  external_publish: !pubsub
+    type: std_msgs/msg/String
+    src: [talker/output]
+    # F5: Empty dst is allowed, topic derived from source

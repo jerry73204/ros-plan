@@ -1,0 +1,12 @@
+node:
+  talker:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      output: !pub
+        type: std_msgs/msg/String
+
+link:
+  invalid_link: !pubsub
+    type: std_msgs/msg/String
+    # F5: Both src and dst are empty - should error

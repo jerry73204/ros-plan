@@ -1,0 +1,20 @@
+node:
+  talker:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      output: !pub
+        type: std_msgs/msg/String
+
+  listener:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+
+link:
+  chatter: !pubsub
+    type: std_msgs/msg/String  # F17: All types match
+    src: [talker/output]
+    dst: [listener/input]

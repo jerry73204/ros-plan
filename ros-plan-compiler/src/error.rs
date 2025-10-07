@@ -50,6 +50,12 @@ pub enum Error {
     #[error("link `{link}` has {source_count} sources but no explicit 'topic' attribute\n  Links with multiple sources must specify a topic name.\n\n  Suggestion: Add a topic field like:\n    link:\n      {link}: !pubsub\n        topic: /shared_topic  # Add this\n        src: [...]\n        dst: [...]")]
     MultipleSourcesRequireExplicitTopic { link: KeyOwned, source_count: usize },
 
+    #[error("link `{link}` must have at least a source or a destination\n  Both 'src' and 'dst' arrays cannot be empty.\n\n  Suggestion: Add sources or destinations:\n    link:\n      {link}: !pubsub\n        src: [node/pub]  # Add sources\n        dst: [node/sub]  # Or add destinations")]
+    LinkMustHaveSourceOrDestination { link: KeyOwned },
+
+    #[error("link `{link}` has no source but no explicit 'topic' attribute\n  Consume-only links (empty src) must specify a topic name.\n\n  Suggestion: Add a topic field like:\n    link:\n      {link}: !pubsub\n        topic: /external_topic  # Add this\n        dst: [...]")]
+    EmptySourceRequiresExplicitTopic { link: KeyOwned },
+
     #[error("cannot reference '{key}' - socket references can only be 2 levels deep: 'entity/socket'\n  {hint}")]
     SocketReferenceTooDeep { key: KeyOwned, hint: String },
 
@@ -83,6 +89,14 @@ pub enum Error {
 
     #[error("either a `path` or a pair of `pkg` and `path` is expected")]
     InvalidIncludePath,
+
+    #[error("type mismatch in link `{link}`: link type is `{link_type}` but socket `{socket}` has type `{socket_type}`\n  All sockets in a link must have compatible types.\n\n  Suggestion: Ensure all sockets use the same message/service type:\n    socket:\n      {socket}: !pub/!sub\n        type: {link_type}  # Must match link type")]
+    LinkSocketTypeMismatch {
+        link: String,
+        link_type: String,
+        socket: String,
+        socket_type: String,
+    },
 }
 
 impl From<mlua::Error> for Error {

@@ -1,0 +1,28 @@
+node:
+  pub1:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      out: !pub
+        type: std_msgs/msg/String
+
+  pub2:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      out: !pub
+        type: std_msgs/msg/Int32  # Wrong type
+
+  listener:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+
+link:
+  multi_pub: !pubsub
+    type: std_msgs/msg/String
+    topic: /shared_topic
+    src: [pub1/out, pub2/out]  # pub2/out has wrong type
+    dst: [listener/input]

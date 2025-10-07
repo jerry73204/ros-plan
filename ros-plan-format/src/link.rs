@@ -41,7 +41,9 @@ pub struct PubSubLinkCfg {
     pub qos: Qos,
 
     pub topic: Option<TextOrExpr>,
+    #[serde(default)]
     pub src: Vec<KeyOrExpr>,
+    #[serde(default)]
     pub dst: Vec<KeyOrExpr>,
 }
 
@@ -53,6 +55,7 @@ pub struct ServiceLinkCfg {
     #[serde(rename = "type")]
     pub ty: InterfaceTypeOwned,
     pub listen: KeyOrExpr,
+    #[serde(default)]
     pub connect: Vec<KeyOrExpr>,
 }
 
