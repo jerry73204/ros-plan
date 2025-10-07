@@ -11,7 +11,7 @@ dependencies = [
     "packaging>=24.1",
 ]
 readme = "README.md"
-requires-python = ">= 3.8"
+requires-python = "==3.10.*"
 
 [project.scripts]
 "launch2dump" = "launch2dump:main"
@@ -19,10 +19,6 @@ requires-python = ">= 3.8"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.rye]
-managed = true
-dev-dependencies = []
 
 [tool.hatch.metadata]
 allow-direct-references = true
