@@ -1,0 +1,21 @@
+node:
+  talker:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      output: !pub
+        type: std_msgs/msg/String
+
+  listener:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+
+link:
+  chatter: !pubsub
+    type: std_msgs/msg/String
+    topic: /absolute/chatter  # F8: Absolute topic (starts with /)
+    src: [talker/output]
+    dst: [listener/input]

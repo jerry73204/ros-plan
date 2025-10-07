@@ -1,0 +1,22 @@
+node:
+  camera:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      image: !pub
+        type: std_msgs/msg/String
+
+  processor:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      image_in: !sub
+        type: std_msgs/msg/String
+
+link:
+  image_feed: !pubsub
+    type: std_msgs/msg/String
+    # F8: No explicit topic - will derive from socket (camera/image)
+    # and prepend namespace (camera), resulting in /camera/camera/image
+    src: [camera/image]
+    dst: [processor/image_in]

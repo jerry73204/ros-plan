@@ -37,6 +37,7 @@ impl LinkResolver {
         // Schedule the job to visit the root
         self.queue.push_back(Job {
             current: program.root_scope().into(),
+            namespace: "/".to_string(), // F8: Root namespace
         });
 
         // Perform traversal
@@ -48,10 +49,13 @@ impl LinkResolver {
     }
 
     fn visit_scope(&mut self, program: &Program, job: Job) -> Result<(), Error> {
-        let Job { current: shared } = job;
+        let Job {
+            current: shared,
+            namespace,
+        } = job;
 
         shared.with_read(|guard| -> Result<_, Error> {
-            let visitor = Visitor::new(program, &shared);
+            let visitor = Visitor::new(program, &shared, &namespace);
 
             for link in guard.pubsub_link().values() {
                 link.with_write(|mut link| visitor.visit_pubsub_link(&mut link))?;
@@ -65,20 +69,34 @@ impl LinkResolver {
 
             // Schedule a job to resolve links if the node has a plan
             // or a group
-            for (_suffix, group) in guard.group() {
+            for (suffix_key, group) in guard.group() {
+                // F8: Child namespace is parent namespace + group key
+                let child_namespace = format!(
+                    "{}/{}",
+                    namespace.trim_end_matches('/'),
+                    suffix_key.as_str()
+                );
                 self.queue.push_back(Job {
                     current: group.clone().into(),
+                    namespace: child_namespace,
                 });
             }
 
-            for include in guard.include().values() {
+            for (include_key, include) in guard.include() {
                 include.with_read(|guard| {
                     let Some(plan) = &guard.plan else {
                         todo!();
                     };
 
+                    // F8: Child namespace is parent namespace + include key
+                    let child_namespace = format!(
+                        "{}/{}",
+                        namespace.trim_end_matches('/'),
+                        include_key.as_str()
+                    );
                     self.queue.push_back(Job {
                         current: plan.clone().into(),
+                        namespace: child_namespace,
                     });
                 });
             }
@@ -91,11 +109,16 @@ impl LinkResolver {
 struct Visitor<'a> {
     program: &'a Program,
     current: &'a ScopeShared,
+    namespace: &'a str, // F8: Namespace of the scope where links are being resolved
 }
 
 impl<'a> Visitor<'a> {
-    pub fn new(program: &'a Program, current: &'a ScopeShared) -> Self {
-        Self { program, current }
+    pub fn new(program: &'a Program, current: &'a ScopeShared, namespace: &'a str) -> Self {
+        Self {
+            program,
+            current,
+            namespace,
+        }
     }
 
     pub fn visit_pubsub_link(&self, link: &mut PubSubLinkCtx) -> Result<(), Error> {
@@ -199,8 +222,10 @@ impl<'a> Visitor<'a> {
             set_or_panic!(link.dst_socket, dst);
         }
 
-        // Derive topic name (F6: single-source derivation, F7: multi-source validation, F10: plan socket topics)
-        link.derived_topic = derive_topic_name(link, &link.key, &plan_pub_sockets)?;
+        // F8: Use the scope's namespace for topic derivation (where the link is defined)
+        // Derive topic name (F6: single-source derivation, F7: multi-source validation, F8: namespace prepending, F10: plan socket topics)
+        link.derived_topic =
+            derive_topic_name(link, &link.key, &plan_pub_sockets, Some(self.namespace))?;
 
         Ok(())
     }
@@ -317,10 +342,37 @@ fn associate_service_link_with_node_sockets(shared: &ServiceLinkShared) {
 #[derive(Debug)]
 struct Job {
     pub current: ScopeShared,
+    pub namespace: String, // F8: Track namespace path for topic resolution
+}
+
+/// F8: Prepend namespace to relative topics (not starting with /)
+/// Absolute topics (starting with /) are returned unchanged
+fn prepend_namespace_if_relative(topic: &str, namespace: Option<&str>) -> String {
+    if topic.starts_with('/') {
+        // Absolute topic - return as-is
+        topic.to_string()
+    } else {
+        // Relative topic - prepend namespace
+        match namespace {
+            Some(ns) if !ns.is_empty() => {
+                // Ensure namespace starts with / and doesn't end with /
+                if ns.starts_with('/') {
+                    format!("{}/{}", ns.trim_end_matches('/'), topic)
+                } else {
+                    format!("/{}/{}", ns.trim_end_matches('/'), topic)
+                }
+            }
+            _ => {
+                // No namespace or empty namespace - prepend / to make absolute
+                format!("/{}", topic)
+            }
+        }
+    }
 }
 
 /// F6: Derive topic name from link
 /// F7: Validate multi-source links require explicit topic
+/// F8: Support absolute/relative topic paths with namespace prepending
 /// F10: Support plan socket topic resolution
 /// Priority: 1. explicit link `topic` field, 2. plan socket `topic` field,
 ///           3. single source's ros_name + socket name
@@ -328,11 +380,13 @@ fn derive_topic_name(
     link: &PubSubLinkCtx,
     link_key: &KeyOwned,
     plan_pub_sockets: &[PlanPubShared],
+    namespace: Option<&str>,
 ) -> Result<Option<String>, Error> {
     // 1. If topic is explicitly set on the link and evaluated, use it
     if let Some(topic_store) = &link.topic {
         if let Ok(topic_text) = topic_store.get_stored() {
-            return Ok(Some(topic_text.clone()));
+            // F8: Prepend namespace for relative topics (not starting with /)
+            return Ok(Some(prepend_namespace_if_relative(topic_text, namespace)));
         }
     }
 
@@ -364,7 +418,8 @@ fn derive_topic_name(
                 .as_ref()
                 .and_then(|topic_store| topic_store.get_stored().ok().cloned())
         }) {
-            return Ok(Some(topic));
+            // F8: Prepend namespace for relative topics
+            return Ok(Some(prepend_namespace_if_relative(&topic, namespace)));
         }
     }
 
@@ -376,7 +431,8 @@ fn derive_topic_name(
             // Check if ros_name override exists
             if let Some(ros_name_store) = &socket.ros_name {
                 if let Ok(ros_name) = ros_name_store.get_stored() {
-                    return Some(ros_name.clone());
+                    // F8: Prepend namespace for relative ros_name
+                    return Some(prepend_namespace_if_relative(ros_name, namespace));
                 }
             }
 
@@ -384,12 +440,15 @@ fn derive_topic_name(
             let (parent_key, socket_name) = socket.key.as_key().split_parent();
             let socket_name = socket_name?;
 
-            // If there's a parent key, use it as namespace, otherwise use socket name only
-            if let Some(parent) = parent_key {
-                Some(format!("{}/{}", parent.as_str(), socket_name.as_str()))
+            // F8: Derived topics are always relative, prepend namespace
+            // Build the relative topic from parent key + socket name
+            let relative_topic = if let Some(parent) = parent_key {
+                format!("{}/{}", parent.as_str(), socket_name.as_str())
             } else {
-                Some(socket_name.to_string())
-            }
+                socket_name.to_string()
+            };
+
+            Some(prepend_namespace_if_relative(&relative_topic, namespace))
         }));
     }
 
@@ -451,7 +510,7 @@ mod tests {
             derived_topic: None,
         };
 
-        let topic = derive_topic_name(&link, &link_key, &[]);
+        let topic = derive_topic_name(&link, &link_key, &[], None);
         assert!(topic.is_ok());
         assert_eq!(topic.unwrap(), Some("/custom/topic".to_string()));
     }
@@ -475,7 +534,7 @@ mod tests {
             derived_topic: None,
         };
 
-        let result = derive_topic_name(&link, &link_key, &[]);
+        let result = derive_topic_name(&link, &link_key, &[], None);
         assert!(result.is_err());
         match result {
             Err(Error::MultipleSourcesRequireExplicitTopic { source_count, .. }) => {
@@ -510,7 +569,7 @@ mod tests {
             derived_topic: None,
         };
 
-        let result = derive_topic_name(&link, &link_key, &[]);
+        let result = derive_topic_name(&link, &link_key, &[], None);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), Some("/shared/topic".to_string()));
     }
@@ -532,7 +591,7 @@ mod tests {
             derived_topic: None,
         };
 
-        let result = derive_topic_name(&link, &link_key, &[]);
+        let result = derive_topic_name(&link, &link_key, &[], None);
         assert!(result.is_err());
         match result.unwrap_err() {
             Error::EmptySourceRequiresExplicitTopic { link } => {
@@ -566,7 +625,7 @@ mod tests {
             derived_topic: None,
         };
 
-        let result = derive_topic_name(&link, &link_key, &[]);
+        let result = derive_topic_name(&link, &link_key, &[], None);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), Some("/explicit/topic".to_string()));
     }
@@ -591,7 +650,7 @@ mod tests {
             derived_topic: None,
         };
 
-        let result = derive_topic_name(&link, &link_key, &[]);
+        let result = derive_topic_name(&link, &link_key, &[], None);
         assert!(result.is_err());
         let err_msg = format!("{}", result.unwrap_err());
         assert!(err_msg.contains("camera_array"));
@@ -642,7 +701,7 @@ mod tests {
             derived_topic: None,
         };
 
-        let result = derive_topic_name(&link, &link_key, &[plan_socket]);
+        let result = derive_topic_name(&link, &link_key, &[plan_socket], None);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), Some("/plan/topic".to_string()));
     }
@@ -689,7 +748,7 @@ mod tests {
             derived_topic: None,
         };
 
-        let result = derive_topic_name(&link, &link_key, &[plan_socket]);
+        let result = derive_topic_name(&link, &link_key, &[plan_socket], None);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), Some("/link/topic".to_string()));
     }
@@ -745,7 +804,7 @@ mod tests {
             derived_topic: None,
         };
 
-        let result = derive_topic_name(&link, &link_key, &[plan_socket]);
+        let result = derive_topic_name(&link, &link_key, &[plan_socket], None);
         assert!(result.is_ok());
         // Should fall through to node socket's ros_name
         assert_eq!(result.unwrap(), Some("/node/ros_name".to_string()));
@@ -809,12 +868,152 @@ mod tests {
 
         // With multiple plan sockets, we don't use plan socket topic (F10 only applies to single plan socket)
         // This should error due to multiple sources without explicit topic
-        let result = derive_topic_name(&link, &link_key, &[plan_socket1, plan_socket2]);
+        let result = derive_topic_name(&link, &link_key, &[plan_socket1, plan_socket2], None);
         assert!(result.is_err());
     }
 
     // Additional tests for namespace and ros_name derivation would require
     // proper SharedTable setup. These are verified via integration tests.
+
+    // F8: Tests for absolute/relative topic path resolution
+
+    #[test]
+    fn absolute_topic_explicit_no_namespace_prepending() {
+        // F8: Absolute topic (starting with /) should not get namespace prepended
+        let link_key: KeyOwned = "test_link".parse().unwrap();
+        let link = PubSubLinkCtx {
+            key: link_key.clone(),
+            ty: "std_msgs/msg/String".parse().unwrap(),
+            qos: Default::default(),
+            when: None,
+            topic: Some({
+                let text_or_expr: TextOrExpr = "/absolute/topic".to_string().into();
+                let mut store = TextStore::new(text_or_expr);
+                store.eval_and_store(&mlua::Lua::new()).unwrap();
+                store
+            }),
+            src_key: vec![],
+            dst_key: vec![],
+            src_socket: None,
+            dst_socket: None,
+            derived_topic: None,
+        };
+
+        let result = derive_topic_name(&link, &link_key, &[], Some("my_namespace"));
+        assert!(result.is_ok());
+        // Absolute topic stays unchanged
+        assert_eq!(result.unwrap(), Some("/absolute/topic".to_string()));
+    }
+
+    #[test]
+    fn relative_topic_explicit_namespace_prepending() {
+        // F8: Relative topic (not starting with /) should get namespace prepended
+        let link_key: KeyOwned = "test_link".parse().unwrap();
+        let link = PubSubLinkCtx {
+            key: link_key.clone(),
+            ty: "std_msgs/msg/String".parse().unwrap(),
+            qos: Default::default(),
+            when: None,
+            topic: Some({
+                let text_or_expr: TextOrExpr = "relative/topic".to_string().into();
+                let mut store = TextStore::new(text_or_expr);
+                store.eval_and_store(&mlua::Lua::new()).unwrap();
+                store
+            }),
+            src_key: vec![],
+            dst_key: vec![],
+            src_socket: None,
+            dst_socket: None,
+            derived_topic: None,
+        };
+
+        let result = derive_topic_name(&link, &link_key, &[], Some("my_namespace"));
+        assert!(result.is_ok());
+        // Relative topic gets namespace prepended
+        assert_eq!(
+            result.unwrap(),
+            Some("/my_namespace/relative/topic".to_string())
+        );
+    }
+
+    #[test]
+    fn absolute_ros_name_no_namespace_prepending() {
+        // F8: Absolute ros_name override should not get namespace prepended
+        let link_key: KeyOwned = "test_link".parse().unwrap();
+
+        let _table = SharedTable::<NodePubCtx>::new("test_absolute_ros_name");
+        let node_socket = {
+            let ctx = NodePubCtx {
+                key: "sensor/data".parse().unwrap(),
+                ty: None,
+                qos: None,
+                ros_name: Some({
+                    let text_or_expr: TextOrExpr = "/absolute/ros/topic".to_string().into();
+                    let mut store = TextStore::new(text_or_expr);
+                    store.eval_and_store(&mlua::Lua::new()).unwrap();
+                    store
+                }),
+                remap_from: None,
+                link_to: None,
+            };
+            _table.insert(ctx)
+        };
+
+        let link = PubSubLinkCtx {
+            key: link_key.clone(),
+            ty: "std_msgs/msg/String".parse().unwrap(),
+            qos: Default::default(),
+            when: None,
+            topic: None,
+            src_key: vec![],
+            dst_key: vec![],
+            src_socket: Some(vec![node_socket]),
+            dst_socket: None,
+            derived_topic: None,
+        };
+
+        let result = derive_topic_name(&link, &link_key, &[], Some("my_namespace"));
+        assert!(result.is_ok());
+        // Absolute ros_name stays unchanged
+        assert_eq!(result.unwrap(), Some("/absolute/ros/topic".to_string()));
+    }
+
+    #[test]
+    fn relative_derived_topic_namespace_prepending() {
+        // F8: Derived topic from socket (always relative) should get namespace prepended
+        let link_key: KeyOwned = "test_link".parse().unwrap();
+
+        let _table = SharedTable::<NodePubCtx>::new("test_relative_derived");
+        let node_socket = {
+            let ctx = NodePubCtx {
+                key: "sensor/data".parse().unwrap(),
+                ty: None,
+                qos: None,
+                ros_name: None,
+                remap_from: None,
+                link_to: None,
+            };
+            _table.insert(ctx)
+        };
+
+        let link = PubSubLinkCtx {
+            key: link_key.clone(),
+            ty: "std_msgs/msg/String".parse().unwrap(),
+            qos: Default::default(),
+            when: None,
+            topic: None,
+            src_key: vec![],
+            dst_key: vec![],
+            src_socket: Some(vec![node_socket]),
+            dst_socket: None,
+            derived_topic: None,
+        };
+
+        let result = derive_topic_name(&link, &link_key, &[], Some("robot1"));
+        assert!(result.is_ok());
+        // Derived topic gets namespace prepended
+        assert_eq!(result.unwrap(), Some("/robot1/sensor/data".to_string()));
+    }
 
     // F17: Tests for type compatibility checking
 
@@ -888,7 +1087,7 @@ mod tests {
         };
 
         // Socket without type should not cause validation errors
-        let result = derive_topic_name(&link, &link_key, &[]);
+        let result = derive_topic_name(&link, &link_key, &[], None);
         assert!(result.is_ok());
     }
 
@@ -916,7 +1115,7 @@ mod tests {
             derived_topic: None,
         };
 
-        let result = derive_topic_name(&link, &link_key, &[]);
+        let result = derive_topic_name(&link, &link_key, &[], None);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), Some("/external/topic".to_string()));
     }
@@ -953,9 +1152,10 @@ mod tests {
             derived_topic: None,
         };
 
-        let result = derive_topic_name(&link, &link_key, &[]);
+        let result = derive_topic_name(&link, &link_key, &[], None);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Some("sensor/data".to_string()));
+        // F8: Derived topics are now absolute (namespace-prepended)
+        assert_eq!(result.unwrap(), Some("/sensor/data".to_string()));
     }
 
     #[test]
@@ -995,7 +1195,7 @@ mod tests {
             derived_topic: None,
         };
 
-        let result = derive_topic_name(&link, &link_key, &[]);
+        let result = derive_topic_name(&link, &link_key, &[], None);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), Some("/output/topic".to_string()));
     }

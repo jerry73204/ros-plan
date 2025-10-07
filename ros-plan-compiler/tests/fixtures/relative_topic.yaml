@@ -1,0 +1,21 @@
+node:
+  talker:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      output: !pub
+        type: std_msgs/msg/String
+
+  listener:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+
+link:
+  chatter: !pubsub
+    type: std_msgs/msg/String
+    topic: relative/chatter  # F8: Relative topic (no leading /) - will get namespace prepended
+    src: [talker/output]
+    dst: [listener/input]
