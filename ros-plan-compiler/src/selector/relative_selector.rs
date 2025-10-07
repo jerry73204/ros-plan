@@ -60,6 +60,46 @@ where
         }
     }
 
+    /// F12: Find a node, traversing through transparent includes
+    /// This allows references like "transparent_plan/internal_node/socket"
+    pub fn find_node_transparent(&self, key: &Key) -> Option<NodeShared> {
+        let (scope_key, node_ident) = key.split_parent();
+        let node_ident = node_ident?;
+
+        match scope_key {
+            Some(scope_key) => {
+                let subscope = self.find_subscope_transparent(scope_key)?;
+                subscope.with_read(|guard| guard.node().get(node_ident).cloned())
+            }
+            None => self.scope.node().get(node_ident).cloned(),
+        }
+    }
+
+    /// F12: Find a subscope, traversing through transparent includes
+    /// When an include is marked as transparent, this will continue into its plan scope
+    pub fn find_subscope_transparent(&self, key: &Key) -> Option<ScopeShared> {
+        use crate::scope::ScopeRefExt;
+        use ros_plan_format::key::KeyKind;
+
+        // Check whether the input key is relative.
+        let KeyKind::Relative { key } = key.to_kind() else {
+            return None;
+        };
+
+        // The first step can start from a plan or a group node.
+        let (mut curr, mut suffix) = self.scope.get_subscope_with_transparency(key)?;
+
+        // In later steps, it can only start from a group node or transparent include
+        while let Some(curr_suffix) = suffix.take() {
+            let (child, next_suffix) =
+                curr.with_read(|guard| guard.get_subscope_with_transparency(curr_suffix))?;
+            curr = child;
+            suffix = next_suffix;
+        }
+
+        Some(curr)
+    }
+
     pub fn find_pubsub_link(&self, key: &Key) -> Option<PubSubLinkShared> {
         let (scope_key, link_ident) = key.split_parent();
         let link_ident = link_ident?;
@@ -122,6 +162,46 @@ where
         node.with_read(|guard| guard.cli.get(socket_ident).cloned())
     }
 
+    /// F12: Find a node pub socket, traversing through transparent includes
+    pub fn find_node_pub_transparent(&self, key: &Key) -> Option<NodePubShared> {
+        let (node_key, socket_ident) = key.split_parent();
+        let node_key = node_key?;
+        let socket_ident = socket_ident?;
+
+        let node = self.find_node_transparent(node_key)?;
+        node.with_read(|guard| guard.pub_.get(socket_ident).cloned())
+    }
+
+    /// F12: Find a node sub socket, traversing through transparent includes
+    pub fn find_node_sub_transparent(&self, key: &Key) -> Option<NodeSubShared> {
+        let (node_key, socket_ident) = key.split_parent();
+        let node_key = node_key?;
+        let socket_ident = socket_ident?;
+
+        let node = self.find_node_transparent(node_key)?;
+        node.with_read(|guard| guard.sub.get(socket_ident).cloned())
+    }
+
+    /// F12: Find a node srv socket, traversing through transparent includes
+    pub fn find_node_srv_transparent(&self, key: &Key) -> Option<NodeSrvShared> {
+        let (node_key, socket_ident) = key.split_parent();
+        let node_key = node_key?;
+        let socket_ident = socket_ident?;
+
+        let node = self.find_node_transparent(node_key)?;
+        node.with_read(|guard| guard.srv.get(socket_ident).cloned())
+    }
+
+    /// F12: Find a node cli socket, traversing through transparent includes
+    pub fn find_node_cli_transparent(&self, key: &Key) -> Option<NodeCliShared> {
+        let (node_key, socket_ident) = key.split_parent();
+        let node_key = node_key?;
+        let socket_ident = socket_ident?;
+
+        let node = self.find_node_transparent(node_key)?;
+        node.with_read(|guard| guard.cli.get(socket_ident).cloned())
+    }
+
     pub fn find_plan_pub(&self, key: &Key) -> Option<PlanPubShared> {
         let (scope_key, socket_ident) = key.split_parent();
         let scope_key = scope_key?;
@@ -163,49 +243,86 @@ where
     }
 
     pub fn find_plan_or_node_pub(&self, socket_key: &Key) -> Option<PlanOrNodePub> {
-        let output: PlanOrNodePub = {
-            if let Some(socket) = self.find_node_pub(socket_key) {
+        // F12: For deep references (3+ segments), try transparent resolution first
+        // Regular resolution won't work for deep refs since find_node only handles 2-level paths
+        let (node_key, _socket_ident) = socket_key.split_parent();
+        let is_deep = node_key.is_some_and(|k| k.segment_count() > 1);
+
+        let output: PlanOrNodePub = if is_deep {
+            // Deep reference - only try transparent resolution
+            if let Some(socket) = self.find_node_pub_transparent(socket_key) {
                 socket.into()
             } else {
+                // Try plan socket as fallback
                 let socket = self.find_plan_pub(socket_key)?;
                 socket.into()
             }
+        } else if let Some(socket) = self.find_node_pub(socket_key) {
+            // Normal (shallow) reference - try regular resolution first
+            socket.into()
+        } else {
+            let socket = self.find_plan_pub(socket_key)?;
+            socket.into()
         };
         Some(output)
     }
 
     pub fn find_plan_or_node_sub(&self, socket_key: &Key) -> Option<PlanOrNodeSub> {
-        let output: PlanOrNodeSub = {
-            if let Some(socket) = self.find_node_sub(socket_key) {
+        let (node_key, _socket_ident) = socket_key.split_parent();
+        let is_deep = node_key.is_some_and(|k| k.segment_count() > 1);
+
+        let output: PlanOrNodeSub = if is_deep {
+            if let Some(socket) = self.find_node_sub_transparent(socket_key) {
                 socket.into()
             } else {
                 let socket = self.find_plan_sub(socket_key)?;
                 socket.into()
             }
+        } else if let Some(socket) = self.find_node_sub(socket_key) {
+            socket.into()
+        } else {
+            let socket = self.find_plan_sub(socket_key)?;
+            socket.into()
         };
         Some(output)
     }
 
     pub fn find_plan_or_node_srv(&self, socket_key: &Key) -> Option<PlanOrNodeSrv> {
-        let output: PlanOrNodeSrv = {
-            if let Some(socket) = self.find_node_srv(socket_key) {
+        let (node_key, _socket_ident) = socket_key.split_parent();
+        let is_deep = node_key.is_some_and(|k| k.segment_count() > 1);
+
+        let output: PlanOrNodeSrv = if is_deep {
+            if let Some(socket) = self.find_node_srv_transparent(socket_key) {
                 socket.into()
             } else {
                 let socket = self.find_plan_srv(socket_key)?;
                 socket.into()
             }
+        } else if let Some(socket) = self.find_node_srv(socket_key) {
+            socket.into()
+        } else {
+            let socket = self.find_plan_srv(socket_key)?;
+            socket.into()
         };
         Some(output)
     }
 
     pub fn find_plan_or_node_cli(&self, socket_key: &Key) -> Option<PlanOrNodeCli> {
-        let output: PlanOrNodeCli = {
-            if let Some(socket) = self.find_node_cli(socket_key) {
+        let (node_key, _socket_ident) = socket_key.split_parent();
+        let is_deep = node_key.is_some_and(|k| k.segment_count() > 1);
+
+        let output: PlanOrNodeCli = if is_deep {
+            if let Some(socket) = self.find_node_cli_transparent(socket_key) {
                 socket.into()
             } else {
                 let socket = self.find_plan_cli(socket_key)?;
                 socket.into()
             }
+        } else if let Some(socket) = self.find_node_cli(socket_key) {
+            socket.into()
+        } else {
+            let socket = self.find_plan_cli(socket_key)?;
+            socket.into()
         };
         Some(output)
     }

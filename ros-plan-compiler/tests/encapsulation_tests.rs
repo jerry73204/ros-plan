@@ -15,46 +15,36 @@ fn fixture_path(name: &str) -> PathBuf {
 
 #[test]
 fn test_too_deep_socket_reference() {
-    // F11: Socket references can only be 2 levels deep (entity/socket)
+    // F11/F12: Deep socket references without transparent includes should fail
+    // With F12, depth validation is removed in favor of resolution-based validation
+    // Deep references now fail with KeyResolutionError instead of SocketReferenceTooDeep
     let path = fixture_path("too_deep_reference.yaml");
     let compiler = Compiler::new();
     let result = compiler.compile(&path, IndexMap::new());
 
     assert!(
         result.is_err(),
-        "Deep socket reference (3+ levels) should fail validation"
+        "Deep socket reference (3+ levels) without transparent should fail"
     );
 
     let err = result.unwrap_err();
     let err_msg = format!("{}", err);
 
-    // Verify it's the right error type
+    // F12: Now fails with KeyResolutionError since resolution can't traverse non-transparent boundary
     match err {
-        Error::SocketReferenceTooDeep { key, hint } => {
+        Error::KeyResolutionError { key, .. } => {
             assert!(
-                key.as_str().contains("subplan/camera/output"),
-                "Error should reference the deep key"
-            );
-            assert!(
-                hint.contains("2 levels deep"),
-                "Error should explain depth limit"
-            );
-            assert!(
-                hint.contains("transparent"),
-                "Error should suggest transparency"
+                key.as_str().contains("subplan/camera/output") || key.as_str().contains("camera"),
+                "Error should reference the key that failed to resolve: {}",
+                key.as_str()
             );
         }
-        _ => panic!("Expected SocketReferenceTooDeep error, got: {:?}", err),
+        _ => panic!("Expected KeyResolutionError, got: {:?}", err),
     }
 
-    // Verify error message is helpful
     assert!(
-        err_msg.contains("2 levels deep"),
-        "Error should explain the depth limit"
-    );
-    assert!(
-        err_msg.contains("transparent") || err_msg.contains("plan socket"),
-        "Error should provide solution hints"
+        err_msg.contains("subplan") || err_msg.contains("camera"),
+        "Error should mention the problematic reference"
     );
 }
 
@@ -163,4 +153,78 @@ fn test_transparent_flag_parsing() {
 
     // Should still error (entity not found), but transparent flag should parse
     assert!(result.is_err());
+}
+
+#[test]
+fn test_transparent_single_level() {
+    // F12: Test single-level transparent include
+    // References like "subplan/camera/output" (3 levels) should work
+    // when subplan is marked as transparent
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("transparent_single_level.yaml");
+
+    let compiler = Compiler::new();
+    let result = compiler.compile(&path, IndexMap::new());
+
+    assert!(
+        result.is_ok(),
+        "Single-level transparent include should compile successfully: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn test_transparent_multi_level() {
+    // F12: Test multi-level (transitive) transparent includes
+    // References like "outer/inner/camera/output" (4 levels) should work
+    // when all intermediate includes are transparent
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("transparent_multi_level.yaml");
+
+    let compiler = Compiler::new();
+    let result = compiler.compile(&path, IndexMap::new());
+
+    assert!(
+        result.is_ok(),
+        "Multi-level transparent includes should compile successfully: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn test_non_transparent_deep_ref_fails() {
+    // F12: Test that deep references fail when includes are NOT transparent
+    // References like "subplan/camera/output" should fail if subplan
+    // is not marked as transparent
+    let path = fixture_path("non_transparent_deep_ref.yaml");
+    let compiler = Compiler::new();
+    let result = compiler.compile(&path, IndexMap::new());
+
+    assert!(
+        result.is_err(),
+        "Deep reference without transparent flag should fail"
+    );
+
+    let err = result.unwrap_err();
+    let err_msg = format!("{}", err);
+
+    // Should be KeyResolutionError since we can't traverse non-transparent boundary
+    match err {
+        Error::KeyResolutionError { key, .. } => {
+            assert!(
+                key.as_str().contains("subplan/camera/output"),
+                "Error should reference the deep key that failed to resolve"
+            );
+        }
+        _ => panic!("Expected KeyResolutionError, got: {:?}", err),
+    }
+
+    assert!(
+        err_msg.contains("subplan") || err_msg.contains("camera"),
+        "Error message should mention the problematic reference"
+    );
 }

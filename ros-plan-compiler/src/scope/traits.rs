@@ -111,6 +111,44 @@ pub trait ScopeRefExt: ScopeRef {
 
         Some((subscope, suffix_key))
     }
+
+    /// F12: Get subscope with transparency support
+    /// Like get_subscope, but for includes checks the transparent flag.
+    /// If an include is NOT transparent, returns None (cannot traverse).
+    /// If transparent, returns the plan scope and allows traversal.
+    fn get_subscope_with_transparency<'a>(
+        &self,
+        key: &'a Key,
+    ) -> Option<(ScopeShared, Option<&'a Key>)> {
+        let (prefix_key, kind) = self.key_upper_bound(Bound::Included(key))?;
+
+        let suffix_key = match key.strip_prefix(prefix_key) {
+            StripKeyPrefix::ImproperPrefix => return None,
+            StripKeyPrefix::EmptySuffix => None,
+            StripKeyPrefix::Suffix(suffix_key) => Some(suffix_key),
+        };
+
+        let subscope: ScopeShared = match kind {
+            KeyKind::Group => self.group()[prefix_key].clone().into(),
+            KeyKind::Include => {
+                let include = &self.include()[prefix_key];
+
+                // F12: Check transparency flag
+                let (is_transparent, plan_opt) = include
+                    .with_read(|guard| (guard.transparent.unwrap_or(false), guard.plan.clone()));
+
+                // Only allow traversal if transparent
+                if !is_transparent {
+                    return None;
+                }
+
+                plan_opt?.into()
+            }
+            _ => return None,
+        };
+
+        Some((subscope, suffix_key))
+    }
 }
 
 impl<T: ScopeRef> ScopeRefExt for T {}

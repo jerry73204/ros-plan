@@ -1,0 +1,7 @@
+# F12: Nested transparent plan - middle layer
+# This includes the camera plan and is itself included transparently
+
+include:
+  inner: !file
+    path: transparent_subplan.yaml
+    transparent: true

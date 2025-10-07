@@ -1,0 +1,22 @@
+# F12: Test multi-level (transitive) transparent includes
+# The link references "outer/inner/camera/output" which is 4 levels deep
+# This should work because both outer and inner are transparent
+
+node:
+  processor:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+
+include:
+  outer: !file
+    path: transparent_nested_subplan.yaml
+    transparent: true
+
+link:
+  deep_camera: !pubsub
+    type: std_msgs/msg/String
+    src: [outer/inner/camera/output]  # 4 levels - allowed due to transitive transparency
+    dst: [processor/input]

@@ -1,0 +1,10 @@
+# F12: Inner plan that will be included transparently
+# This plan contains a camera node that will be accessed from the parent plan
+
+node:
+  camera:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      output: !pub
+        type: std_msgs/msg/String

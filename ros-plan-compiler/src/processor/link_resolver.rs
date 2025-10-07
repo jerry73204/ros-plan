@@ -8,7 +8,7 @@ use crate::{
     scope::{ScopeRef, ScopeShared},
 };
 use itertools::Itertools;
-use ros_plan_format::key::{Key, KeyOwned};
+use ros_plan_format::key::KeyOwned;
 use std::collections::VecDeque;
 
 macro_rules! bail {
@@ -103,12 +103,6 @@ impl<'a> Visitor<'a> {
         let mut plan_pub_sockets = Vec::new();
 
         {
-            // F11: Validate all source socket reference depths first
-            for socket_key_store in &link.src_key {
-                let socket_key = socket_key_store.get_stored().unwrap();
-                validate_socket_reference_depth(socket_key)?;
-            }
-
             let src: Result<Vec<_>, _> = link
                 .src_key
                 .iter()
@@ -139,12 +133,6 @@ impl<'a> Visitor<'a> {
         }
 
         {
-            // F11: Validate all destination socket reference depths first
-            for socket_key_store in &link.dst_key {
-                let socket_key = socket_key_store.get_stored().unwrap();
-                validate_socket_reference_depth(socket_key)?;
-            }
-
             let dst: Result<Vec<_>, _> = link
                 .dst_key
                 .iter()
@@ -175,9 +163,7 @@ impl<'a> Visitor<'a> {
     }
 
     fn visit_service_link(&self, link: &mut ServiceLinkCtx) -> Result<(), Error> {
-        // F11: Validate listen socket reference depth
         let socket_key = link.listen_key.get_stored()?;
-        validate_socket_reference_depth(socket_key)?;
 
         let listen = {
             let listen = (|| {
@@ -191,12 +177,6 @@ impl<'a> Visitor<'a> {
             };
             listen
         };
-
-        // F11: Validate connect socket reference depths
-        for socket_key_store in &link.connect_key {
-            let socket_key = socket_key_store.get_stored().unwrap();
-            validate_socket_reference_depth(socket_key)?;
-        }
 
         let connect: Result<Vec<_>, _> = link
             .connect_key
@@ -262,32 +242,6 @@ fn associate_service_link_with_node_sockets(shared: &ServiceLinkShared) {
 #[derive(Debug)]
 struct Job {
     pub current: ScopeShared,
-}
-
-/// F11: Validate socket reference depth (max 2 levels: entity/socket)
-/// Returns error with helpful hint if reference is too deep
-fn validate_socket_reference_depth(socket_key: &Key) -> Result<(), Error> {
-    let segment_count = socket_key.segment_count();
-
-    // Socket references must be exactly 2 segments: entity/socket
-    // 0-1 segments are invalid, 3+ segments are too deep
-    if segment_count > 2 {
-        let hint = "Socket references can only be 2 levels deep: 'entity/socket'\n\n  \
-                    Hint: If you need to access sockets inside a subplan, either:\n  \
-                    1. Mark the include as transparent:\n     \
-                       include:\n       \
-                         subplan: !file\n           \
-                           path: subplan.yaml\n           \
-                           transparent: true\n\n  \
-                    2. Use an exposed plan socket from the subplan's 'socket:' section";
-
-        return Err(Error::SocketReferenceTooDeep {
-            key: socket_key.to_owned(),
-            hint: hint.to_string(),
-        });
-    }
-
-    Ok(())
 }
 
 /// F6: Derive topic name from link

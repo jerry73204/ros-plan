@@ -1,0 +1,22 @@
+# F12: Test that deep references fail when includes are NOT transparent
+# The link references "subplan/camera/output" which is 3 levels deep
+# This should fail because subplan is NOT marked as transparent
+
+node:
+  processor:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+
+include:
+  subplan: !file
+    path: ../transparent_subplan.yaml
+    # transparent: false (default)
+
+link:
+  camera_to_processor: !pubsub
+    type: std_msgs/msg/String
+    src: [subplan/camera/output]  # 3 levels - should fail without transparency
+    dst: [processor/input]
