@@ -1,0 +1,28 @@
+# F18: Link QoS derived from socket requirements
+node:
+  sensor:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      data: !pub
+        type: std_msgs/msg/String
+        qos: !profile
+          reliability: reliable
+          depth: 15
+
+  processor:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+        qos: !profile
+          reliability: best-effort
+          depth: 10
+
+link:
+  data_link: !pubsub
+    type: std_msgs/msg/String
+    # No explicit QoS - derives: reliable (strictest), depth=15 (max)
+    src: [sensor/data]
+    dst: [processor/input]

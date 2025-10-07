@@ -1,0 +1,26 @@
+# F18 ERROR: Link QoS doesn't satisfy socket reliability requirement
+node:
+  sensor:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      data: !pub
+        type: std_msgs/msg/String
+        qos: !profile
+          reliability: reliable
+
+  processor:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+
+link:
+  data_link: !pubsub
+    type: std_msgs/msg/String
+    qos: !profile
+      reliability: best-effort  # ERROR: doesn't satisfy reliable requirement
+      depth: 10
+    src: [sensor/data]
+    dst: [processor/input]

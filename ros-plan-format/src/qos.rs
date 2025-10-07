@@ -27,13 +27,41 @@ pub enum QosPreset {
 pub struct QosProfile {
     pub depth: usize,
     pub reliability: ReliabilityPolicy,
+    #[serde(default = "default_durability")]
+    pub durability: DurabilityPolicy,
+    #[serde(default = "default_history")]
+    pub history: HistoryPolicy,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+fn default_durability() -> DurabilityPolicy {
+    DurabilityPolicy::Volatile
+}
+
+fn default_history() -> HistoryPolicy {
+    HistoryPolicy::KeepLast
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum ReliabilityPolicy {
     BestEffort,
     Reliable,
     SystemDefault,
     Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum DurabilityPolicy {
+    Volatile,
+    TransientLocal,
+    SystemDefault,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum HistoryPolicy {
+    KeepLast,
+    KeepAll,
+    SystemDefault,
 }

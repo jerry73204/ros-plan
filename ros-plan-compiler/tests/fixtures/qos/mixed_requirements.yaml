@@ -1,0 +1,47 @@
+# F18: Multiple publishers and subscribers with different requirements
+node:
+  sensor1:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      data: !pub
+        type: std_msgs/msg/String
+        qos: !profile
+          reliability: reliable
+          depth: 20
+
+  sensor2:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      data: !pub
+        type: std_msgs/msg/String
+        qos: !profile
+          reliability: best-effort
+          depth: 10
+
+  processor1:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+        qos: !profile
+          durability: volatile
+
+  processor2:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+        qos: !profile
+          reliability: reliable
+
+link:
+  data_link: !pubsub
+    type: std_msgs/msg/String
+    topic: /shared_data
+    # Derives: reliable (strictest), volatile (from processor1), depth=20 (max)
+    src: [sensor1/data, sensor2/data]
+    dst: [processor1/input, processor2/input]

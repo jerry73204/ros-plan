@@ -1,0 +1,24 @@
+# F18: Link uses QoS preset and validates against requirements
+node:
+  sensor:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      data: !pub
+        type: std_msgs/msg/String
+        qos: !profile
+          reliability: best-effort
+
+  processor:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+
+link:
+  data_link: !pubsub
+    type: std_msgs/msg/String
+    qos: !preset sensor-data  # sensor-data preset uses best-effort
+    src: [sensor/data]
+    dst: [processor/input]

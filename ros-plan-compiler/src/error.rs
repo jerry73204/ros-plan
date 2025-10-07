@@ -97,6 +97,15 @@ pub enum Error {
         socket: String,
         socket_type: String,
     },
+
+    #[error("QoS requirement not satisfied in link `{link}`: socket `{socket}` requires {policy}={required} but link provides {policy}={offered}\n  The link's QoS profile must satisfy all connected socket requirements.\n\n  Suggestion: Update the link's QoS profile:\n    link:\n      {link}: !pubsub\n        qos: !profile\n          {policy}: {required}  # Must satisfy socket requirement")]
+    QosRequirementNotSatisfied {
+        link: String,
+        socket: String,
+        policy: String,
+        required: String,
+        offered: String,
+    },
 }
 
 impl From<mlua::Error> for Error {

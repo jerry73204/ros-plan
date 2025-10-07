@@ -222,6 +222,69 @@ impl<'a> Visitor<'a> {
             set_or_panic!(link.dst_socket, dst);
         }
 
+        // F18: QoS validation - derive or validate QoS profile
+        {
+            use crate::qos_validator;
+            use ros_plan_format::qos_requirement::QosRequirement;
+
+            // Collect QoS requirements from all source and destination sockets
+            // Store (requirement, socket_key) pairs for better error messages
+            let mut requirements: Vec<(QosRequirement, String)> = Vec::new();
+
+            // Get source socket requirements
+            if let Some(ref src_sockets) = link.src_socket {
+                for socket in src_sockets {
+                    socket.with_read(|socket| {
+                        if let Some(ref qos_req) = socket.qos {
+                            requirements.push((qos_req.clone(), socket.key.as_str().to_string()));
+                        }
+                    });
+                }
+            }
+
+            // Get destination socket requirements
+            if let Some(ref dst_sockets) = link.dst_socket {
+                for socket in dst_sockets {
+                    socket.with_read(|socket| {
+                        if let Some(ref qos_req) = socket.qos {
+                            requirements.push((qos_req.clone(), socket.key.as_str().to_string()));
+                        }
+                    });
+                }
+            }
+
+            // Derive QoS if link doesn't have explicit QoS, or use explicit QoS
+            let req_refs: Vec<&QosRequirement> = requirements.iter().map(|(req, _)| req).collect();
+            let final_qos = if matches!(
+                link.qos,
+                ros_plan_format::qos::Qos::Preset(ros_plan_format::qos::QosPreset::Default)
+            ) {
+                // Link has default QoS - derive from requirements
+                qos_validator::derive_minimal_qos(&req_refs)
+            } else {
+                // Link has explicit QoS - use it
+                link.qos.clone()
+            };
+
+            // Validate that final QoS satisfies all socket requirements
+            for (req, socket_key) in &requirements {
+                if let Err((policy, required, offered)) =
+                    qos_validator::satisfies_requirement(&final_qos, req)
+                {
+                    return Err(Error::QosRequirementNotSatisfied {
+                        link: link.key.as_str().to_string(),
+                        socket: socket_key.clone(),
+                        policy,
+                        required,
+                        offered,
+                    });
+                }
+            }
+
+            // Update link's QoS to the final validated QoS
+            link.qos = final_qos;
+        }
+
         // F8: Use the scope's namespace for topic derivation (where the link is defined)
         // Derive topic name (F6: single-source derivation, F7: multi-source validation, F8: namespace prepending, F10: plan socket topics)
         link.derived_topic =

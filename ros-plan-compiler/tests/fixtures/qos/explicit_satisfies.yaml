@@ -1,0 +1,32 @@
+# F18: Explicit link QoS satisfies socket requirements
+node:
+  sensor:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      data: !pub
+        type: std_msgs/msg/String
+        qos: !profile
+          reliability: reliable
+          depth: 10
+
+  processor:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+        qos: !profile
+          reliability: reliable
+          depth: 5
+
+link:
+  data_link: !pubsub
+    type: std_msgs/msg/String
+    qos: !profile
+      reliability: reliable
+      durability: volatile
+      history: keep-last
+      depth: 20  # Satisfies both requirements (≥10 and ≥5)
+    src: [sensor/data]
+    dst: [processor/input]

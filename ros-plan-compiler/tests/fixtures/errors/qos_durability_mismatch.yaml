@@ -1,0 +1,27 @@
+# F18 ERROR: Durability mismatch
+node:
+  sensor:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      data: !pub
+        type: std_msgs/msg/String
+        qos: !profile
+          durability: transient-local
+
+  processor:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+
+link:
+  data_link: !pubsub
+    type: std_msgs/msg/String
+    qos: !profile
+      durability: volatile  # ERROR: Volatile doesn't satisfy transient-local
+      reliability: reliable
+      depth: 10
+    src: [sensor/data]
+    dst: [processor/input]

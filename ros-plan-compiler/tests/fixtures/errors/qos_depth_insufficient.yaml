@@ -1,0 +1,26 @@
+# F18 ERROR: Link depth insufficient
+node:
+  sensor:
+    pkg: demo_nodes_cpp
+    exec: talker
+    socket:
+      data: !pub
+        type: std_msgs/msg/String
+        qos: !profile
+          depth: 20  # Requires depth ≥ 20
+
+  processor:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+        type: std_msgs/msg/String
+
+link:
+  data_link: !pubsub
+    type: std_msgs/msg/String
+    qos: !profile
+      depth: 10  # ERROR: Only provides depth=10
+      reliability: reliable
+    src: [sensor/data]
+    dst: [processor/input]

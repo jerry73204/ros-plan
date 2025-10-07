@@ -4,6 +4,7 @@ pub mod error;
 pub mod eval;
 pub mod processor;
 pub mod program;
+pub mod qos_validator;
 pub mod scope;
 pub mod selector;
 pub mod utils;
