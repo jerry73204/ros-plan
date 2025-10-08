@@ -24,11 +24,14 @@ test:
 .PHONY: format
 format:
 	cargo +nightly fmt
+	cd launch2dump && uv run ruff format src/ tests/
 
 .PHONY: lint
 lint:
 	cargo +nightly fmt --check
 	cargo clippy --all-targets --all-features -- -D warnings
+	cd launch2dump && uv run ruff check src/ tests/
+	cd launch2dump && uv run ruff format --check src/ tests/
 
 .PHONY: clean
 clean:
