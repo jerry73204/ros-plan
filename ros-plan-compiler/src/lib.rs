@@ -2,6 +2,7 @@ pub mod compiler;
 pub mod context;
 pub mod error;
 pub mod eval;
+pub mod launch_loader;
 pub mod processor;
 pub mod program;
 pub mod qos_validator;

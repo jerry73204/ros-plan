@@ -1,4 +1,5 @@
 pub mod evaluator;
+pub mod launch_integration;
 pub mod link_resolver;
 pub mod program_builder;
 pub mod shared_ref_initializer;

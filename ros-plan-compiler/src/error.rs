@@ -106,6 +106,9 @@ pub enum Error {
         required: String,
         offered: String,
     },
+
+    #[error("unable to load launch file `{path}`: {error}")]
+    LaunchFileLoadError { path: PathBuf, error: String },
 }
 
 impl From<mlua::Error> for Error {

@@ -62,13 +62,30 @@ impl ProgramBuilder {
             include: include_shared,
         } = job;
 
-        // Resolve the included file location
-        let (prefix, plan_path) = include_shared.with_read(|guard| -> Result<_, Error> {
-            assert!(guard.plan.is_none());
-            let prefix = guard.key.clone();
-            let plan_path = guard.location.resolve_absolute_path()?;
-            Ok((prefix, plan_path))
-        })?;
+        // Resolve the included file location and check if it's a launch file
+        let (prefix, plan_path, is_launch, namespace_prefix, args) =
+            include_shared.with_read(|guard| -> Result<_, Error> {
+                assert!(guard.plan.is_none());
+                let prefix = guard.key.clone();
+                let plan_path = guard.location.resolve_absolute_path()?;
+                let is_launch = guard.launch;
+                let namespace_prefix = guard
+                    .namespace_prefix
+                    .as_ref()
+                    .and_then(|ns| ns.get_stored().ok())
+                    .map(|s| s.to_string()); // Clone the string to avoid lifetime issues
+
+                // Extract argument values for launch files
+                let args: IndexMap<_, _> = guard
+                    .assign_arg
+                    .iter()
+                    .filter_map(|(k, v)| {
+                        v.get_stored().ok().map(|value| (k.clone(), value.clone()))
+                    })
+                    .collect();
+
+                Ok((prefix, plan_path, is_launch, namespace_prefix, args))
+            })?;
 
         // If the plan path cannot be resolved, push the include to the deferred set.
         let Some(plan_path) = plan_path else {
@@ -77,7 +94,30 @@ impl ProgramBuilder {
         };
 
         // Create the plan scope.
-        let plan_cfg: Plan = read_yaml_file(&plan_path)?;
+        let plan_cfg: Plan = if is_launch {
+            // Load as ROS 2 launch file
+            use super::launch_integration;
+            let launch_nodes = launch_integration::load_launch_as_nodes(
+                &plan_path,
+                args,
+                namespace_prefix.as_deref(),
+            )?;
+
+            // Create a Plan with just the loaded nodes
+            Plan {
+                arg: IndexMap::new(),
+                var: IndexMap::new(),
+                socket: IndexMap::new(),
+                node: launch_nodes,
+                link: IndexMap::new(),
+                include: IndexMap::new(),
+                group: IndexMap::new(),
+            }
+        } else {
+            // Load as YAML plan file
+            read_yaml_file(&plan_path)?
+        };
+
         let (plan_ctx, subscope) = to_plan_scope(program, plan_path.clone(), &prefix, plan_cfg)?;
         let plan_shared = program.plan_tab.insert(plan_ctx);
 
@@ -193,6 +233,8 @@ impl ProgramBuilder {
                         location,
                         when: child_cfg.when.map(BoolStore::new),
                         transparent: child_cfg.transparent,
+                        launch: child_cfg.launch,
+                        namespace_prefix: child_cfg.namespace.map(TextStore::new),
                         assign_arg: arg_assign,
                         plan: None,
                     }
@@ -261,6 +303,8 @@ fn create_root_include(program: &mut Program, plan_path: &Path) -> Result<Includ
         }),
         when: None,
         transparent: None, // Root include has no transparency
+        launch: false,     // Root is never a launch file
+        namespace_prefix: None,
         assign_arg: IndexMap::new(),
         plan: None,
     };

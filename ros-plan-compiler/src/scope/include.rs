@@ -20,6 +20,8 @@ pub struct IncludeCtx {
     pub location: IncludeLocation,
     pub when: Option<BoolStore>,
     pub transparent: Option<bool>,
+    pub launch: bool,
+    pub namespace_prefix: Option<TextStore>,
     pub assign_arg: IndexMap<ParamName, ValueStore>,
     pub plan: Option<PlanScopeShared>,
 }

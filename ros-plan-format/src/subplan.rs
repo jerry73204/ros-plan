@@ -18,6 +18,14 @@ pub struct IncludeCfg {
     pub path: Option<PathBuf>,
     pub transparent: Option<bool>,
 
+    /// Namespace prefix for included nodes (only for launch files)
+    pub namespace: Option<TextOrExpr>,
+
+    /// Treat this include as a ROS 2 launch file (.launch.py/.launch.xml)
+    /// When true, uses launch_loader to extract nodes
+    #[serde(default)]
+    pub launch: bool,
+
     #[serde(default)]
     pub arg: IndexMap<ParamName, ValueOrExpr>,
 }
@@ -103,5 +111,66 @@ transparent: true
         let serialized = serde_yaml::to_string(&cfg).unwrap();
         let deserialized: IncludeCfg = serde_yaml::from_str(&serialized).unwrap();
         assert_eq!(deserialized.transparent, Some(true));
+    }
+
+    #[test]
+    fn parse_launch_include() {
+        let yaml = r#"
+path: /path/to/camera.launch.py
+launch: true
+namespace: /sensors
+arg:
+  camera_name: !str "front_camera"
+  fps: !i64 30
+"#;
+        let result: Result<IncludeCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert!(cfg.launch);
+        assert!(cfg.namespace.is_some());
+        assert_eq!(cfg.arg.len(), 2);
+    }
+
+    #[test]
+    fn parse_launch_include_with_when_condition() {
+        let yaml = r#"
+path: /path/to/optional.launch.py
+launch: true
+when: !lua "$args.use_optional == true$"
+"#;
+        let result: Result<IncludeCfg, _> = serde_yaml::from_str(yaml);
+        if let Err(e) = &result {
+            eprintln!("Parse error: {}", e);
+        }
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert!(cfg.launch);
+        assert!(cfg.when.is_some());
+    }
+
+    #[test]
+    fn parse_launch_include_default_launch_false() {
+        let yaml = r#"
+path: subplan.yaml
+"#;
+        let result: Result<IncludeCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert!(!cfg.launch);
+    }
+
+    #[test]
+    fn parse_launch_include_with_pkg() {
+        let yaml = r#"
+pkg: camera_package
+file: launch/camera.launch.py
+launch: true
+"#;
+        let result: Result<IncludeCfg, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_ok());
+        let cfg = result.unwrap();
+        assert!(cfg.launch);
+        assert!(cfg.pkg.is_some());
+        assert!(cfg.file.is_some());
     }
 }
