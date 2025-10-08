@@ -1,31 +1,34 @@
-"""Module for entity visitors."""
+"""
+Entity visitor for traversing launch description entities
+"""
 
 import asyncio
-from typing import List
-from typing import Tuple
+from typing import List, Tuple
 
 from launch.action import Action
-from launch.utilities import is_a_subclass
 from launch.launch_context import LaunchContext
 from launch.launch_description_entity import LaunchDescriptionEntity
+from launch.utilities import is_a_subclass
 
 from .action import visit_action
-from .session import Session
+from .session import CollectionSession
 
 
 def visit_entity(
-    entity: LaunchDescriptionEntity, context: LaunchContext, session: Session
+    entity: LaunchDescriptionEntity,
+    context: LaunchContext,
+    session: CollectionSession,
 ) -> List[Tuple[LaunchDescriptionEntity, asyncio.Future]]:
     """
-    Visit given entity, as well as all sub-entities, and collect any futures.
+    Visit an entity and collect metadata.
 
-    Sub-entities are visited recursively and depth-first.
-    The future is collected from each entity (unless it returns None) before
-    continuing on to more sub-entities.
+    Recursively visits sub-entities depth-first and collects futures.
 
-    This function may call itself to traverse the sub-entities recursively.
+    :param entity: The entity to visit
+    :param context: The launch context
+    :param session: The collection session
+    :return: List of (entity, future) pairs
     """
-
     if is_a_subclass(entity, Action):
         sub_entities = visit_action(entity, context, session)
     else:
@@ -36,9 +39,9 @@ def visit_entity(
     futures_to_return = []
     if entity_future is not None:
         futures_to_return.append((entity, entity_future))
+
     if sub_entities is not None:
         for sub_entity in sub_entities:
             futures_to_return += visit_entity(sub_entity, context, session)
-    return [
-        future_pair for future_pair in futures_to_return if future_pair[1] is not None
-    ]
+
+    return [pair for pair in futures_to_return if pair[1] is not None]

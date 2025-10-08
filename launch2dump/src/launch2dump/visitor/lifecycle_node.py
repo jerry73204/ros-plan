@@ -1,27 +1,37 @@
-from typing import List
-from typing import Optional
+"""
+Lifecycle node visitor
+"""
 
-from launch_ros.actions.lifecycle_node import LifecycleNode
+from typing import List, Optional
+
 from launch.launch_context import LaunchContext
 from launch.launch_description_entity import LaunchDescriptionEntity
+from launch_ros.actions.lifecycle_node import LifecycleNode
 
-
-from .node import visit_node
+from .node import visit_node as visit_regular_node
+from .session import CollectionSession
 
 
 def visit_lifecycle_node(
-    node: LifecycleNode, context: LaunchContext
+    node: LifecycleNode, context: LaunchContext, session: CollectionSession
 ) -> Optional[List[LaunchDescriptionEntity]]:
     """
-    Execute the action.
+    Visit a LifecycleNode action.
 
-    Delegated to :meth:`launch.actions.ExecuteProcess.execute`.
+    LifecycleNode is a subclass of Node, so we can reuse the regular node visitor
+    but add it to the lifecycle_nodes list instead.
+
+    :param node: The LifecycleNode action
+    :param context: The launch context
+    :param session: The collection session
+    :return: None
     """
-    node._perform_substitutions(context)  # ensure node.node_name is expanded
-    if "<node_name_unspecified>" in node.node_name:
-        raise RuntimeError("node_name unexpectedly incomplete for lifecycle node")
+    # Visit as regular node to extract metadata
+    result = visit_regular_node(node, context, session)
 
-    # Record the lifecycle node name
-    node_name = node._Node__expanded_node_name
+    # Move the last added node from nodes to lifecycle_nodes
+    if session.nodes:
+        last_node = session.nodes.pop()
+        session.add_lifecycle_node(last_node)
 
-    return visit_node(node, context)
+    return result

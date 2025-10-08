@@ -1,33 +1,26 @@
-"""Module for OnIncludeLaunchDescription class."""
-
-from typing import Text
+"""
+Event handlers for launch inspection
+"""
 
 from launch.event_handler import EventHandler
 from launch.events import IncludeLaunchDescription
-from launch.utilities import is_a_subclass
-from launch.actions import OpaqueFunction
 
 
 class OnIncludeLaunchDescription(EventHandler):
-    """Event handler used to handle asynchronous requests to include LaunchDescriptions."""
+    """Event handler for IncludeLaunchDescription events."""
 
     def __init__(self, **kwargs):
-        """Create an OnIncludeLaunchDescription event handler."""
-
+        """Create OnIncludeLaunchDescription event handler."""
         super().__init__(
-            matcher=lambda event: is_a_subclass(event, IncludeLaunchDescription),
-            entities=OpaqueFunction(
-                function=lambda context: [context.locals.event.launch_description]
-            ),
-            **kwargs,
+            matcher=lambda event: isinstance(event, IncludeLaunchDescription), **kwargs
         )
 
-    @property
-    def handler_description(self) -> Text:
-        """Return the string description of the handler."""
-        return "returns the launch_description in the event"
+    def handle(self, event: IncludeLaunchDescription, context):
+        """
+        Handle the event.
 
-    @property
-    def matcher_description(self) -> Text:
-        """Return the string description of the matcher."""
-        return "event issubclass of launch.events.IncludeLaunchDescription"
+        :param event: The IncludeLaunchDescription event
+        :param context: The launch context
+        :return: List of entities to visit
+        """
+        return event.launch_description.entities

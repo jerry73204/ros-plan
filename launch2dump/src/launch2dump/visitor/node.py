@@ -1,103 +1,171 @@
-from typing import List
-from typing import Optional
-from typing import Dict
+"""
+Node visitor for extracting node metadata
+"""
 
+from typing import Any, Dict, List, Optional, Tuple
 
-import launch
-from launch_ros.actions.node import Node
 from launch.launch_context import LaunchContext
 from launch.launch_description_entity import LaunchDescriptionEntity
-from launch_ros.utilities import add_node_name
-from launch_ros.utilities import get_node_name_count
-from launch.utilities import perform_substitutions, is_a
+from launch.utilities import normalize_to_list_of_substitutions, perform_substitutions
+from launch_ros.actions.node import Node
 from launch_ros.descriptions import Parameter
-from launch.utilities import normalize_to_list_of_substitutions
 
-from ..utils import param_to_kv
-
-from .execute_process import visit_execute_process
+from ..result import NodeInfo
+from .session import CollectionSession
+from .substitution_tracker import track_substitutions_in_value
 
 
 def visit_node(
-    node: Node, context: LaunchContext
+    node: Node, context: LaunchContext, session: CollectionSession
 ) -> Optional[List[LaunchDescriptionEntity]]:
+    """
+    Visit a Node action and extract metadata.
+
+    Uses Python name mangling to access private members of the Node class.
+
+    :param node: The Node action
+    :param context: The launch context
+    :param session: The collection session
+    :return: None (no process spawned)
+    """
+    # Perform substitutions to resolve all placeholders
     node._perform_substitutions(context)
 
     def substitute(subst):
-        nonlocal context
-        return perform_substitutions(context, normalize_to_list_of_substitutions(subst))
+        """Helper to perform substitutions."""
+        result = perform_substitutions(context, normalize_to_list_of_substitutions(subst))
+        # Track parameter dependencies
+        track_substitutions_in_value(subst, session)
+        return result
 
-    executable = substitute(node.node_executable)
-    package = substitute(node.node_package)
+    # Extract basic node information using name mangling
+    # Track parameter dependencies before substitution
+    track_substitutions_in_value(node._Node__package, session)
+    track_substitutions_in_value(node._Node__node_executable, session)
 
-    if node._Node__ros_arguments is not None:
-        ros_args = list(substitute(subst) for subst in node._Node__ros_arguments)
-    else:
-        ros_args = None
+    package = substitute(node._Node__package)
+    executable = substitute(node._Node__node_executable)
 
-    if node._Node__arguments is not None:
-        args = list(substitute(subst) for subst in node._Node__arguments)
-    else:
-        args = None
-
-    if node.expanded_node_namespace == node.UNSPECIFIED_NODE_NAMESPACE:
-        namespace = None
-    else:
-        namespace = node.expanded_node_namespace
-
-    # Prepare the ros_specific_arguments list and add it to the context so that the
-    # LocalSubstitution placeholders added to the the cmd can be expanded using the contents.
-    ros_specific_arguments: Dict[str, Union[str, List[str]]] = {}
+    # Extract node name (optional)
+    name = None
     if node._Node__node_name is not None:
-        ros_specific_arguments["name"] = "__node:={}".format(
-            node._Node__expanded_node_name
-        )
+        track_substitutions_in_value(node._Node__node_name, session)
+        name = node._Node__expanded_node_name
+
+    # Extract namespace (optional)
+    namespace = None
     if node._Node__expanded_node_namespace != "":
-        ros_specific_arguments["ns"] = "__ns:={}".format(
-            node._Node__expanded_node_namespace
-        )
+        namespace = node._Node__expanded_node_namespace
 
-    # Give extensions a chance to prepare for execution
-    for extension in node._Node__extensions.values():
-        cmd_extension, ros_specific_arguments = extension.prepare_for_execute(
-            context, ros_specific_arguments, node
-        )
-        node.cmd.extend(cmd_extension)
-    context.extend_locals({"ros_specific_arguments": ros_specific_arguments})
-
-    # Visit ExecuteProcess
-    ret = visit_execute_process(node, context)
-
-    if node.is_node_name_fully_specified():
-        add_node_name(context, node.node_name)
-        node_name_count = get_node_name_count(context, node.node_name)
-        if node_name_count > 1:
-            execute_process_logger = launch.logging.get_logger(node.name)
-            execute_process_logger.warning(
-                "there are now at least {} nodes with the name {} created within this "
-                "launch context".format(node_name_count, node.node_name)
-            )
+    # Track parameter substitutions before extraction
+    if node._Node__parameters is not None:
+        for param in node._Node__parameters:
+            track_substitutions_in_value(param, session)
 
     # Extract parameters
-    params_files = list()
-    params = list()
+    parameters = extract_parameters(node, context)
+
+    # Extract remappings
+    remappings = extract_remappings(node)
+
+    # Extract arguments
+    arguments = extract_arguments(node, substitute)
+
+    # Extract environment variables
+    env_vars = extract_env_vars(node, substitute)
+
+    # Create NodeInfo and add to session
+    node_info = NodeInfo(
+        package=package,
+        executable=executable,
+        name=name,
+        namespace=namespace,
+        parameters=parameters,
+        remappings=remappings,
+        arguments=arguments,
+        env_vars=env_vars,
+    )
+
+    session.add_node(node_info)
+
+    # Don't spawn process - return None
+    return None
+
+
+def extract_parameters(node: Node, context: LaunchContext) -> List[Dict[str, Any]]:
+    """Extract parameters from node."""
+    parameters = []
     node_params = node._Node__expanded_parameter_arguments
 
     if node_params is not None:
         for entry, is_file in node_params:
             if is_file:
-                path = entry
-                with open(path, "r") as fp:
-                    data = fp.read()
-                    params_files.append(data)
+                # Parameter file
+                parameters.append({"__param_file": str(entry)})
             else:
-                assert is_a(entry, Parameter)
-                name, value = param_to_kv(entry)
-                params.append((name, value))
+                # Individual parameter
+                if isinstance(entry, Parameter):
+                    param_dict = {}
+                    name = entry.name
+                    value = entry.value
 
+                    # Handle nested parameter names (e.g., "namespace.param")
+                    if isinstance(name, str) and "." in name:
+                        # Split nested parameter name
+                        parts = name.split(".")
+                        current = param_dict
+                        for part in parts[:-1]:
+                            if part not in current:
+                                current[part] = {}
+                            current = current[part]
+                        current[parts[-1]] = value
+                    else:
+                        param_dict[str(name)] = value
+
+                    parameters.append(param_dict)
+
+    return parameters
+
+
+def extract_remappings(node: Node) -> List[Tuple[str, str]]:
+    """Extract remappings from node."""
     if node.expanded_remapping_rules is None:
-        remaps = list()
-    else:
-        remaps = node.expanded_remapping_rules
+        return []
+    return list(node.expanded_remapping_rules)
 
-    return ret
+
+def extract_arguments(node: Node, substitute) -> List[str]:
+    """Extract command-line arguments from node."""
+    arguments = []
+
+    if node._Node__arguments is not None:
+        for arg in node._Node__arguments:
+            arguments.append(substitute(arg))
+
+    if node._Node__ros_arguments is not None:
+        for arg in node._Node__ros_arguments:
+            arguments.append(substitute(arg))
+
+    return arguments
+
+
+def extract_env_vars(node: Node, substitute) -> Dict[str, str]:
+    """Extract environment variables from node."""
+    env_vars = {}
+
+    # Try to get env from different possible attributes
+    env_list = None
+    if hasattr(node, "env") and node.env is not None:
+        env_list = node.env
+    elif hasattr(node, "_Node__env") and node._Node__env is not None:
+        env_list = node._Node__env
+
+    if env_list is not None:
+        for env_var in env_list:
+            # env_var is typically a tuple of (name, value)
+            if isinstance(env_var, tuple) and len(env_var) == 2:
+                name = substitute(env_var[0])
+                value = substitute(env_var[1])
+                env_vars[name] = value
+
+    return env_vars

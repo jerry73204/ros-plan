@@ -19,9 +19,6 @@ dev = [
     "ruff>=0.8.0",
 ]
 
-[project.scripts]
-"launch2dump" = "launch2dump:main"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -31,7 +28,7 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = [
-    "src/launch2plan",
+    "src/launch2dump",
     "src/ros_cmdline",
 ]
 
