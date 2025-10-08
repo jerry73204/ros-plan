@@ -3,6 +3,7 @@ Serialization utilities for converting LaunchResult to JSON/YAML formats.
 """
 
 import json
+import sys
 from typing import Any, Dict
 
 try:
@@ -13,22 +14,36 @@ except ImportError:
 from .result import ComposableNodeInfo, ContainerInfo, LaunchResult, NodeInfo
 
 
-def clean_dict(obj):
+def clean_dict(obj, path="root", warn=True):
     """
     Recursively convert tuples and other non-serializable types to serializable forms.
+    Warns if unresolved substitutions are detected.
+
+    :param obj: Object to clean
+    :param path: Current path in object tree (for warning messages)
+    :param warn: Whether to emit warnings for unresolved substitutions
+    :return: Cleaned object
     """
     if isinstance(obj, dict):
-        return {str(k): clean_dict(v) for k, v in obj.items()}
+        return {str(k): clean_dict(v, f"{path}.{k}", warn) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
-        return [clean_dict(item) for item in obj]
-    elif hasattr(obj, "__dict__"):
-        # Convert objects with __dict__ to their string representation
-        return str(obj)
+        return [clean_dict(item, f"{path}[{i}]", warn) for i, item in enumerate(obj)]
     elif isinstance(obj, (str, int, float, bool, type(None))):
         return obj
+    elif hasattr(obj, "__dict__"):
+        # Check if this is an unresolved substitution object
+        obj_str = str(obj)
+        if "object at 0x" in obj_str and warn:
+            print(
+                f"Warning: Unresolved substitution detected at {path}: {obj_str}", file=sys.stderr
+            )
+        return obj_str
     else:
         # For any other type, convert to string
-        return str(obj)
+        obj_str = str(obj)
+        if "object at 0x" in obj_str and warn:
+            print(f"Warning: Unresolved object detected at {path}: {obj_str}", file=sys.stderr)
+        return obj_str
 
 
 def serialize_launch_result(result: LaunchResult, format: str = "yaml") -> str:
