@@ -1,0 +1,9 @@
+nodes:
+- package: demo_nodes_cpp
+  executable: talker
+  name: talker
+  namespace: <node_namespace_unspecified>
+containers: []
+parameter_dependencies:
+- node_name
+errors: []

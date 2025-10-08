@@ -13,6 +13,9 @@ dependencies = [
 readme = "README.md"
 requires-python = "==3.10.*"
 
+[project.scripts]
+launch2dump = "launch2dump.__main__:main"
+
 [dependency-groups]
 dev = [
     "pytest>=8.1.1",
