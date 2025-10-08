@@ -28,39 +28,43 @@ def visit_node(
     :param session: The collection session
     :return: None (no process spawned)
     """
-    # Perform substitutions to resolve all placeholders
+    # Track parameter dependencies BEFORE performing substitutions
+    # This ensures we capture LaunchConfiguration uses before they're resolved
+    track_substitutions_in_value(node._Node__package, session)
+    track_substitutions_in_value(node._Node__node_executable, session)
+    if node._Node__node_name is not None:
+        track_substitutions_in_value(node._Node__node_name, session)
+    if node._Node__parameters is not None:
+        for param in node._Node__parameters:
+            track_substitutions_in_value(param, session)
+    if node._Node__remappings is not None:
+        track_substitutions_in_value(node._Node__remappings, session)
+    if node._Node__arguments is not None:
+        track_substitutions_in_value(node._Node__arguments, session)
+    if node._Node__ros_arguments is not None:
+        track_substitutions_in_value(node._Node__ros_arguments, session)
+
+    # Now perform substitutions to resolve all placeholders
     node._perform_substitutions(context)
 
     def substitute(subst):
         """Helper to perform substitutions."""
         result = perform_substitutions(context, normalize_to_list_of_substitutions(subst))
-        # Track parameter dependencies
-        track_substitutions_in_value(subst, session)
         return result
 
     # Extract basic node information using name mangling
-    # Track parameter dependencies before substitution
-    track_substitutions_in_value(node._Node__package, session)
-    track_substitutions_in_value(node._Node__node_executable, session)
-
     package = substitute(node._Node__package)
     executable = substitute(node._Node__node_executable)
 
     # Extract node name (optional)
     name = None
     if node._Node__node_name is not None:
-        track_substitutions_in_value(node._Node__node_name, session)
         name = node._Node__expanded_node_name
 
     # Extract namespace (optional)
     namespace = None
     if node._Node__expanded_node_namespace != "":
         namespace = node._Node__expanded_node_namespace
-
-    # Track parameter substitutions before extraction
-    if node._Node__parameters is not None:
-        for param in node._Node__parameters:
-            track_substitutions_in_value(param, session)
 
     # Extract parameters
     parameters = extract_parameters(node, context)
