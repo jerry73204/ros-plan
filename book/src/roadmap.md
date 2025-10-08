@@ -2116,7 +2116,7 @@ The implementation reuses the existing `launch2dump` project architecture, which
 ### Phase 6.2.5: CLI Tool for Testing Launch Extraction
 
 **Timeline**: 1-2 days
-**Status**: 🔴 Not Started
+**Status**: 🟢 Complete
 
 #### F34.5: CLI Launch Dump Tool
 
@@ -2260,25 +2260,199 @@ This project uses a **hybrid approach** for Rust-Python integration:
    - For comparison in tests
 
 **Test Cases**:
-- [ ] CLI loads simple launch file and outputs YAML
-- [ ] CLI loads launch file with arguments (`-a key:=value`)
-- [ ] CLI outputs JSON format (`-f json`)
-- [ ] CLI writes to output file (`-o output.yaml`)
-- [ ] CLI handles missing launch file with clear error
-- [ ] CLI handles invalid argument format with error
-- [ ] Output can be parsed back (JSON roundtrip)
-- [ ] YAML output is human-readable
-- [ ] No processes spawned during execution
-- [ ] `--help` displays usage information
+
+*Basic Functionality:*
+- [x] CLI loads simple launch file and outputs YAML
+- [x] CLI loads launch file with arguments (`-a key:=value`)
+- [x] CLI outputs JSON format (`-f json`)
+- [x] CLI writes to output file (`-o output.yaml`)
+- [x] CLI handles missing launch file with clear error
+- [x] CLI handles invalid argument format with error
+- [x] Output can be parsed back (JSON roundtrip)
+- [x] YAML output is human-readable
+- [x] No processes spawned during execution
+- [x] `--help` displays usage information
+
+*Real-world Validation:*
+- [x] Test CLI with large launch file containing many nodes and includes
+- [x] Verify parameter dependencies are tracked through deep launch hierarchies
+- [x] Confirm no crashes on complex launch files with nested substitutions
 
 **Files Added**:
 - `launch2dump/src/launch2dump/__main__.py`
 - `launch2dump/src/launch2dump/serialization.py`
 - `launch2dump/tests/test_cli.py`
 - `launch2dump/tests/fixtures/expected_simple.{json,yaml}`
+- `scripts/test_autoware_dump.sh` (Example script for testing with Autoware - not part of source tree)
 
 **Files Modified**:
 - `launch2dump/pyproject.toml` (add `[project.scripts]`)
+
+**Notes**:
+- The `scripts/test_autoware_dump.sh` provides an example of how to use the CLI tool to dump complex launch files like Autoware's planning_simulator
+- This script is for manual testing and is not included in automated tests
+- XML launch files can be preprocessed using `ros2 launch` internals or converted to Python format before dumping
+
+---
+
+### Phase 6.2.6: Fix Serialization and Parameter Extraction
+
+**Timeline**: 2-3 days
+**Status**: ✅ Complete
+
+#### Issues Found in Autoware Testing
+
+1. **Unresolved Substitutions in Output**: Many `<launch.substitutions.text_substitution.TextSubstitution object at 0x...>` strings appear in the JSON output, indicating that substitutions are not being properly resolved before serialization.
+
+2. **Temporary Parameter Files**: Parameter files like `/tmp/launch_params_*` are referenced in the output. These temporary files are created during launch processing and will be deleted, making the dump non-persistent.
+
+3. **Composable Node Parameters Not Extracted**: Composable nodes show raw parameter dictionaries without proper extraction/resolution.
+
+#### F36: Resolve Substitutions Before Extraction
+
+**Problem**: Composable node parameters contain unresolved `TextSubstitution` objects that get serialized as object repr strings.
+
+**Root Cause**: In `composable_node_container.py`, parameters are extracted without performing substitutions:
+```python
+# Current (line 96-100):
+parameters = []
+if comp_node.parameters is not None:
+    for param in comp_node.parameters:
+        if isinstance(param, dict):
+            parameters.append(param)  # Raw dict, may contain substitutions!
+```
+
+**Solution**:
+- Track substitutions BEFORE resolution (for dependency tracking)
+- Perform substitutions on all parameter names and values
+- Handle `ParameterFile` objects properly
+- Extract resolved parameter dictionaries
+
+**Work Items**:
+1. Update `extract_composable_node_parameters()` in `composable_node_container.py`:
+   - Track substitutions for all parameter names/values BEFORE resolution
+   - Use `context.perform_substitution()` to resolve all substitutions
+   - Handle nested substitutions in parameter values
+   - Convert resolved values to JSON-serializable types
+
+2. Ensure substitution tracking happens before resolution:
+   ```python
+   # Track BEFORE resolution
+   track_substitutions_in_value(comp_node.parameters, session)
+
+   # Then resolve
+   resolved_params = perform_substitutions(context, comp_node.parameters)
+   ```
+
+3. Update `clean_dict()` in `serialization.py`:
+   - Add better handling for `ParameterValue` objects
+   - Detect and warn about unresolved substitutions
+   - Convert `LaunchConfiguration` objects to their resolved values
+
+**Test Cases**:
+- ✅ Composable node with simple parameters serializes correctly
+- ✅ Composable node with nested substitutions resolves properly
+- ✅ No `<object at 0x...>` strings in output
+- ✅ Parameter dictionaries with tuple keys are handled
+
+**Files Modified**:
+- `launch2dump/src/launch2dump/visitor/composable_node_container.py`
+- `launch2dump/src/launch2dump/serialization.py`
+- `launch2dump/tests/test_composable_nodes.py` (add tests)
+
+#### F37: Persist Temporary Parameter Files
+
+**Problem**: Temporary parameter files (`/tmp/launch_params_*`) referenced in the output will be deleted after launch processing completes.
+
+**Root Cause**: ROS 2 launch system creates temporary YAML files when parameters are specified as dictionaries. The file paths are stored but the files are ephemeral.
+
+**Solution Options**:
+
+**Option A: Inline Parameter Values** (Recommended)
+- Instead of storing `{"__param_file": "/tmp/..."}`, extract and inline the actual parameter values
+- Read the temporary YAML file contents before it's deleted
+- Store the actual parameters in the JSON output
+- Pros: Self-contained output, no external file dependencies
+- Cons: Larger output files
+
+**Option B: Copy to Persistent Location**
+- Copy temporary parameter files to a permanent location (e.g., `scripts/params/`)
+- Update references in the output
+- Pros: Preserves original file structure
+- Cons: Requires file management, output not self-contained
+
+**Recommended: Option A**
+
+**Work Items**:
+1. Detect temporary parameter files in `extract_parameters()`:
+   ```python
+   if is_file:
+       param_file_path = str(entry)
+       if param_file_path.startswith('/tmp/launch_params_'):
+           # Read and inline the parameters
+           params = read_yaml_params(param_file_path)
+           parameters.append(params)
+       else:
+           # Keep reference to persistent file
+           parameters.append({"__param_file": param_file_path})
+   ```
+
+2. Implement `read_yaml_params()` helper:
+   ```python
+   def read_yaml_params(file_path: str) -> Dict[str, Any]:
+       """Read parameters from a YAML file and return as dict."""
+       import yaml
+       with open(file_path, 'r') as f:
+           return yaml.safe_load(f)
+   ```
+
+3. Add option to CLI for parameter inlining behavior:
+   - `--inline-params` (default: true for temp files, false for permanent)
+   - `--keep-param-files` to preserve file references
+
+4. Handle parameter file errors gracefully:
+   - If temp file doesn't exist, try to extract from node's unexpanded parameters
+   - Log warnings for missing parameter files
+
+**Test Cases**:
+- ✅ Temporary parameter files are inlined in output
+- ✅ Permanent parameter files keep `__param_file` reference
+- ✅ Missing parameter files are handled gracefully
+- ✅ Large parameter sets are correctly inlined
+- ✅ YAML parsing errors are reported
+
+**Files Added**:
+- `launch2dump/src/launch2dump/utils/param_reader.py`
+
+**Files Modified**:
+- `launch2dump/src/launch2dump/visitor/node.py` (`extract_parameters`)
+- `launch2dump/src/launch2dump/__main__.py` (add CLI flags)
+- `launch2dump/tests/test_param_persistence.py` (new test file)
+
+#### F38: Validation and Testing
+
+**Work Items**:
+1. Create comprehensive test with composable nodes:
+   - Test with Autoware-like complex parameter structures
+   - Verify no object repr strings in output
+   - Verify all parameters are resolved and persistent
+
+2. Update Autoware test script:
+   - Add validation to check for common issues
+   - Warn if `<object at 0x...>` found in output
+   - Warn if `/tmp/launch_params_` found in output
+
+3. Add documentation:
+   - Document parameter inlining behavior
+   - Document limitations and known issues
+   - Add troubleshooting guide
+
+**Success Criteria**:
+- ✅ No `<object at 0x...>` strings in Autoware dump
+- ✅ No `/tmp/` file references in Autoware dump
+- ✅ All composable node parameters are properly extracted
+- ✅ Output is self-contained and persistent
+- ✅ All existing tests pass
 
 ---
 
@@ -3252,11 +3426,11 @@ This project uses a **hybrid approach** for Rust-Python integration:
 
 ## Phase 6 Success Criteria
 
-- [ ] All 11 features (F32-F41, including F34.5) implemented and tested
+- [ ] All 14 features (F32-F41, including F34.5, F36-F38) implemented and tested
 - [ ] UV workspace successfully replaces Rye
 - [ ] Python launch loader extracts node metadata without spawning processes
 - [ ] CLI tool (`launch2dump`) successfully dumps launch metadata to JSON/YAML
-- [ ] Serialization output is human-readable for debugging
+- [ ] Serialization output is human-readable for debugging (no object repr strings, persistent parameters)
 - [ ] PyO3 integration works reliably with no memory leaks
 - [ ] Plan format supports launch includes with arguments
 - [ ] Compiler merges included nodes with plan nodes
