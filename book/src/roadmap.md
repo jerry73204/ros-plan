@@ -1825,7 +1825,7 @@ All tests must:
 ## Phase 6: ROS Launch Compatibility Layer
 
 **Status**: 🔴 Not Started
-**Timeline**: 3-4 weeks (15-19 days)
+**Timeline**: 3.5-4.5 weeks (16-21 days)
 **Dependencies**: Phases 1-5 complete
 
 ### Overview
@@ -1908,7 +1908,7 @@ The implementation reuses the existing `launch2dump` project architecture, which
 ### Phase 6.2: Launch Loader API
 
 **Timeline**: 4-5 days
-**Status**: 🔴 Not Started
+**Status**: ✅ Complete
 
 #### F33: Launch File Walker with Visitor Pattern
 
@@ -2024,20 +2024,20 @@ The implementation reuses the existing `launch2dump` project architecture, which
    - Support default argument values from launch file
 
 **Test Cases**:
-- [ ] Load simple launch file with single node
-- [ ] Load launch file with multiple nodes
-- [ ] Load launch file with composable node container
-- [ ] Load launch file with lifecycle nodes
-- [ ] Pass launch arguments and verify substitution resolution
-- [ ] Load launch file that includes other launch files (recursive)
-- [ ] Handle launch file with conditionals (GroupAction with condition)
-- [ ] Handle launch file with DeclareLaunchArgument
-- [ ] Extract node parameters (YAML files, dicts, individual params)
-- [ ] Extract node remappings
-- [ ] Extract node environment variables
-- [ ] Error handling for missing launch file
-- [ ] Error handling for invalid launch file syntax
-- [ ] Verify no processes are spawned during loading
+- [x] Load simple launch file with single node
+- [x] Load launch file with multiple nodes
+- [x] Load launch file with composable node container
+- [x] Load launch file with lifecycle nodes
+- [x] Pass launch arguments and verify substitution resolution
+- [x] Load launch file that includes other launch files (recursive)
+- [x] Handle launch file with conditionals (GroupAction with condition)
+- [x] Handle launch file with DeclareLaunchArgument
+- [x] Extract node parameters (YAML files, dicts, individual params)
+- [x] Extract node remappings
+- [x] Extract node environment variables
+- [x] Error handling for missing launch file
+- [x] Error handling for invalid launch file syntax
+- [x] Verify no processes are spawned during loading
 
 **Files Added**:
 - `launch2dump/src/launch2plan/__init__.py`
@@ -2094,21 +2094,191 @@ The implementation reuses the existing `launch2dump` project architecture, which
    - Document which parameters affect which launch files
 
 **Test Cases**:
-- [ ] Track single parameter dependency
-- [ ] Track multiple parameter dependencies
-- [ ] Track nested substitution dependencies (PathJoinSubstitution)
-- [ ] Handle launch file with no parameter dependencies
-- [ ] Handle same parameter used multiple times (deduplicate)
-- [ ] Track dependencies through included launch files
+- [x] Track single parameter dependency
+- [x] Track multiple parameter dependencies
+- [x] Track nested substitution dependencies (PathJoinSubstitution)
+- [x] Handle launch file with no parameter dependencies
+- [x] Handle same parameter used multiple times (deduplicate)
+- [x] Track dependencies through included launch files
 
 **Files Modified**:
 - `launch2dump/src/launch2plan/result.py`
 - `launch2dump/src/launch2plan/loader.py`
 - `launch2dump/src/launch2plan/visitor/action.py`
+- `launch2dump/src/launch2plan/visitor/node.py`
 
 **Files Added**:
-- `launch2dump/src/launch2plan/tracker.py`
-- `launch2dump/tests/test_dependency_tracking.py`
+- `launch2dump/src/launch2plan/visitor/substitution_tracker.py`
+- `launch2dump/tests/test_loader.py` (includes dependency tracking tests)
+
+---
+
+### Phase 6.2.5: CLI Tool for Testing Launch Extraction
+
+**Timeline**: 1-2 days
+**Status**: 🔴 Not Started
+
+#### F34.5: CLI Launch Dump Tool
+
+**Description**: Create a command-line tool to load ROS 2 launch files and dump extracted metadata in JSON/YAML format for testing and inspection. This tool uses serialization-based output, while Phase 6.3 will use PyO3 FFI for direct Rust-Python integration.
+
+**Rust-Python Bridge Strategy**:
+
+This project uses a **hybrid approach** for Rust-Python integration:
+
+| Approach                      | Use Case                     | Trade-offs                                                                                                                        |
+|-------------------------------|------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| **Serialization (JSON/YAML)** | CLI tool, testing, debugging | ✅ Language-agnostic<br>✅ Easy to inspect<br>✅ No FFI complexity<br>❌ Slower (parsing overhead)<br>❌ Extra serialization step |
+| **PyO3 FFI**                  | Rust compiler integration    | ✅ Fast (zero-copy)<br>✅ Direct data access<br>✅ Type safety<br>❌ Requires Python runtime<br>❌ Complex error handling         |
+
+**Rationale**:
+- **CLI Tool (Phase 6.2.5)**: Uses serialization for human-readable output, perfect for debugging and testing
+- **Rust Integration (Phase 6.3)**: Uses PyO3 FFI for fast, production-ready compiler integration
+
+**Work Items**:
+
+1. **Create CLI Entry Point** (`launch2dump/src/launch2dump/__main__.py`)
+   ```python
+   """CLI tool for extracting ROS 2 launch file metadata."""
+   import argparse
+   import json
+   import sys
+   from pathlib import Path
+
+   from ruamel.yaml import YAML
+
+   from .loader import LaunchLoader
+   from .serialization import result_to_dict
+
+   def parse_launch_args(args_list):
+       """Parse key:=value arguments."""
+       if not args_list:
+           return {}
+       result = {}
+       for arg in args_list:
+           if ":=" not in arg:
+               raise ValueError(f"Invalid argument format: {arg}")
+           key, value = arg.split(":=", 1)
+           result[key] = value
+       return result
+
+   def main():
+       parser = argparse.ArgumentParser(
+           description="Extract metadata from ROS 2 launch files without spawning processes"
+       )
+       parser.add_argument("launch_file", help="Path to .launch.py file")
+       parser.add_argument(
+           "-a", "--args",
+           nargs="*",
+           help="Launch arguments in key:=value format"
+       )
+       parser.add_argument(
+           "-f", "--format",
+           choices=["json", "yaml"],
+           default="yaml",
+           help="Output format (default: yaml)"
+       )
+       parser.add_argument(
+           "-o", "--output",
+           help="Output file (default: stdout)"
+       )
+
+       args = parser.parse_args()
+
+       # Load launch file
+       loader = LaunchLoader()
+       launch_args = parse_launch_args(args.args)
+       result = loader.load_launch_file(args.launch_file, launch_args)
+
+       # Convert to dict
+       data = result_to_dict(result)
+
+       # Format output
+       if args.format == "json":
+           output_text = json.dumps(data, indent=2)
+       else:  # yaml
+           from io import StringIO
+           yaml = YAML()
+           yaml.default_flow_style = False
+           stream = StringIO()
+           yaml.dump(data, stream)
+           output_text = stream.getvalue()
+
+       # Write output
+       if args.output:
+           Path(args.output).write_text(output_text)
+       else:
+           print(output_text)
+
+       return 0
+
+   if __name__ == "__main__":
+       sys.exit(main())
+   ```
+
+2. **Implement Serialization Module** (`launch2dump/src/launch2dump/serialization.py`)
+   ```python
+   """Serialization helpers for LaunchResult."""
+   from dataclasses import asdict
+   from typing import Any, Dict
+
+   from .result import LaunchResult
+
+   def result_to_dict(result: LaunchResult) -> Dict[str, Any]:
+       """
+       Convert LaunchResult to JSON/YAML-serializable dict.
+
+       Handles:
+       - Dataclass to dict conversion
+       - Set to list conversion (for JSON compatibility)
+       - Nested dataclasses
+       """
+       data = asdict(result)
+
+       # Convert parameter_dependencies from set to sorted list
+       data["parameter_dependencies"] = sorted(data["parameter_dependencies"])
+
+       return data
+   ```
+
+3. **Add CLI Entry Point to pyproject.toml**
+   ```toml
+   [project.scripts]
+   launch2dump = "launch2dump.__main__:main"
+   ```
+
+4. **Create CLI Tests** (`launch2dump/tests/test_cli.py`)
+   - Test JSON output format
+   - Test YAML output format
+   - Test with launch arguments
+   - Test output to file
+   - Test error handling
+
+5. **Create Expected Output Fixtures**
+   - `tests/fixtures/expected_simple.yaml`
+   - `tests/fixtures/expected_simple.json`
+   - For comparison in tests
+
+**Test Cases**:
+- [ ] CLI loads simple launch file and outputs YAML
+- [ ] CLI loads launch file with arguments (`-a key:=value`)
+- [ ] CLI outputs JSON format (`-f json`)
+- [ ] CLI writes to output file (`-o output.yaml`)
+- [ ] CLI handles missing launch file with clear error
+- [ ] CLI handles invalid argument format with error
+- [ ] Output can be parsed back (JSON roundtrip)
+- [ ] YAML output is human-readable
+- [ ] No processes spawned during execution
+- [ ] `--help` displays usage information
+
+**Files Added**:
+- `launch2dump/src/launch2dump/__main__.py`
+- `launch2dump/src/launch2dump/serialization.py`
+- `launch2dump/tests/test_cli.py`
+- `launch2dump/tests/fixtures/expected_simple.{json,yaml}`
+
+**Files Modified**:
+- `launch2dump/pyproject.toml` (add `[project.scripts]`)
 
 ---
 
@@ -3009,6 +3179,12 @@ The implementation reuses the existing `launch2dump` project architecture, which
 ### Unit Tests
 - [ ] LaunchLoader API (Python)
 - [ ] Visitor pattern (Python)
+- [ ] CLI tool (Python)
+  - [ ] JSON output validation
+  - [ ] YAML output validation
+  - [ ] Argument parsing
+  - [ ] Error handling
+  - [ ] Output file writing
 - [ ] PyO3 FFI bindings (Rust)
 - [ ] LaunchInclude parsing (Rust)
 - [ ] Node conversion (Rust)
@@ -3076,9 +3252,11 @@ The implementation reuses the existing `launch2dump` project architecture, which
 
 ## Phase 6 Success Criteria
 
-- [ ] All 10 features (F32-F41) implemented and tested
+- [ ] All 11 features (F32-F41, including F34.5) implemented and tested
 - [ ] UV workspace successfully replaces Rye
 - [ ] Python launch loader extracts node metadata without spawning processes
+- [ ] CLI tool (`launch2dump`) successfully dumps launch metadata to JSON/YAML
+- [ ] Serialization output is human-readable for debugging
 - [ ] PyO3 integration works reliably with no memory leaks
 - [ ] Plan format supports launch includes with arguments
 - [ ] Compiler merges included nodes with plan nodes
