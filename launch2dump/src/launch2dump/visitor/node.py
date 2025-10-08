@@ -98,6 +98,10 @@ def visit_node(
 
 def extract_parameters(node: Node, context: LaunchContext) -> List[Dict[str, Any]]:
     """Extract parameters from node."""
+    import os
+
+    import yaml as pyyaml
+
     parameters = []
     node_params = node._Node__expanded_parameter_arguments
 
@@ -105,7 +109,29 @@ def extract_parameters(node: Node, context: LaunchContext) -> List[Dict[str, Any
         for entry, is_file in node_params:
             if is_file:
                 # Parameter file
-                parameters.append({"__param_file": str(entry)})
+                param_file_path = str(entry)
+
+                # Check if it's a temporary file and inline it
+                if param_file_path.startswith("/tmp/launch_params_"):
+                    # Read and inline temporary parameter file
+                    try:
+                        if os.path.exists(param_file_path):
+                            with open(param_file_path, "r") as f:
+                                file_params = pyyaml.safe_load(f)
+                                if file_params:
+                                    parameters.append(file_params)
+                                else:
+                                    # Empty file, keep reference
+                                    parameters.append({"__param_file": param_file_path})
+                        else:
+                            # File doesn't exist, keep reference
+                            parameters.append({"__param_file": param_file_path})
+                    except Exception:
+                        # If reading fails, keep reference
+                        parameters.append({"__param_file": param_file_path})
+                else:
+                    # Keep reference to permanent files
+                    parameters.append({"__param_file": param_file_path})
             else:
                 # Individual parameter
                 if isinstance(entry, Parameter):
