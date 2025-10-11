@@ -8,18 +8,20 @@ use std::{path::PathBuf, str::FromStr};
 
 #[derive(Debug, Clone, Parser)]
 pub enum Cli {
+    /// Compile a plan file to a program
     Compile(CompileArgs),
+    /// Run a plan with the runtime system
+    Run(RunArgs),
 }
 
-// #[derive(Debug, Clone, Parser)]
-// pub struct StartArgs {
-//     /// The ROS plan file.
-//     pub plan_file: PathBuf,
+#[derive(Debug, Clone, Parser)]
+pub struct RunArgs {
+    /// The ROS plan file.
+    pub plan_file: PathBuf,
 
-//     /// The execution environment configuration file.
-//     #[clap(short = 'c', long)]
-//     pub config: Option<PathBuf>,
-// }
+    /// The arguments passed to the program.
+    pub args: Option<Vec<ArgAssign>>,
+}
 
 #[derive(Debug, Clone, Parser)]
 pub struct CompileArgs {

@@ -9,6 +9,7 @@ eyre = "0.6.12"
 indexmap.workspace = true
 ros-plan-format = { version = "0.1.0", path = "../ros-plan-format" }
 ros-plan-compiler = { version = "0.1.0", path = "../ros-plan-compiler" }
+ros-plan-runtime = { version = "0.1.0", path = "../ros-plan-runtime" }
 serde.workspace = true
 serde_yaml = "0.9.34"
 toml = "0.8.19"

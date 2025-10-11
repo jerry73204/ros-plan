@@ -2,15 +2,17 @@ mod cli;
 mod config;
 
 use clap::Parser;
-use cli::{ArgAssign, Cli, CompileArgs};
+use cli::{ArgAssign, Cli, CompileArgs, RunArgs};
 use indexmap::IndexMap;
 use ros_plan_compiler::Compiler;
+use ros_plan_runtime::Runtime;
 
 fn main() -> eyre::Result<()> {
     let cli = Cli::parse();
 
     match cli {
         Cli::Compile(args) => compile(args)?,
+        Cli::Run(args) => run(args)?,
     }
 
     Ok(())
@@ -40,5 +42,22 @@ fn compile(opts: CompileArgs) -> eyre::Result<()> {
     } else {
         print!("{text}");
     }
+    Ok(())
+}
+
+fn run(opts: RunArgs) -> eyre::Result<()> {
+    let RunArgs { plan_file, args } = opts;
+
+    let args: IndexMap<_, _> = match args {
+        Some(args) => args
+            .into_iter()
+            .map(|ArgAssign { name, value }| (name, value))
+            .collect(),
+        None => IndexMap::new(),
+    };
+
+    let mut runtime = Runtime::new(plan_file, args)?;
+    runtime.run()?;
+
     Ok(())
 }
