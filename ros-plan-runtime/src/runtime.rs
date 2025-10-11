@@ -1,5 +1,9 @@
 use crate::{
-    config::RuntimeConfig, process_manager::ProcessManager, state::RuntimeState, Error, Result,
+    config::RuntimeConfig,
+    diff::{diff_programs, ApplyResult, ProgramDiff, UpdateResult},
+    process_manager::ProcessManager,
+    state::RuntimeState,
+    Error, Result,
 };
 use indexmap::IndexMap;
 use ros_plan_compiler::{Compiler, Program};
@@ -188,4 +192,236 @@ impl Runtime {
     pub fn program(&self) -> Option<&Program> {
         self.program.as_ref()
     }
+
+    /// Recompile the plan with updated parameters
+    pub fn recompile_with_params(
+        &mut self,
+        new_params: IndexMap<ParamName, Value>,
+    ) -> Result<Program> {
+        // Merge new params with existing params (new params override)
+        let mut merged_params = self.state.parameters.clone();
+        for (key, value) in new_params {
+            merged_params.insert(key, value);
+        }
+
+        // Compile with updated parameters
+        let new_program = self
+            .compiler
+            .compile(&self.plan_path, merged_params.clone())?;
+
+        // Update stored parameters
+        self.state.parameters = merged_params;
+
+        Ok(new_program)
+    }
+
+    /// Update a single parameter and recompile
+    pub fn update_parameter(&mut self, param_name: ParamName, new_value: Value) -> Result<Program> {
+        let mut params = IndexMap::new();
+        params.insert(param_name, new_value);
+        self.recompile_with_params(params)
+    }
+
+    /// Apply a program diff by stopping/starting/restarting nodes
+    pub fn apply_diff(&mut self, diff: &ProgramDiff, new_program: &Program) -> Result<ApplyResult> {
+        let mut stopped = Vec::new();
+        let mut restarted = Vec::new();
+        let mut started = Vec::new();
+        let mut failures = Vec::new();
+
+        // Stop removed nodes
+        for node_id in &diff.removed_nodes {
+            match self
+                .process_manager
+                .stop_node(node_id, self.config.graceful_shutdown_timeout)
+            {
+                Ok(()) => {
+                    println!("Stopped removed node: {}", node_id);
+                    stopped.push(node_id.clone());
+                }
+                Err(e) => {
+                    eprintln!("Failed to stop node {}: {}", node_id, e);
+                    failures.push((node_id.clone(), e.to_string()));
+                }
+            }
+        }
+
+        // Restart modified nodes
+        for modification in &diff.modified_nodes {
+            let node_id = &modification.ident;
+
+            // Stop the old node
+            if let Err(e) = self
+                .process_manager
+                .stop_node(node_id, self.config.graceful_shutdown_timeout)
+            {
+                eprintln!("Failed to stop modified node {}: {}", node_id, e);
+                failures.push((node_id.clone(), format!("Stop failed: {}", e)));
+                continue;
+            }
+
+            // Get new node context
+            let new_node_ctx = find_node_by_key(&new_program.node_tab, node_id);
+            match new_node_ctx {
+                Some(node_ctx) => {
+                    // Start the new node
+                    match self.process_manager.spawn_node(node_id.clone(), &node_ctx) {
+                        Ok(()) => {
+                            println!("Restarted modified node: {}", node_id);
+                            restarted.push(node_id.clone());
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to restart node {}: {}", node_id, e);
+                            failures.push((node_id.clone(), format!("Restart failed: {}", e)));
+                        }
+                    }
+                }
+                None => {
+                    eprintln!("Could not find new node context for {}", node_id);
+                    failures.push((
+                        node_id.clone(),
+                        "Node context not found in new program".to_string(),
+                    ));
+                }
+            }
+        }
+
+        // Start added nodes
+        for node_id in &diff.added_nodes {
+            let new_node_ctx = find_node_by_key(&new_program.node_tab, node_id);
+            match new_node_ctx {
+                Some(node_ctx) => {
+                    match self.process_manager.spawn_node(node_id.clone(), &node_ctx) {
+                        Ok(()) => {
+                            println!("Started new node: {}", node_id);
+                            started.push(node_id.clone());
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to start new node {}: {}", node_id, e);
+                            failures.push((node_id.clone(), format!("Start failed: {}", e)));
+                        }
+                    }
+                }
+                None => {
+                    eprintln!("Could not find node context for {}", node_id);
+                    failures.push((
+                        node_id.clone(),
+                        "Node context not found in new program".to_string(),
+                    ));
+                }
+            }
+        }
+
+        Ok(ApplyResult {
+            stopped,
+            restarted,
+            started,
+            failures,
+        })
+    }
+
+    /// Update parameters and apply changes to running nodes
+    pub fn update_parameters_and_apply(
+        &mut self,
+        new_params: IndexMap<ParamName, Value>,
+    ) -> Result<UpdateResult> {
+        let mut errors = Vec::new();
+
+        // Check if we have a program
+        if self.program.is_none() {
+            return Err(Error::InvalidParameter(
+                "No program compiled yet".to_string(),
+            ));
+        }
+
+        // Recompile with new parameters
+        let new_program = match self.recompile_with_params(new_params) {
+            Ok(prog) => prog,
+            Err(e) => {
+                errors.push(format!("Compilation failed: {}", e));
+                return Ok(UpdateResult {
+                    success: false,
+                    diff: ProgramDiff {
+                        added_nodes: Vec::new(),
+                        removed_nodes: Vec::new(),
+                        modified_nodes: Vec::new(),
+                        unchanged_nodes: Vec::new(),
+                    },
+                    applied: ApplyResult {
+                        stopped: Vec::new(),
+                        restarted: Vec::new(),
+                        started: Vec::new(),
+                        failures: Vec::new(),
+                    },
+                    errors,
+                });
+            }
+        };
+
+        // Compute diff (old program is guaranteed to exist at this point)
+        let diff = diff_programs(self.program.as_ref().unwrap(), &new_program);
+
+        // Apply diff
+        let applied = match self.apply_diff(&diff, &new_program) {
+            Ok(result) => result,
+            Err(e) => {
+                errors.push(format!("Failed to apply diff: {}", e));
+                return Ok(UpdateResult {
+                    success: false,
+                    diff,
+                    applied: ApplyResult {
+                        stopped: Vec::new(),
+                        restarted: Vec::new(),
+                        started: Vec::new(),
+                        failures: Vec::new(),
+                    },
+                    errors,
+                });
+            }
+        };
+
+        // Update stored program
+        self.program = Some(new_program);
+
+        let success = applied.success() && errors.is_empty();
+
+        Ok(UpdateResult {
+            success,
+            diff,
+            applied,
+            errors,
+        })
+    }
+
+    /// Update a single parameter and apply changes
+    pub fn update_parameter_and_apply(
+        &mut self,
+        param_name: ParamName,
+        new_value: Value,
+    ) -> Result<UpdateResult> {
+        let mut params = IndexMap::new();
+        params.insert(param_name, new_value);
+        self.update_parameters_and_apply(params)
+    }
+}
+
+/// Helper function to find node by key
+fn find_node_by_key(
+    node_tab: &ros_plan_compiler::utils::shared_table::SharedTable<
+        ros_plan_compiler::context::node::NodeCtx,
+    >,
+    key: &ros_plan_format::key::KeyOwned,
+) -> Option<ros_plan_compiler::context::node::NodeCtx> {
+    for (_, node_shared) in node_tab.read().iter() {
+        let mut result = None;
+        node_shared.with_read(|node| {
+            if &node.key == key {
+                result = Some(node.clone());
+            }
+        });
+        if result.is_some() {
+            return result;
+        }
+    }
+    None
 }

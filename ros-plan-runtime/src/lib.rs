@@ -1,9 +1,13 @@
 pub mod config;
+pub mod diff;
 pub mod process_manager;
 pub mod runtime;
 pub mod state;
 
 pub use config::{RestartPolicy, RuntimeConfig};
+pub use diff::{
+    diff_programs, ApplyResult, NodeChanges, NodeModification, ProgramDiff, UpdateResult,
+};
 pub use process_manager::{ManagedNode, NodeHandle, NodeState, ProcessManager};
 pub use runtime::Runtime;
 pub use state::RuntimeState;
