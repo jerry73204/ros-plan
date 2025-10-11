@@ -1,0 +1,12 @@
+# Plan with node that has same name as node in launch file
+node:
+  test_talker:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+
+include:
+  launch_nodes:
+    path: simple_node.launch.py
+    launch: true

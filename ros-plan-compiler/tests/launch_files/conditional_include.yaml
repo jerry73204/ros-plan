@@ -1,0 +1,16 @@
+# Plan with conditional launch include
+arg:
+  enable_talker:
+    type: bool
+    default: !bool true
+
+node:
+  listener:
+    pkg: demo_nodes_cpp
+    exec: listener
+
+include:
+  optional_talker:
+    path: simple_node.launch.py
+    launch: true
+    when: $ enable_talker $

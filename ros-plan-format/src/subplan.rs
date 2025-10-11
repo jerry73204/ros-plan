@@ -136,7 +136,7 @@ arg:
         let yaml = r#"
 path: /path/to/optional.launch.py
 launch: true
-when: !lua "$args.use_optional == true$"
+when: $ use_optional == true $
 "#;
         let result: Result<IncludeCfg, _> = serde_yaml::from_str(yaml);
         if let Err(e) = &result {

@@ -1,0 +1,18 @@
+# Plan with parameter substitution in launch include arguments
+arg:
+  custom_rate:
+    type: i64
+    default: !i64 25
+
+node:
+  listener:
+    pkg: demo_nodes_cpp
+    exec: listener
+
+include:
+  talker_with_custom_rate:
+    path: with_args.launch.py
+    launch: true
+    arg:
+      node_name: !str "custom_talker"
+      rate: !i64 $ custom_rate $

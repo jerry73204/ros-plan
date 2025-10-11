@@ -1,0 +1,11 @@
+# Plan that includes a launch file with namespace prefix
+node:
+  listener:
+    pkg: demo_nodes_cpp
+    exec: listener
+
+include:
+  sensors:
+    path: simple_node.launch.py
+    launch: true
+    namespace: /sensors

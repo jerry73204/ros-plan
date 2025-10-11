@@ -1,0 +1,20 @@
+# Plan that includes a launch file and links its nodes with plan nodes
+node:
+  listener:
+    pkg: demo_nodes_cpp
+    exec: listener
+    socket:
+      input: !sub
+
+include:
+  launch_nodes:
+    path: talker_for_link.launch.py
+    launch: true
+
+link:
+  chatter: !pubsub
+    type: std_msgs/msg/String
+    src:
+      - launch_nodes/launch_talker/chatter
+    dst:
+      - listener/input
