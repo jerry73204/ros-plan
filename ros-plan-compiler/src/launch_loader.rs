@@ -466,26 +466,140 @@ mod tests {
 
     #[test]
     fn test_load_simple_launch_file() {
-        // This test requires a test launch file and ROS 2 environment
-        // Skip if not available
-        let test_launch = Path::new("/tmp/test_simple.launch.py");
+        // Use the test launch file from the tests directory
+        let test_launch =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/launch_files/simple_node.launch.py");
+
         if !test_launch.exists() {
-            println!("Skipping test - no test launch file at {:?}", test_launch);
+            println!("Skipping test - launch file not found at {:?}", test_launch);
             return;
         }
 
         let args = HashMap::new();
-        let result = load_launch_file(test_launch, args);
+        let result = load_launch_file(&test_launch, args);
 
         match result {
             Ok(launch_result) => {
                 println!("✅ Successfully loaded launch file");
                 println!("  Nodes: {}", launch_result.nodes.len());
                 println!("  Containers: {}", launch_result.containers.len());
-                println!("  Errors: {}", launch_result.errors.len());
+                println!("  Lifecycle nodes: {}", launch_result.lifecycle_nodes.len());
+
+                // Verify we got the expected node
+                assert_eq!(launch_result.nodes.len(), 1, "Expected 1 node");
+                let node = &launch_result.nodes[0];
+                assert_eq!(node.package, "demo_nodes_cpp");
+                assert_eq!(node.executable, "talker");
+                assert_eq!(node.name, Some("test_talker".to_string()));
+                assert_eq!(node.namespace, Some("/test".to_string()));
+
+                // Verify parameters were extracted
+                assert!(!node.parameters.is_empty(), "Expected parameters");
+
+                // Verify remappings were extracted
+                assert_eq!(node.remappings.len(), 1, "Expected 1 remapping");
+                assert_eq!(
+                    node.remappings[0],
+                    ("/chatter".to_string(), "/test_topic".to_string())
+                );
             }
             Err(e) => {
-                println!("⚠️  Failed to load launch file: {}", e);
+                // Only fail if launch2dump is available
+                Python::with_gil(|py| {
+                    if py.import_bound("launch2dump").is_ok() {
+                        panic!("Failed to load launch file: {}", e);
+                    } else {
+                        println!("⚠️  Skipping test - launch2dump not available: {}", e);
+                    }
+                });
+            }
+        }
+    }
+
+    #[test]
+    fn test_load_multi_node_launch_file() {
+        let test_launch =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/launch_files/multi_node.launch.py");
+
+        if !test_launch.exists() {
+            println!("Skipping test - launch file not found");
+            return;
+        }
+
+        let args = HashMap::new();
+        let result = load_launch_file(&test_launch, args);
+
+        match result {
+            Ok(launch_result) => {
+                println!("✅ Successfully loaded multi-node launch file");
+
+                // Verify we got multiple nodes
+                assert_eq!(launch_result.nodes.len(), 2, "Expected 2 nodes");
+
+                // Check first node
+                let talker = &launch_result.nodes[0];
+                assert_eq!(talker.package, "demo_nodes_cpp");
+                assert_eq!(talker.executable, "talker");
+                assert_eq!(talker.name, Some("talker_node".to_string()));
+
+                // Check second node
+                let listener = &launch_result.nodes[1];
+                assert_eq!(listener.package, "demo_nodes_cpp");
+                assert_eq!(listener.executable, "listener");
+                assert_eq!(listener.name, Some("listener_node".to_string()));
+            }
+            Err(e) => {
+                Python::with_gil(|py| {
+                    if py.import_bound("launch2dump").is_ok() {
+                        panic!("Failed to load launch file: {}", e);
+                    } else {
+                        println!("⚠️  Skipping test - launch2dump not available: {}", e);
+                    }
+                });
+            }
+        }
+    }
+
+    #[test]
+    fn test_load_launch_file_with_arguments() {
+        let test_launch =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/launch_files/with_args.launch.py");
+
+        if !test_launch.exists() {
+            println!("Skipping test - launch file not found");
+            return;
+        }
+
+        // Provide launch arguments
+        let mut args = HashMap::new();
+        args.insert("node_name".to_string(), "custom_talker".to_string());
+        args.insert("rate".to_string(), "20".to_string());
+
+        let result = load_launch_file(&test_launch, args);
+
+        match result {
+            Ok(launch_result) => {
+                println!("✅ Successfully loaded launch file with arguments");
+                assert_eq!(launch_result.nodes.len(), 1, "Expected 1 node");
+
+                let node = &launch_result.nodes[0];
+                assert_eq!(node.package, "demo_nodes_cpp");
+                assert_eq!(node.executable, "talker");
+
+                // Node name should reflect the argument
+                assert_eq!(node.name, Some("custom_talker".to_string()));
+
+                // Parameters should include the rate argument
+                assert!(!node.parameters.is_empty(), "Expected parameters");
+            }
+            Err(e) => {
+                Python::with_gil(|py| {
+                    if py.import_bound("launch2dump").is_ok() {
+                        panic!("Failed to load launch file: {}", e);
+                    } else {
+                        println!("⚠️  Skipping test - launch2dump not available: {}", e);
+                    }
+                });
             }
         }
     }

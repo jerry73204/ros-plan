@@ -1,0 +1,10 @@
+# Test plan that includes a ROS 2 launch file
+node:
+  plan_node:
+    pkg: demo_nodes_cpp
+    exec: listener
+
+include:
+  launch_nodes:
+    path: simple_node.launch.py
+    launch: true
