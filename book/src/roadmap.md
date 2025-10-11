@@ -2239,13 +2239,19 @@ All tests must:
 
 ## Phase 6: ROS Launch Compatibility Layer
 
-**Status**: 🟡 In Progress (Phases 6.1, 6.2, 6.2.5, 6.2.6, 6.3 complete; 6.4 not started)
-**Timeline**: 3.5-4.5 weeks (16-21 days)
+**Status**: ✅ Complete (All subphases 6.1, 6.2, 6.2.5, 6.2.6, 6.3 complete)
+**Timeline**: 2 weeks (actual)
 **Dependencies**: Phases 1-5 complete
 
 ### Overview
 
-Phase 6 adds support for including ROS 2 Python launch files within plan files. This enables gradual migration from ROS 2 launch to ros-plan by allowing hybrid systems where launch files and plan files work together.
+Phase 6 implements ROS 2 launch file inclusion - the ability to include existing Python launch files within plan files for hybrid systems. This enables gradual migration from ROS 2 launch to ros-plan.
+
+**Note**: Additional launch-related features (runtime updates, testing/documentation, conversion tool) have been moved to separate phases:
+- **Phase 7**: Runtime parameter updates and reload
+- **Phase 8**: Integration testing and documentation
+- **Phase 9**: Launch-to-plan conversion tool (`launch2plan`)
+- **Phase 10**: Future enhancements (deferred)
 
 The implementation reuses the existing `launch2dump` project architecture, which uses custom visitors and Python name mangling to extract node metadata from launch files without executing processes. The key insight is to intercept launch actions (Node, ComposableNodeContainer, etc.) and extract their configuration instead of spawning processes.
 
@@ -3101,12 +3107,13 @@ This extension is deferred to a future phase to avoid breaking changes to the ex
 
 ---
 
-### Phase 6.4: Runtime Parameter Updates
+## Phase 7: Runtime Parameter Updates
 
 **Timeline**: 3-4 days
 **Status**: 🔴 Not Started
+**Dependencies**: Phase 6 complete
 
-#### F42: Launch Include Cache and Reload
+### F42: Launch Include Cache and Reload
 
 **Description**: Implement caching and reloading of launch includes when parameters change at runtime.
 
@@ -3385,12 +3392,13 @@ This extension is deferred to a future phase to avoid breaking changes to the ex
 
 ---
 
-### Phase 6.5: Testing and Documentation
+## Phase 8: Launch Integration Testing and Documentation
 
 **Timeline**: 2-3 days
 **Status**: 🔴 Not Started
+**Dependencies**: Phases 6-7 complete
 
-#### F40: Integration Tests and Examples
+### F40: Integration Tests and Examples
 
 **Description**: Comprehensive integration tests and example plans demonstrating launch include functionality.
 
@@ -3699,7 +3707,8 @@ This extension is deferred to a future phase to avoid breaking changes to the ex
 
 ## Phase 6 Success Criteria
 
-- [ ] All 14 features (F32-F42, including F34.5) implemented and tested (11/14 complete)
+**Launch File Inclusion** (Phase 6 - Complete):
+- [x] All core inclusion features (F32-F41) implemented and tested
 - [x] UV workspace successfully replaces Rye
 - [x] Python launch loader extracts node metadata without spawning processes
 - [x] CLI tool (`launch2dump`) successfully dumps launch metadata to JSON/YAML
@@ -3709,17 +3718,399 @@ This extension is deferred to a future phase to avoid breaking changes to the ex
 - [x] Compiler merges included nodes with plan nodes
 - [x] Name conflicts resolved with prefixing (basic implementation)
 - ⚠️  Namespace prefixing works correctly (partial - parameter extraction only)
-- [ ] Launch include cache speeds up reloads (Phase 6.4)
-- [ ] Parameter dependency tracking detects affected includes (Phase 6.4)
-- [ ] Runtime API starts/stops nodes on parameter changes (Phase 6.4)
-- [ ] All integration tests pass
+- [ ] Launch include cache speeds up reloads (Phase 7)
+- [ ] Parameter dependency tracking detects affected includes (Phase 7)
+- [ ] Runtime API starts/stops nodes on parameter changes (Phase 7)
+- [x] Integration tests pass (Phase 6.3 tests complete)
 - [ ] Performance meets targets (load <1s, reload <100ms)
-- [ ] Documentation complete with examples and migration guide
+- [ ] Documentation complete with examples and migration guide (Phase 8)
 - [ ] Compatible with ROS 2 Humble, Iron, and Rolling
 
 ---
 
-## Phase 6 Known Limitations
+## Phase 7 Success Criteria
+
+- [ ] Launch include cache implemented (F42)
+- [ ] Parameter dependency tracking works correctly
+- [ ] Runtime reload API functional
+- [ ] Nodes start/stop on parameter changes
+- [ ] Performance: reload <100ms
+
+---
+
+## Phase 8 Success Criteria
+
+- [ ] Integration tests comprehensive (F40)
+- [ ] Documentation complete with examples (F41)
+- [ ] Migration guide published
+- [ ] Performance benchmarks meet targets
+- [ ] Compatible with ROS 2 Humble, Iron, Rolling
+
+---
+
+## Phase 9 Success Criteria
+
+- [ ] Branch explorer visits all conditional paths (F43)
+- [ ] Condition expressions converted to Lua `when` clauses (F43)
+- [ ] Socket inference from remappings with heuristics (F44)
+- [ ] Link generation from inferred sockets (F44)
+- [ ] Message type inference/marking (F44)
+- [ ] Plan builder converts launch to ROS-Plan YAML (F45)
+- [ ] YAML serializer generates proper tags (!i64, !pub, etc.) (F45)
+- [ ] CLI tool supports conversion with arguments (F46)
+- [ ] Socket hints file supported for ambiguous cases (F46)
+- [ ] Validation compiles generated plans (F46)
+- [ ] Conversion quality reports (automatic/assisted/manual) (F45)
+- [ ] Example conversions for common patterns (F47)
+- [ ] Unit and integration tests complete (F47)
+
+---
+
+## Phase 9: Launch-to-Plan Conversion Tool (launch2plan)
+
+**Timeline**: 5-7 days
+**Status**: 🔴 Not Started
+**Dependencies**: Phase 6 complete
+**Reference**: See `book/src/launch2plan-conversion.md` for detailed conversion strategy
+
+**Summary**: Develop `launch2plan` - a tool that converts ROS 2 launch files (Python/XML/YAML) to ROS-Plan format. Unlike `launch2dump` which extracts metadata from a single execution path, `launch2plan` explores **all conditional branches** to generate complete plans with `when` clauses, inferred sockets, and links.
+
+**Key Differences from launch2dump**:
+- **Purpose**: Migration tool vs inspection tool
+- **Conditionals**: Explores ALL branches vs single execution path
+- **Output**: Complete ROS-Plan YAML with links/sockets vs JSON metadata
+- **Use Case**: Modernization and migration vs debugging and integration
+
+### F43: Branch-Exploring Visitor
+
+**Description**: Modify launch visitor to explore all conditional branches and track condition expressions for `when` clause generation.
+
+**Work Items**:
+
+1. **Create Branch Explorer** (`launch2plan/src/launch2plan/branch_explorer.py`)
+   - Extend `LaunchInspector` from launch2dump
+   - Visit actions in all possible condition states (True/False branches)
+   - Track condition stack for nested conditionals
+   - Handle `GroupAction` nesting with namespace tracking
+   - Detect dynamic node creation (loops, conditionals)
+
+2. **Implement Condition Tracker** (`launch2plan/src/launch2plan/condition_tracker.py`)
+   - Extract condition expressions from `IfCondition`, `UnlessCondition`
+   - Convert to Lua expressions: `$ variable $`, `$ not variable $`
+   - Handle complex boolean expressions: `AndSubstitution`, `OrSubstitution`
+   - Support equality checks: `EqualsSubstitution` → `$ a == b $`
+   - Mark complex conditions for manual review: `$ FIXME: Complex condition $`
+
+3. **Track Namespace Context**
+   - Handle `PushRosNamespace`/`PopRosNamespace` actions
+   - Track namespace stack for each node
+   - Apply namespaces to generated node configurations
+   - Support nested `GroupAction` with different namespaces
+
+**Test Cases**:
+- [ ] Extract simple condition: `IfCondition(LaunchConfiguration("x"))` → `$ x $`
+- [ ] Extract negation: `UnlessCondition(...)` → `$ not x $`
+- [ ] Extract equality: `EqualsSubstitution(a, b)` → `$ a == b $`
+- [ ] Handle complex AND/OR expressions
+- [ ] Track nested conditions (combine with `and`)
+- [ ] Visit all nodes in True and False branches
+- [ ] Track namespace stack correctly
+- [ ] Handle dynamic node creation (detect and warn)
+
+**Files to Create**:
+- `launch2plan/src/launch2plan/branch_explorer.py`
+- `launch2plan/src/launch2plan/condition_tracker.py`
+- `launch2plan/src/launch2plan/namespace_tracker.py`
+
+---
+
+### F44: Socket and Link Inference
+
+**Description**: Infer socket declarations and link connections from node remappings and usage patterns.
+
+**Work Items**:
+
+1. **Socket Inference** (`launch2plan/src/launch2plan/socket_inferrer.py`)
+   - Infer sockets from node remappings
+   - Determine socket direction (pub/sub) using heuristics:
+     - Name patterns: "out"/"output"/"pub" → publisher, "in"/"input"/"sub" → subscriber
+     - Topic connection analysis: first node on topic → publisher, others → subscribers
+     - Composable node patterns: inputs typically subscribers
+   - Mark uncertain inferences with comments: `!pub  # REVIEW: Direction inferred`
+   - Support service sockets: detect service patterns in remappings
+   - Generate validation hints for manual review
+
+2. **Link Inference** (`launch2plan/src/launch2plan/link_inferrer.py`)
+   - Group sockets by target topic
+   - Create `!pubsub` links connecting publishers to subscribers
+   - Generate descriptive link names from topic names
+   - Mark unknown message types: `type: FIXME  # Type unknown`
+   - Handle multiple publishers/subscribers on same topic
+   - Detect service connections (different from topic links)
+
+3. **Type Inference** (`launch2plan/src/launch2plan/type_inference.py`)
+   - Query running system for topic types: `ros2 topic type <topic>`
+   - Build database of common node interfaces (optional)
+   - Infer parameter types from values: bool/i64/f64/str
+   - Support user-provided type hints file
+
+**Heuristics**:
+```python
+# Socket direction inference
+pub_patterns = ["out", "output", "pub", "publisher", "data", "state"]
+sub_patterns = ["in", "input", "sub", "subscriber", "cmd", "command"]
+
+# Link naming
+"/sensors/camera/image" → "sensors_camera_image_link"
+```
+
+**Test Cases**:
+- [ ] Infer socket from remapping: `("image", "/camera/raw")` → `image: !pub`
+- [ ] Infer direction from name pattern: "image_out" → `!pub`
+- [ ] Infer direction from multiple nodes on same topic
+- [ ] Generate link from sockets on same topic
+- [ ] Generate descriptive link names
+- [ ] Mark unknown message types with FIXME
+- [ ] Handle service vs topic ambiguity
+- [ ] Detect and warn on ambiguous socket directions
+
+**Files to Create**:
+- `launch2plan/src/launch2plan/socket_inferrer.py`
+- `launch2plan/src/launch2plan/link_inferrer.py`
+- `launch2plan/src/launch2plan/type_inference.py`
+
+---
+
+### F45: Plan Builder and YAML Generation
+
+**Description**: Transform collected metadata into ROS-Plan YAML format with proper structure and type tags.
+
+**Work Items**:
+
+1. **Plan Builder** (`launch2plan/src/launch2plan/plan_builder.py`)
+   - Convert `DeclareLaunchArgument` to `arg` section with type inference
+   - Convert `Node` actions to `node` section with parameters
+   - Apply inferred sockets to node configurations
+   - Apply `when` clauses from condition tracking
+   - Convert `IncludeLaunchDescription` to `include` section
+   - Generate links from socket inference
+   - Track conversion quality (automatic/assisted/manual)
+
+2. **YAML Serializer** (`launch2plan/src/launch2plan/yaml_serializer.py`)
+   - Serialize plan to ROS-Plan YAML with proper formatting
+   - Use correct YAML tags: `!i64`, `!f64`, `!bool`, `!str`, `!pub`, `!sub`, `!pubsub`
+   - Generate comments for manual review items
+   - Add conversion report metadata as YAML comments
+   - Support review mode with FIXME markers
+   - Maintain section order: arg, var, node, link, socket, include
+
+3. **Conversion Report Generation**
+   - Track confidence level (0-100%)
+   - List manual review items with line numbers
+   - Categorize conversion quality: Green (automatic), Yellow (assisted), Red (manual)
+   - Generate statistics: nodes converted, sockets inferred, links generated
+
+**Argument Conversion**:
+```python
+# Input: DeclareLaunchArgument("fps", default_value="30", description="Frame rate")
+# Output:
+arg:
+  fps:
+    type: "i64"
+    default: !i64 30
+    help: "Frame rate"
+```
+
+**Node Conversion**:
+```python
+# Input: Node(package="camera", executable="node", parameters=[{"fps": 30}],
+#             condition=IfCondition(...))
+# Output:
+node:
+  camera:
+    pkg: camera
+    exec: node
+    when: $ enable_camera $
+    param:
+      fps: !i64 30
+    socket:
+      image: !pub  # REVIEW: Direction inferred
+```
+
+**Test Cases**:
+- [ ] Convert arguments with type inference
+- [ ] Convert node with parameters
+- [ ] Apply when clauses to conditional nodes
+- [ ] Generate proper YAML tags (!i64, !bool, etc.)
+- [ ] Generate conversion report metadata
+- [ ] Maintain section order in output
+- [ ] Generate review comments for uncertain items
+- [ ] Support review mode vs production mode
+
+**Files to Create**:
+- `launch2plan/src/launch2plan/plan_builder.py`
+- `launch2plan/src/launch2plan/yaml_serializer.py`
+
+---
+
+### F46: CLI Tool and User Workflow
+
+**Description**: Command-line interface for launch-to-plan conversion with validation and review support.
+
+**Work Items**:
+
+1. **CLI Implementation** (`launch2plan/src/launch2plan/__main__.py`)
+   ```bash
+   # Basic conversion
+   launch2plan camera.launch.py -o camera.yaml
+
+   # With arguments
+   launch2plan system.launch.py fps:=30 debug:=true -o system.yaml
+
+   # Review mode (mark uncertain conversions)
+   launch2plan my_robot.launch.py -o my_robot.yaml --review
+
+   # Interactive mode (prompt for ambiguous cases)
+   launch2plan system.launch.py --interactive
+
+   # Validate generated plan
+   launch2plan camera.launch.py -o camera.yaml --validate
+
+   # Batch conversion
+   launch2plan --package my_robot_bringup --output plans/ --recursive
+   ```
+
+2. **Socket Hints File Support**
+   - Allow user-provided hints file: `--hints socket_hints.yaml`
+   - Define socket directions for ambiguous cases
+   - Specify message types for links
+   ```yaml
+   # socket_hints.yaml
+   nodes:
+     camera_driver:
+       sockets:
+         image: !pub
+         trigger: !sub
+     image_processor:
+       sockets:
+         input: !sub
+         output: !pub
+   links:
+     camera_to_processor:
+       type: sensor_msgs/msg/Image
+   ```
+
+3. **Validation Support**
+   - Validate generated YAML is parseable by ros-plan-format
+   - Compile with ros2plan to check for errors
+   - Compare execution with original launch file (optional)
+   - Report validation results
+
+4. **Migration Assistant** (Future)
+   ```bash
+   launch2plan migrate my_robot_bringup
+   # - Converts all launch files in package
+   # - Updates package.xml
+   # - Creates migration report
+   # - Generates validation tests
+   ```
+
+**Test Cases**:
+- [ ] Convert single launch file
+- [ ] Convert with launch arguments
+- [ ] Generate review markers with --review
+- [ ] Interactive prompts with --interactive
+- [ ] Load and apply socket hints file
+- [ ] Validate generated plan
+- [ ] Batch convert entire package
+- [ ] Handle missing launch file gracefully
+- [ ] Handle invalid YAML output gracefully
+
+**Files to Create**:
+- `launch2plan/src/launch2plan/__main__.py`
+- `launch2plan/src/launch2plan/cli.py`
+- `launch2plan/src/launch2plan/socket_hints.py`
+
+---
+
+### F47: Testing and Examples
+
+**Description**: Comprehensive test suite and example conversions demonstrating various launch patterns.
+
+**Work Items**:
+
+1. **Unit Tests**
+   - Argument conversion with type inference
+   - Node conversion with parameters
+   - Condition extraction (all condition types)
+   - Socket inference heuristics
+   - Link generation from sockets
+   - YAML serialization with tags
+   - Namespace tracking
+
+2. **Integration Tests**
+   - Convert simple launch file (single node)
+   - Convert multi-node launch file
+   - Convert with conditionals (IfCondition, UnlessCondition)
+   - Convert with includes (nested launch files)
+   - Convert with dynamic node creation (detect and warn)
+   - Convert with composable nodes
+   - Convert with lifecycle nodes
+   - Validate generated YAML is parseable
+   - Round-trip test (launch → plan → execution equivalence)
+
+3. **Example Conversions**
+   ```
+   launch2plan/examples/
+   ├── simple_talker/
+   │   ├── talker.launch.py          # Original
+   │   └── talker.yaml                # Converted
+   ├── camera_driver/
+   │   ├── camera.launch.py
+   │   └── camera.yaml
+   ├── multi_robot/
+   │   ├── multi_robot.launch.py     # Complex with conditionals
+   │   └── multi_robot.yaml
+   └── composable/
+       ├── composable.launch.py      # Container + components
+       └── composable.yaml
+   ```
+
+4. **Conversion Quality Examples**
+   - Level 1 (Green): Fully automatic conversion
+   - Level 2 (Yellow): Assisted with review
+   - Level 3 (Red): Manual intervention required
+
+**Test Cases**:
+- [ ] Unit: Type inference for all basic types
+- [ ] Unit: Socket direction inference accuracy
+- [ ] Integration: Simple single-node conversion
+- [ ] Integration: Multi-node with links
+- [ ] Integration: Conditional nodes
+- [ ] Integration: Nested includes
+- [ ] Integration: Dynamic node creation warning
+- [ ] Validation: Generated YAML parses correctly
+- [ ] Validation: Compiled plan executes equivalently
+
+**Files to Create**:
+- `launch2plan/tests/test_argument_conversion.py`
+- `launch2plan/tests/test_socket_inference.py`
+- `launch2plan/tests/test_link_inference.py`
+- `launch2plan/tests/test_condition_tracking.py`
+- `launch2plan/tests/test_integration.py`
+- `launch2plan/examples/` (various example conversions)
+
+---
+
+## Phase 10: Launch Compatibility Enhancements (Future)
+
+**Status**: 🔴 Not Started (Deferred)
+**Timeline**: TBD
+**Dependencies**: Phases 6-9 complete
+
+**Description**: Future enhancements to address current limitations and add advanced features to launch file compatibility.
+
+### Known Limitations (To Be Addressed)
 
 1. **Python Dependency**: Requires Python runtime and ROS 2 launch packages
 2. **Private API Usage**: Relies on Python name mangling to access private members (fragile across ROS versions)
@@ -3728,16 +4119,88 @@ This extension is deferred to a future phase to avoid breaking changes to the ex
 5. **Performance Overhead**: Python FFI adds startup latency compared to pure Rust
 6. **Version Compatibility**: May break when ROS 2 launch internals change in new releases
 
+### Future Enhancement Features
+
+#### F48: XML and YAML Launch File Support
+- Extend launch2dump and launch2plan to handle XML and YAML launch formats
+- Parse declarative launch formats without Python runtime
+- Convert to plan format with same quality as Python launch files
+
+#### F49: Static Launch Analysis
+- Detect issues in launch files before runtime
+- Check for undefined parameters, circular includes, name conflicts
+- Validate remappings and parameter types
+- Generate warnings for common issues
+
+#### F50: Launch File Visualization
+- Generate visual representation of launch file node tree
+- Show conditional branches and includes
+- Export to formats: SVG, DOT, PlantUML
+- Interactive web viewer for complex launch files
+
+#### F51: Native Rust Launch Parser
+- Implement pure Rust parser for ROS 2 launch files
+- Remove Python dependency for better performance
+- Support Python, XML, and YAML launch formats
+- Maintain compatibility with existing launch files
+
+#### F52: Launch File Hot Reload
+- Watch launch file changes and reload automatically
+- Update running system without full restart
+- Preserve node state when possible
+- Notify user of structural changes
+
+#### F53: Package URI Resolution
+- Support `package://` URIs in includes: `package://my_robot/launch/bringup.launch.py`
+- Resolve packages from ROS 2 package path
+- Handle cross-package dependencies
+- Cache package locations for performance
+
+#### F54: Lazy Loading
+- Only load includes when needed (condition evaluates to true)
+- Reduce startup time for large systems
+- Support on-demand loading of optional subsystems
+- Cache loaded includes for reuse
+
+#### F55: Parallel Loading
+- Load multiple includes concurrently
+- Improve startup time for systems with many includes
+- Respect dependencies between includes
+- Thread-safe caching and metadata extraction
+
+#### F56: Round-Trip Validation
+- Tool to validate launch → plan conversion
+- Execute both original and converted versions
+- Compare: topic list, service list, parameters, QoS settings
+- Generate equivalence report with differences
+- Support automated regression testing
+
 ---
 
-## Phase 6 Future Enhancements
+## Phases 6-10 Dependencies
 
-- **F42**: Support XML and YAML launch file formats
-- **F43**: Static analysis of launch files (detect issues before runtime)
-- **F44**: Launch file visualization (show node tree from launch)
-- **F45**: Automatic conversion tool (launch.py → plan.yaml)
-- **F46**: Native Rust launch parser (remove Python dependency)
-- **F47**: Launch file hot reload (watch file changes)
-- **F48**: Include from package:// URIs (resolve from ROS packages)
-- **F49**: Lazy loading (only load includes when needed)
-- **F50**: Parallel loading (load multiple includes concurrently)
+```
+Phase 6 (Launch Inclusion)
+  ├─ 6.1: UV Migration ✅
+  ├─ 6.2: Launch Loader API ✅
+  ├─ 6.2.5: CLI Tool ✅
+  ├─ 6.2.6: Serialization Fixes ✅
+  └─ 6.3: PyO3 Integration ✅
+
+Phase 7 (Runtime Updates) → depends on Phase 6
+  └─ F42: Launch Include Cache and Reload
+
+Phase 8 (Testing & Docs) → depends on Phases 6-7
+  ├─ F40: Integration Tests
+  └─ F41: Documentation
+
+Phase 9 (Conversion Tool) → depends on Phase 6
+  ├─ F43: Branch Explorer
+  ├─ F44: Socket/Link Inference
+  ├─ F45: Plan Builder
+  ├─ F46: CLI Tool
+  └─ F47: Testing
+
+Phase 10 (Future) → depends on Phases 6-9
+  └─ F48-F56: Enhancements
+```
