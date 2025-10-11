@@ -6,3 +6,4 @@
 - [Plan File Format](./plan-format.md)
 - [Execution Workflow](./execution-workflow.md)
 - [Lua Integration](./lua-integration.md)
+- [Launch2Plan Conversion Strategy](./launch2plan-conversion.md)
