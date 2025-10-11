@@ -403,6 +403,24 @@ impl Runtime {
         params.insert(param_name, new_value);
         self.update_parameters_and_apply(params)
     }
+
+    /// Check which launch includes would be reloaded with new parameters
+    pub fn check_launch_reload(
+        &self,
+        new_params: &IndexMap<ParamName, Value>,
+    ) -> crate::launch_tracking::ReloadCheck {
+        self.state.launch_tracker.check_reload_needed(new_params)
+    }
+
+    /// Get launch tracker (for manual inspection/modification)
+    pub fn launch_tracker(&self) -> &crate::launch_tracking::LaunchTracker {
+        &self.state.launch_tracker
+    }
+
+    /// Get mutable launch tracker (for manual registration during compilation)
+    pub fn launch_tracker_mut(&mut self) -> &mut crate::launch_tracking::LaunchTracker {
+        &mut self.state.launch_tracker
+    }
 }
 
 /// Helper function to find node by key

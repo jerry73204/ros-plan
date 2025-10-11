@@ -1,3 +1,4 @@
+use crate::launch_tracking::LaunchTracker;
 use indexmap::IndexMap;
 use ros_plan_format::{expr::Value, parameter::ParamName};
 use std::time::Instant;
@@ -9,6 +10,8 @@ pub struct RuntimeState {
     pub start_time: Instant,
     /// Current parameter values
     pub parameters: IndexMap<ParamName, Value>,
+    /// Launch file include tracking
+    pub launch_tracker: LaunchTracker,
 }
 
 impl RuntimeState {
@@ -16,6 +19,7 @@ impl RuntimeState {
         Self {
             start_time: Instant::now(),
             parameters,
+            launch_tracker: LaunchTracker::new(),
         }
     }
 
