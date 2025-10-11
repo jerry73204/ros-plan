@@ -11,7 +11,10 @@ fn test_default_runtime_config() {
 
     // Check default restart policy
     match config.restart_policy {
-        RestartPolicy::OnFailure { max_retries, backoff } => {
+        RestartPolicy::OnFailure {
+            max_retries,
+            backoff,
+        } => {
             assert_eq!(max_retries, 3);
             assert_eq!(backoff, Duration::from_secs(1));
         }
@@ -40,7 +43,10 @@ fn test_restart_policy_on_failure() {
     let deserialized: RestartPolicy = serde_json::from_str(&json).unwrap();
 
     match deserialized {
-        RestartPolicy::OnFailure { max_retries, backoff } => {
+        RestartPolicy::OnFailure {
+            max_retries,
+            backoff,
+        } => {
             assert_eq!(max_retries, 5);
             assert_eq!(backoff, Duration::from_secs(2));
         }

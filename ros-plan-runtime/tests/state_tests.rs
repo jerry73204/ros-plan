@@ -6,10 +6,7 @@ use std::time::Duration;
 #[test]
 fn test_runtime_state_creation() {
     let mut params = IndexMap::new();
-    params.insert(
-        "test_param".parse::<ParamName>().unwrap(),
-        Value::I64(42),
-    );
+    params.insert("test_param".parse::<ParamName>().unwrap(), Value::I64(42));
 
     let state = RuntimeState::new(params.clone());
 
