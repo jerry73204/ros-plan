@@ -6,7 +6,7 @@
 - [Plan File Format](./plan-format.md)
 - [Execution Workflow](./execution-workflow.md)
 - [Lua Integration](./lua-integration.md)
-- [Launch2Plan Conversion Strategy](./launch2plan-conversion.md)
+- [Launch2Plan: Launch-to-Plan Conversion](./launch2plan.md)
 
 # Runtime System
 
