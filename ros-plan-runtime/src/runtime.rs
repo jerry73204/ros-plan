@@ -421,6 +421,45 @@ impl Runtime {
     pub fn launch_tracker_mut(&mut self) -> &mut crate::launch_tracking::LaunchTracker {
         &mut self.state.launch_tracker
     }
+
+    /// Get comprehensive runtime status
+    pub fn get_status(&self) -> crate::status::RuntimeStatus {
+        use crate::status::{IncludeStatus, NodeSource, NodeStatus};
+
+        // Collect node statuses
+        let mut nodes = Vec::new();
+        for node_id in self.process_manager.node_ids() {
+            if let Some(managed) = self.process_manager.get_node(node_id) {
+                // Determine node source
+                let source = self
+                    .state
+                    .launch_tracker
+                    .get_node_source(node_id)
+                    .map(|s| NodeSource::Include(s.to_string()))
+                    .unwrap_or(NodeSource::Plan);
+
+                nodes.push(NodeStatus::from_managed(node_id, managed, source));
+            }
+        }
+
+        // Collect include statuses
+        let mut includes = Vec::new();
+        for (name, include) in &self.state.launch_tracker.includes {
+            includes.push(IncludeStatus {
+                name: name.clone(),
+                file_path: include.file_path.clone(),
+                node_count: include.node_idents.len(),
+                parameter_deps: include.parameter_deps.clone(),
+            });
+        }
+
+        crate::status::RuntimeStatus {
+            uptime: self.state.uptime(),
+            parameters: self.state.parameters.clone(),
+            nodes,
+            includes,
+        }
+    }
 }
 
 /// Helper function to find node by key

@@ -1,4 +1,4 @@
-use crate::launch_tracking::LaunchTracker;
+use crate::{events::EventLog, launch_tracking::LaunchTracker, metrics::RuntimeMetrics};
 use indexmap::IndexMap;
 use ros_plan_format::{expr::Value, parameter::ParamName};
 use std::time::Instant;
@@ -12,6 +12,10 @@ pub struct RuntimeState {
     pub parameters: IndexMap<ParamName, Value>,
     /// Launch file include tracking
     pub launch_tracker: LaunchTracker,
+    /// Event log
+    pub event_log: EventLog,
+    /// Runtime metrics
+    pub metrics: RuntimeMetrics,
 }
 
 impl RuntimeState {
@@ -20,6 +24,8 @@ impl RuntimeState {
             start_time: Instant::now(),
             parameters,
             launch_tracker: LaunchTracker::new(),
+            event_log: EventLog::default(),
+            metrics: RuntimeMetrics::default(),
         }
     }
 
