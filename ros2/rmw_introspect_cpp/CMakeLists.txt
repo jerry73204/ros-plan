@@ -28,6 +28,11 @@ add_library(${PROJECT_NAME} SHARED
   src/rmw_service.cpp
   src/rmw_client.cpp
   src/rmw_wait.cpp
+  src/rmw_graph.cpp
+  src/rmw_serialize.cpp
+  src/rmw_event.cpp
+  src/rmw_network_flow.cpp
+  src/rmw_utils.cpp
   src/data.cpp
   src/type_support.cpp
 )
@@ -92,6 +97,10 @@ if(BUILD_TESTING)
   ament_add_gtest(test_phase2 test/test_phase2.cpp)
   target_link_libraries(test_phase2 ${PROJECT_NAME})
   ament_target_dependencies(test_phase2 rcutils rmw std_srvs rosidl_typesupport_cpp)
+
+  ament_add_gtest(test_phase3 test/test_phase3.cpp)
+  target_link_libraries(test_phase3 ${PROJECT_NAME})
+  ament_target_dependencies(test_phase3 rcutils rmw)
 endif()
 
 ament_package()
