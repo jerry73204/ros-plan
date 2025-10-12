@@ -22,7 +22,14 @@ find_package(rmw_dds_common REQUIRED)
 # RMW introspect library
 add_library(${PROJECT_NAME} SHARED
   src/rmw_init.cpp
+  src/rmw_node.cpp
+  src/rmw_publisher.cpp
+  src/rmw_subscription.cpp
+  src/rmw_service.cpp
+  src/rmw_client.cpp
+  src/rmw_wait.cpp
   src/data.cpp
+  src/type_support.cpp
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -67,6 +74,8 @@ install(
 # Testing
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  find_package(std_msgs REQUIRED)
+  find_package(std_srvs REQUIRED)
 
   ament_add_gtest(test_init test/test_init.cpp)
   target_link_libraries(test_init ${PROJECT_NAME})
@@ -75,6 +84,14 @@ if(BUILD_TESTING)
   ament_add_gtest(test_data test/test_data.cpp)
   target_link_libraries(test_data ${PROJECT_NAME})
   ament_target_dependencies(test_data rcutils)
+
+  ament_add_gtest(test_phase1 test/test_phase1.cpp)
+  target_link_libraries(test_phase1 ${PROJECT_NAME})
+  ament_target_dependencies(test_phase1 rcutils rmw std_msgs rosidl_typesupport_cpp)
+
+  ament_add_gtest(test_phase2 test/test_phase2.cpp)
+  target_link_libraries(test_phase2 ${PROJECT_NAME})
+  ament_target_dependencies(test_phase2 rcutils rmw std_srvs rosidl_typesupport_cpp)
 endif()
 
 ament_package()
