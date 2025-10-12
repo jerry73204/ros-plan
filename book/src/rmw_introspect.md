@@ -388,7 +388,11 @@ clients: []
 ### Usage Example
 
 ```bash
-# Set environment
+# Build and source the package (in ros-plan workspace)
+colcon build --base-paths ros2
+source install/setup.bash
+
+# Set environment to use rmw_introspect
 export RMW_IMPLEMENTATION=rmw_introspect_cpp
 export RMW_INTROSPECT_OUTPUT=/tmp/camera_node_introspect.json
 
@@ -402,6 +406,28 @@ cat /tmp/camera_node_introspect.json
 ## Integration with launch2plan
 
 The integration is straightforward: **launch2plan simply sets `RMW_IMPLEMENTATION=rmw_introspect_cpp` and runs the node**, then parses the output JSON.
+
+### Activation Workflow
+
+1. **Build rmw_introspect_cpp**:
+   ```bash
+   cd /path/to/ros-plan
+   colcon build --base-paths ros2
+   ```
+
+2. **Source the installation** (makes rmw_introspect_cpp discoverable):
+   ```bash
+   source install/setup.bash
+   ```
+
+3. **Use in launch2plan** (Python code sets `RMW_IMPLEMENTATION`):
+   ```python
+   env = os.environ.copy()
+   env['RMW_IMPLEMENTATION'] = 'rmw_introspect_cpp'
+   # Run node with modified environment
+   ```
+
+The `RMW_IMPLEMENTATION` environment variable is the standard ROS 2 mechanism for selecting middleware implementations. Once the package is built and sourced, setting this variable activates rmw_introspect for any subsequent node launches.
 
 ### Simple Python Integration
 
@@ -534,8 +560,11 @@ The complexity is all in the C++ RMW implementation, not in Python wrappers.
 #### Work Items
 
 1. **Create package directory structure**
+
+   The package will be located in the `ros2/` directory of the ros-plan workspace:
+
    ```
-   rmw_introspect_cpp/
+   ros2/rmw_introspect_cpp/
    ├── CMakeLists.txt
    ├── package.xml
    ├── include/
@@ -556,6 +585,17 @@ The complexity is all in the C++ RMW implementation, not in Python wrappers.
    └── test/
        ├── test_init.cpp            # Basic initialization tests
        └── test_data.cpp            # IntrospectionData tests
+   ```
+
+   **Note**: The package is placed in `ros2/` so that colcon will discover and build it when running:
+   ```bash
+   colcon build --base-paths ros2
+   ```
+
+   After building, source the installation to make the RMW implementation available:
+   ```bash
+   source install/setup.bash
+   export RMW_IMPLEMENTATION=rmw_introspect_cpp
    ```
 
 2. **Setup CMakeLists.txt**
@@ -599,6 +639,54 @@ The complexity is all in the C++ RMW implementation, not in Python wrappers.
 - Verify data can be cleared between tests
 
 **Deliverable**: Buildable package skeleton with basic structure and passing initialization tests.
+
+#### Phase 0 Status: ✅ COMPLETE (2025-10-12)
+
+**Implementation Summary**:
+- ✅ Package created in `ros2/rmw_introspect_cpp/`
+- ✅ CMakeLists.txt with ROS 2 Humble dependencies
+- ✅ package.xml with RMW typesupport export
+- ✅ Header files: visibility_control.h, identifier.hpp, types.hpp, data.hpp
+- ✅ Source files: rmw_init.cpp, data.cpp
+- ✅ Test files: test_init.cpp, test_data.cpp
+
+**RMW Functions Implemented**:
+- ✅ `rmw_get_implementation_identifier()` → "rmw_introspect_cpp"
+- ✅ `rmw_get_serialization_format()` → "introspect"
+- ✅ `rmw_init_options_init()`, `rmw_init_options_copy()`, `rmw_init_options_fini()`
+- ✅ `rmw_init()`, `rmw_shutdown()`, `rmw_context_fini()`
+
+**Data Structures Implemented**:
+- ✅ QoSProfile with conversion from rmw_qos_profile_t
+- ✅ PublisherInfo, SubscriptionInfo, ServiceInfo, ClientInfo structs
+- ✅ IntrospectionData singleton with thread-safe recording
+- ✅ JSON export functionality
+
+**Test Results**: **11/11 tests passing** (100%)
+- test_init: 4/4 tests passing
+  - ✅ ImplementationIdentifier
+  - ✅ InitOptionsInit
+  - ✅ InitOptionsCopy
+  - ✅ RmwInitShutdown
+- test_data: 5/5 tests passing
+  - ✅ SingletonInstance
+  - ✅ RecordNode
+  - ✅ RecordPublisher
+  - ✅ QoSConversion
+  - ✅ JsonExport
+
+**Build Commands**:
+```bash
+. /opt/ros/humble/setup.bash
+colcon build --base-paths ros2 --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+colcon test --base-paths ros2 --packages-select rmw_introspect_cpp
+```
+
+**Activation**:
+```bash
+. install/setup.bash
+export RMW_IMPLEMENTATION=rmw_introspect_cpp
+```
 
 ---
 
@@ -891,14 +979,14 @@ The complexity is all in the C++ RMW implementation, not in Python wrappers.
 
 ### Summary of Phases
 
-| Phase | Duration | Focus | Key Tests | Deliverable |
-|-------|----------|-------|-----------|-------------|
-| 0 | 2-3 days | Package setup, RMW headers | Init, build, identifier | Buildable skeleton |
-| 1 | 3-5 days | Node, pub/sub introspection | Create/destroy, metadata, export | Working pub/sub capture |
-| 2 | 2-3 days | Service/client, wait operations | Service/client, wait timeout | Complete interface capture |
-| 3 | 2-3 days | Graph queries, remaining stubs | Graph, serialize, validate | Full 62-function impl |
-| 4 | 2-3 days | E2E tests, packaging | Real nodes, performance, benchmarks | Production-ready |
-| **Total** | **11-17 days** | **~2-3 weeks** | **30+ tests** | **Complete rmw_introspect** |
+| Phase     | Duration       | Focus                           | Key Tests                           | Deliverable                 |
+|-----------|----------------|---------------------------------|-------------------------------------|-----------------------------|
+| 0         | 2-3 days       | Package setup, RMW headers      | Init, build, identifier             | Buildable skeleton          |
+| 1         | 3-5 days       | Node, pub/sub introspection     | Create/destroy, metadata, export    | Working pub/sub capture     |
+| 2         | 2-3 days       | Service/client, wait operations | Service/client, wait timeout        | Complete interface capture  |
+| 3         | 2-3 days       | Graph queries, remaining stubs  | Graph, serialize, validate          | Full 62-function impl       |
+| 4         | 2-3 days       | E2E tests, packaging            | Real nodes, performance, benchmarks | Production-ready            |
+| **Total** | **11-17 days** | **~2-3 weeks**                  | **30+ tests**                       | **Complete rmw_introspect** |
 
 ### Test Coverage Target
 
@@ -1044,4 +1132,30 @@ This approach eliminates the need for heuristics, pattern matching, or multi-pas
 
 The implementation is feasible (62 RMW functions, mostly no-ops) and can leverage existing stub implementations as a starting point. Integration with launch2plan is straightforward via Python wrappers and caching.
 
-**Status**: Design phase. Implementation planned for Phase 12 of ROS-Plan development.
+## Implementation Status
+
+**Current Phase**: Phase 0 Complete ✅
+
+| Phase | Status | Completed | Tests | Notes |
+|-------|--------|-----------|-------|-------|
+| Phase 0 | ✅ Complete | 2025-10-12 | 11/11 passing | Package setup, init functions, data structures |
+| Phase 1 | 🔜 Not Started | - | - | Node, pub/sub introspection |
+| Phase 2 | 🔜 Not Started | - | - | Service/client, wait operations |
+| Phase 3 | 🔜 Not Started | - | - | Graph queries, remaining stubs |
+| Phase 4 | 🔜 Not Started | - | - | E2E tests, packaging |
+
+**Location**: `ros2/rmw_introspect_cpp/` in ros-plan workspace
+
+**Build & Test**:
+```bash
+# Build
+. /opt/ros/humble/setup.bash
+colcon build --base-paths ros2
+
+# Test
+colcon test --base-paths ros2 --packages-select rmw_introspect_cpp
+
+# Activate
+. install/setup.bash
+export RMW_IMPLEMENTATION=rmw_introspect_cpp
+```
