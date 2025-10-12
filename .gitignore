@@ -16,3 +16,8 @@ wheels/
 
 # Rust
 /target
+
+# ROS
+/build/
+/install/
+/log/
