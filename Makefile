@@ -17,6 +17,7 @@ build:
 .PHONY: test
 test:
 	# Run ROS 2 package tests
+	. /opt/ros/humble/setup.bash && \
 	colcon test --base-paths ros2
 
 	# Run Rust tests
