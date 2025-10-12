@@ -1,0 +1,5 @@
+[tool.uv.workspace]
+members = ["launch2dump"]
+
+[tool.uv]
+dev-dependencies = []

@@ -1,11 +1,11 @@
 [workspace]
 resolver = "2"
 members = [
-  "ros-plan-format",
-  "ros-plan-compiler",
-  "ros-plan-runtime",
-  "ros2plan",
-  "ros-utils",
+  "rust/ros-plan-format",
+  "rust/ros-plan-compiler",
+  "rust/ros-plan-runtime",
+  "ros2/ros2plan",
+  "rust/ros-utils",
 ]
 
 [workspace.dependencies]
