@@ -6,6 +6,9 @@
 #include "rcutils/types/rcutils_ret.h"
 #include "rmw_introspect/identifier.hpp"
 #include "rmw_introspect/visibility_control.h"
+#include "rmw_introspect/data.hpp"
+#include <cstdlib>
+#include <string>
 
 // Define the identifier symbol (declared in identifier.hpp)
 extern "C" const char * const rmw_introspect_cpp_identifier = "rmw_introspect_cpp";
@@ -124,7 +127,21 @@ rmw_ret_t rmw_shutdown(rmw_context_t * context)
     return RMW_RET_INCORRECT_RMW_IMPLEMENTATION;
   }
 
-  // TODO: Trigger JSON export here in future phases
+  // Check if auto-export is enabled
+  const char * auto_export_env = std::getenv("RMW_INTROSPECT_AUTO_EXPORT");
+  bool auto_export = true;  // Default to enabled
+  if (auto_export_env && std::string(auto_export_env) == "0") {
+    auto_export = false;
+  }
+
+  // Export introspection data if enabled
+  if (auto_export) {
+    const char * output_path = std::getenv("RMW_INTROSPECT_OUTPUT");
+    if (output_path) {
+      rmw_introspect::IntrospectionData::instance().export_to_json(output_path);
+    }
+  }
+
   return RMW_RET_OK;
 }
 
