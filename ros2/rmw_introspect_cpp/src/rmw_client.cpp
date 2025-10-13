@@ -109,4 +109,40 @@ rmw_ret_t rmw_take_response(
   return RMW_RET_OK;
 }
 
+// Get client request publisher actual QoS (stub)
+RMW_INTROSPECT_PUBLIC
+rmw_ret_t rmw_client_request_publisher_get_actual_qos(
+  const rmw_client_t * client,
+  rmw_qos_profile_t * qos)
+{
+  RCUTILS_CHECK_ARGUMENT_FOR_NULL(client, RMW_RET_INVALID_ARGUMENT);
+  RCUTILS_CHECK_ARGUMENT_FOR_NULL(qos, RMW_RET_INVALID_ARGUMENT);
+  RMW_CHECK_TYPE_IDENTIFIERS_MATCH(
+    client,
+    client->implementation_identifier,
+    rmw_introspect_cpp_identifier,
+    return RMW_RET_INCORRECT_RMW_IMPLEMENTATION);
+
+  *qos = rmw_qos_profile_default;
+  return RMW_RET_OK;
+}
+
+// Get client response subscription actual QoS (stub)
+RMW_INTROSPECT_PUBLIC
+rmw_ret_t rmw_client_response_subscription_get_actual_qos(
+  const rmw_client_t * client,
+  rmw_qos_profile_t * qos)
+{
+  RCUTILS_CHECK_ARGUMENT_FOR_NULL(client, RMW_RET_INVALID_ARGUMENT);
+  RCUTILS_CHECK_ARGUMENT_FOR_NULL(qos, RMW_RET_INVALID_ARGUMENT);
+  RMW_CHECK_TYPE_IDENTIFIERS_MATCH(
+    client,
+    client->implementation_identifier,
+    rmw_introspect_cpp_identifier,
+    return RMW_RET_INCORRECT_RMW_IMPLEMENTATION);
+
+  *qos = rmw_qos_profile_default;
+  return RMW_RET_OK;
+}
+
 }  // extern "C"

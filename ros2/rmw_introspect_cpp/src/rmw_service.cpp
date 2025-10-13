@@ -122,4 +122,40 @@ rmw_ret_t rmw_service_server_is_available(
   return RMW_RET_OK;
 }
 
+// Get service request subscription actual QoS (stub)
+RMW_INTROSPECT_PUBLIC
+rmw_ret_t rmw_service_request_subscription_get_actual_qos(
+  const rmw_service_t * service,
+  rmw_qos_profile_t * qos)
+{
+  RCUTILS_CHECK_ARGUMENT_FOR_NULL(service, RMW_RET_INVALID_ARGUMENT);
+  RCUTILS_CHECK_ARGUMENT_FOR_NULL(qos, RMW_RET_INVALID_ARGUMENT);
+  RMW_CHECK_TYPE_IDENTIFIERS_MATCH(
+    service,
+    service->implementation_identifier,
+    rmw_introspect_cpp_identifier,
+    return RMW_RET_INCORRECT_RMW_IMPLEMENTATION);
+
+  *qos = rmw_qos_profile_default;
+  return RMW_RET_OK;
+}
+
+// Get service response publisher actual QoS (stub)
+RMW_INTROSPECT_PUBLIC
+rmw_ret_t rmw_service_response_publisher_get_actual_qos(
+  const rmw_service_t * service,
+  rmw_qos_profile_t * qos)
+{
+  RCUTILS_CHECK_ARGUMENT_FOR_NULL(service, RMW_RET_INVALID_ARGUMENT);
+  RCUTILS_CHECK_ARGUMENT_FOR_NULL(qos, RMW_RET_INVALID_ARGUMENT);
+  RMW_CHECK_TYPE_IDENTIFIERS_MATCH(
+    service,
+    service->implementation_identifier,
+    rmw_introspect_cpp_identifier,
+    return RMW_RET_INCORRECT_RMW_IMPLEMENTATION);
+
+  *qos = rmw_qos_profile_default;
+  return RMW_RET_OK;
+}
+
 }  // extern "C"

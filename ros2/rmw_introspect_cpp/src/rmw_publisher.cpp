@@ -166,4 +166,23 @@ rmw_ret_t rmw_publisher_assert_liveliness(const rmw_publisher_t * publisher)
   return RMW_RET_OK;
 }
 
+// Wait for all acked (stub - returns immediately)
+RMW_INTROSPECT_PUBLIC
+rmw_ret_t rmw_publisher_wait_for_all_acked(
+  const rmw_publisher_t * publisher,
+  rmw_time_t wait_timeout)
+{
+  (void)wait_timeout;
+  RCUTILS_CHECK_ARGUMENT_FOR_NULL(publisher, RMW_RET_INVALID_ARGUMENT);
+  RMW_CHECK_TYPE_IDENTIFIERS_MATCH(
+    publisher,
+    publisher->implementation_identifier,
+    rmw_introspect_cpp_identifier,
+    return RMW_RET_INCORRECT_RMW_IMPLEMENTATION);
+
+  // In introspection mode, we don't actually publish messages,
+  // so we can return OK immediately
+  return RMW_RET_OK;
+}
+
 }  // extern "C"

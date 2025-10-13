@@ -16,6 +16,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rcutils REQUIRED)
 find_package(rmw REQUIRED)
 find_package(rosidl_typesupport_introspection_cpp REQUIRED)
+find_package(rosidl_typesupport_introspection_c REQUIRED)
 find_package(rosidl_typesupport_cpp REQUIRED)
 find_package(rmw_dds_common REQUIRED)
 
@@ -35,6 +36,14 @@ add_library(${PROJECT_NAME} SHARED
   src/rmw_utils.cpp
   src/data.cpp
   src/type_support.cpp
+  # Phase 4 stub implementations
+  src/rmw_gid.cpp
+  src/rmw_qos_compat.cpp
+  src/rmw_info.cpp
+  src/rmw_allocation.cpp
+  src/rmw_callbacks.cpp
+  src/rmw_features.cpp
+  src/rmw_logging.cpp
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -47,6 +56,7 @@ ament_target_dependencies(${PROJECT_NAME}
   rcutils
   rmw
   rosidl_typesupport_introspection_cpp
+  rosidl_typesupport_introspection_c
   rosidl_typesupport_cpp
   rmw_dds_common
 )
@@ -57,6 +67,7 @@ ament_export_dependencies(
   rcutils
   rmw
   rosidl_typesupport_introspection_cpp
+  rosidl_typesupport_introspection_c
   rosidl_typesupport_cpp
   rmw_dds_common
 )
@@ -101,6 +112,10 @@ if(BUILD_TESTING)
   ament_add_gtest(test_phase3 test/test_phase3.cpp)
   target_link_libraries(test_phase3 ${PROJECT_NAME})
   ament_target_dependencies(test_phase3 rcutils rmw)
+
+  ament_add_gtest(test_phase4_stubs test/test_phase4_stubs.cpp)
+  target_link_libraries(test_phase4_stubs ${PROJECT_NAME})
+  ament_target_dependencies(test_phase4_stubs rcutils rmw std_msgs std_srvs rosidl_typesupport_cpp)
 endif()
 
 ament_package()
