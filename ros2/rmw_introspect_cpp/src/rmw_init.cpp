@@ -7,6 +7,9 @@
 #include "rmw_introspect/identifier.hpp"
 #include "rmw_introspect/visibility_control.h"
 
+// Define the identifier symbol (declared in identifier.hpp)
+extern "C" const char * const rmw_introspect_cpp_identifier = "rmw_introspect_cpp";
+
 extern "C"
 {
 

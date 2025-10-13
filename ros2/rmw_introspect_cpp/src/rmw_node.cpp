@@ -28,10 +28,11 @@ rmw_node_t * rmw_create_node(
   RCUTILS_CHECK_ARGUMENT_FOR_NULL(name, nullptr);
   RCUTILS_CHECK_ARGUMENT_FOR_NULL(namespace_, nullptr);
 
-  if (context->implementation_identifier != rmw_introspect_cpp_identifier) {
-    RMW_SET_ERROR_MSG("context not from this implementation");
-    return nullptr;
-  }
+  RMW_CHECK_TYPE_IDENTIFIERS_MATCH(
+    context,
+    context->implementation_identifier,
+    rmw_introspect_cpp_identifier,
+    return nullptr);
 
   // Allocate node structure
   rmw_node_t * node = new (std::nothrow) rmw_node_t;

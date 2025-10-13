@@ -17,10 +17,11 @@ rmw_wait_set_t * rmw_create_wait_set(rmw_context_t * context, size_t max_conditi
 
   RCUTILS_CHECK_ARGUMENT_FOR_NULL(context, nullptr);
 
-  if (context->implementation_identifier != rmw_introspect_cpp_identifier) {
-    RMW_SET_ERROR_MSG("context not from this implementation");
-    return nullptr;
-  }
+  RMW_CHECK_TYPE_IDENTIFIERS_MATCH(
+    context,
+    context->implementation_identifier,
+    rmw_introspect_cpp_identifier,
+    return nullptr);
 
   // Allocate wait set structure
   rmw_wait_set_t * wait_set = new (std::nothrow) rmw_wait_set_t;
@@ -80,10 +81,11 @@ rmw_guard_condition_t * rmw_create_guard_condition(rmw_context_t * context)
 {
   RCUTILS_CHECK_ARGUMENT_FOR_NULL(context, nullptr);
 
-  if (context->implementation_identifier != rmw_introspect_cpp_identifier) {
-    RMW_SET_ERROR_MSG("context not from this implementation");
-    return nullptr;
-  }
+  RMW_CHECK_TYPE_IDENTIFIERS_MATCH(
+    context,
+    context->implementation_identifier,
+    rmw_introspect_cpp_identifier,
+    return nullptr);
 
   // Allocate guard condition structure
   rmw_guard_condition_t * guard_condition = new (std::nothrow) rmw_guard_condition_t;
