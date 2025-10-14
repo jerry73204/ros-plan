@@ -155,9 +155,9 @@ def introspect_node(
                 bash_cmd_parts.append(f"source {setup_script}")
 
         # Export introspection variables AFTER sourcing
-        bash_cmd_parts.append(f"export RMW_IMPLEMENTATION=rmw_introspect_cpp")
+        bash_cmd_parts.append("export RMW_IMPLEMENTATION=rmw_introspect_cpp")
         bash_cmd_parts.append(f"export RMW_INTROSPECT_OUTPUT='{output_path}'")
-        bash_cmd_parts.append(f"export RMW_INTROSPECT_AUTO_EXPORT=1")
+        bash_cmd_parts.append("export RMW_INTROSPECT_AUTO_EXPORT=1")
 
         # Add the actual command
         bash_cmd_parts.append(" ".join(cmd))
@@ -170,7 +170,7 @@ def introspect_node(
 
         # Run node with timeout
         try:
-            result = subprocess.run(
+            subprocess.run(
                 cmd,
                 env=env,
                 timeout=timeout,
