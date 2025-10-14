@@ -8,6 +8,19 @@ This document describes the design and strategy for converting ROS 2 launch file
 
 The tool uses a **multi-pass workflow** where it generates skeleton plans with TODO markers, the user fills in missing information, and subsequent passes learn from user annotations to complete remaining TODOs automatically.
 
+### Design Principle: No Heuristics or Guessing
+
+**launch2plan uses only two sources of information:**
+
+1. **Launch file structure** - Explicit information (nodes, arguments, remappings, conditions)
+2. **RMW introspection** - Actual node interfaces via `ros2-introspect`
+
+**No heuristics or guessing.** If information cannot be determined from these two sources, the tool generates explicit TODO markers with helpful comments for manual completion. This ensures:
+
+- ✓ **Correctness**: No incorrect guesses that need debugging later
+- ✓ **Transparency**: Clear about what is known vs. unknown
+- ✓ **Maintainability**: User corrections are precise and reusable
+
 ### Key Differences from launch2dump
 
 | Aspect           | launch2dump                                   | launch2plan                                     |
@@ -193,7 +206,7 @@ class VisitorSession:
 
 **Challenge**: Launch files don't specify socket directions (!pub vs !sub) or message types.
 
-**Approach**: Use `ros2-introspect` to query actual node interfaces without running middleware.
+**Approach**: Use `ros2-introspect` to query actual node interfaces without running middleware. No heuristics or guessing - if information cannot be determined from launch files or introspection, generate TODO markers for manual completion.
 
 ```python
 from ros2_introspect import introspect_node
@@ -273,20 +286,25 @@ def convert_node(launch_node, introspection_service):
                 sockets[remap_from] = {
                     'direction': socket_info['direction'],
                     'type': socket_info['message_type'],
-                    'confidence': 1.0,
+                    'qos': socket_info['qos'],
                     'source': 'introspection'
                 }
                 continue
 
-        # Fallback to heuristics
-        sockets[remap_from] = infer_socket_heuristic(remap_from)
+        # If introspection failed or didn't find this socket, mark as TODO
+        sockets[remap_from] = {
+            'direction': '!todo',
+            'type': 'TODO',
+            'source': 'unknown',
+            'comment': f'Unable to introspect {package}::{executable}. Please specify direction and type manually.'
+        }
 
     return PlanNode(package=package, executable=executable, sockets=sockets)
 ```
 
-**Pass 1: TODO Stub Generation with Introspection**
+**Pass 1: TODO Stub Generation**
 
-Generate skeleton with helpful hints:
+When introspection succeeds, sockets are fully resolved:
 
 ```yaml
 node:
@@ -294,65 +312,83 @@ node:
     pkg: image_tools
     exec: cam2image
     socket:
-      # TODO: Specify direction (!pub or !sub)
-      # Remapping: image -> /camera/image_raw
-      # Heuristic: Topic name suggests this might be !pub (confidence: 0.6)
-      image: !todo
+      # Resolved via introspection
+      image: !pub
 ```
 
-**Heuristic Inference**: Use pattern matching for hints:
+When introspection fails, generate TODO markers:
 
-```python
-class SocketInference:
-    PUB_PATTERNS = [
-        r"publisher", r"_pub$", r"output", r"writer",
-        r"^image$", r"^camera", r"sensor"
-    ]
+```yaml
+node:
+  custom_node:
+    pkg: custom_pkg
+    exec: custom_exe
+    socket:
+      # TODO: Specify direction (!pub or !sub) and message type
+      # Unable to introspect custom_pkg::custom_exe
+      # Remapping: data -> /topic/name
+      data: !todo
 
-    SUB_PATTERNS = [
-        r"subscriber", r"_sub$", r"input", r"reader", r"listener"
-    ]
-
-    def infer_direction(self, topic_name, node_name):
-        # Score based on pattern matches
-        pub_score = sum(1 for p in self.PUB_PATTERNS if re.search(p, topic_name))
-        sub_score = sum(1 for p in self.SUB_PATTERNS if re.search(p, topic_name))
-
-        if pub_score > sub_score:
-            return ("!pub", confidence)
-        elif sub_score > pub_score:
-            return ("!sub", confidence)
-        return (None, 0.0)
+link:
+  custom_link: !pubsub
+    # TODO: Specify message type
+    # Unable to determine from introspection
+    type: "TODO"
+    src: ["custom_node/data"]
 ```
 
-**Pass 2: Pattern Learning**
+**Pass 2: Pattern Learning from User Corrections**
 
-Learn from user changes:
+Learn from user-completed TODOs to auto-fill similar cases:
 
 ```python
 @dataclass
 class LearnedPattern:
     pattern_type: str      # "socket_direction", "message_type"
-    matcher: str           # Topic/node name pattern
+    package: str           # Package name
+    executable: str        # Executable name
+    socket_name: str       # Socket/topic name
     value: Any            # !pub, !sub, msg type
-    confidence: float      # 0.0-1.0
-    examples: List[str]    # Where it was seen
+    examples: List[str]    # Where it was applied
 
 class PatternLearner:
     def learn_from_changes(self, old_plan, new_plan):
-        # Detect what user changed
+        """Detect user completions of TODO markers."""
         changes = diff_plans(old_plan, new_plan)
 
         for change in changes:
-            if change.field == "socket_direction":
-                pattern = self.generalize(change.location)
-                self.add_pattern(pattern, change.value)
+            # User changed !todo to actual direction
+            if change.old_value == "!todo" and change.new_value in ["!pub", "!sub"]:
+                self.add_pattern(LearnedPattern(
+                    pattern_type="socket_direction",
+                    package=change.node.package,
+                    executable=change.node.executable,
+                    socket_name=change.socket_name,
+                    value=change.new_value,
+                    examples=[change.location]
+                ))
+
+            # User filled in message type
+            if change.old_value == "TODO" and change.field == "message_type":
+                self.add_pattern(LearnedPattern(
+                    pattern_type="message_type",
+                    package=change.nodes[0].package,  # From src node
+                    executable=change.nodes[0].executable,
+                    socket_name=change.nodes[0].socket,
+                    value=change.new_value,
+                    examples=[change.location]
+                ))
 
     def apply_patterns(self, pending_todos):
+        """Apply learned patterns to TODOs with exact matches."""
         for todo in pending_todos:
-            pattern = self.find_matching_pattern(todo.location)
-            if pattern and pattern.confidence >= 0.8:
+            # Only apply if exact match: same package, executable, and socket name
+            pattern = self.find_exact_match(
+                todo.package, todo.executable, todo.socket_name
+            )
+            if pattern:
                 todo.inferred_value = pattern.value
+                todo.comment = f"Auto-filled from previous user completion"
 ```
 
 ### F63: Plan Builder with Includes
@@ -524,17 +560,24 @@ node:
 ### 3. Socket Inference
 
 ```python
-# From remappings, infer sockets
+# From remappings and introspection, resolve sockets
 remappings = [
-    ('image_raw', '/camera/image_raw'),  # Likely !pub (sensor output)
-    ('cmd_vel', '/robot/cmd_vel'),       # Could be !pub or !sub
+    ('image_raw', '/camera/image_raw'),
+    ('cmd_vel', '/robot/cmd_vel'),
 ]
 
-# Generate with hints
+# Introspect to get actual directions
+introspection_result = introspect_node("sensor_pkg", "camera_node")
+
+# If introspection succeeds
 socket:
-  # TODO: !pub or !sub?
+  image_raw: !pub  # From introspection
+
+# If introspection fails
+socket:
+  # TODO: Specify !pub or !sub
+  # Unable to introspect sensor_pkg::camera_node
   # Remapping: image_raw -> /camera/image_raw
-  # Hint: Sensor topics are usually !pub
   image_raw: !todo
 ```
 
@@ -542,14 +585,28 @@ socket:
 
 ```python
 # Discover topics from multiple nodes
-node1: remaps 'chatter' -> '/demo/chatter'
-node2: remaps 'chatter' -> '/demo/chatter'
+node1: remaps 'chatter' -> '/demo/chatter'  # talker: !pub
+node2: remaps 'chatter' -> '/demo/chatter'  # listener: !sub
 
-# Generate link
+# Introspect both nodes to get message types
+talker_info = introspect_node("demo_nodes_cpp", "talker")
+listener_info = introspect_node("demo_nodes_cpp", "listener")
+
+# If introspection succeeds, generate complete link
 link:
   demo_chatter: !pubsub
-    type: "TODO"  # Message type unknown
-    # TODO: Specify std_msgs/msg/String or other
+    type: "std_msgs/msg/String"  # From introspection
+    src: ["talker/chatter"]
+    dst: ["listener/chatter"]
+
+# If introspection fails for message type
+link:
+  demo_chatter: !pubsub
+    # TODO: Specify message type
+    # Unable to determine from introspection
+    type: "TODO"
+    src: ["talker/chatter"]
+    dst: ["listener/chatter"]
 ```
 
 ### 5. Condition Tracking
@@ -709,9 +766,9 @@ Generated executable plan with 2 nodes
 **Problem**: Can't determine if `image` topic is !pub or !sub from remapping alone.
 
 **Solution**:
-- Heuristic hints based on topic/node names
-- TODO markers with suggestions
-- Pattern learning across multiple nodes
+- **Runtime Introspection**: Use `ros2-introspect` to query actual node interfaces
+- **TODO markers**: When introspection fails or is not available
+- **Pattern learning**: Apply user completions to identical cases across multiple files
 
 ### Challenge 2: Message Type Unknown
 
@@ -719,9 +776,8 @@ Generated executable plan with 2 nodes
 
 **Solution**:
 - **Runtime Introspection**: Use `ros2-introspect` to query actual node interfaces
-- **Common type database**: Fallback heuristics (image → sensor_msgs/msg/Image)
-- **TODO markers**: When introspection is not available or ambiguous
-- **Pattern learning**: Remember types from previous introspections
+- **TODO markers**: When introspection is not available or fails
+- **Pattern learning**: Remember user-specified types for reuse across similar nodes
 
 ### Challenge 3: Complex Conditionals
 
@@ -794,25 +850,25 @@ Generated executable plan with 2 nodes
 
 ---
 
-### Phase 12.3: Socket Inference with Heuristics Fallback (Week 2)
+### Phase 12.3: Socket Inference & TODO Generation (Week 2)
 
-**Goal**: Complete socket inference using introspection + heuristics
+**Goal**: Complete socket inference using introspection only, generate TODOs for unknowns
 
 **Tasks**:
 1. Create `inference.py` module
-2. Implement heuristic patterns for common topics (image, cmd_vel, etc.)
-3. Combine introspection results with heuristics
-4. Assign confidence scores (1.0 for introspection, 0.0-0.9 for heuristics)
-5. Generate TODO markers for low-confidence inferences
+2. Implement socket direction resolution from introspection
+3. Implement message type resolution from introspection
+4. Generate TODO markers when introspection fails or finds no match
+5. Add helpful comments to TODO markers (remapping info, error messages)
 
 **Tests**:
-- `test_inference.py::test_heuristic_pub_patterns` - Publisher heuristics
-- `test_inference.py::test_heuristic_sub_patterns` - Subscriber heuristics
-- `test_inference.py::test_combine_introspection_and_heuristics` - Priority
-- `test_inference.py::test_confidence_scoring` - Score calculation
-- `test_inference.py::test_todo_generation` - Low confidence → TODO
+- `test_inference.py::test_resolve_from_introspection` - Successful resolution
+- `test_inference.py::test_introspection_not_available` - Generate TODO
+- `test_inference.py::test_socket_not_found_in_introspection` - Generate TODO
+- `test_inference.py::test_todo_comment_generation` - Helpful TODO comments
+- `test_inference.py::test_multiple_remappings` - Multiple sockets per node
 
-**Deliverable**: Robust socket inference with clear confidence levels
+**Deliverable**: Clean inference with introspection or explicit TODOs
 
 ---
 
@@ -985,10 +1041,11 @@ Generated executable plan with 2 nodes
 
 ### Current Limitations
 
-1. **Dynamic Behavior**: Cannot analyze `OpaqueFunction` or runtime-evaluated code
-2. **Message Types**: Requires user specification or introspection
-3. **Complex Conditions**: Some Python expressions may not convert cleanly to Lua
-4. **Implicit Connections**: Topic connections not explicitly declared in launch files
+1. **Dynamic Behavior**: Cannot analyze `OpaqueFunction` or runtime-evaluated code (will generate TODO markers)
+2. **Introspection Failures**: Nodes that cannot be introspected require manual TODO completion
+3. **Complex Conditions**: Some Python expressions may not convert cleanly to Lua (will be marked as TODO)
+4. **Custom Packages**: Nodes from packages not available in the environment require manual specification
+5. **No Heuristics**: Tool will not guess - unknown information becomes explicit TODO markers for user completion
 
 ### Future Enhancements
 
