@@ -10,9 +10,13 @@ dependencies = [
     "lark>=1.2.2",
     "packaging>=24.1",
     "pyyaml>=6.0",
+    "ros2-introspect",
 ]
 readme = "README.md"
 requires-python = "==3.10.*"
+
+[tool.uv.sources]
+ros2-introspect = { workspace = true }
 
 [project.scripts]
 launch2dump = "launch2dump.__main__:main"
