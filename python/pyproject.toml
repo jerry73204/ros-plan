@@ -1,5 +1,5 @@
 [tool.uv.workspace]
-members = ["launch2dump", "ros2-introspect"]
+members = ["launch2dump", "ros2-introspect", "launch2plan"]
 
 [tool.uv]
 dev-dependencies = []
