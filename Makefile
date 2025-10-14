@@ -17,15 +17,15 @@ build:
 .PHONY: test
 test:
 	# Run ROS 2 package tests
-	. /opt/ros/humble/setup.bash && \
+	. /opt/ros/humble/setup.sh && \
 	colcon test --base-paths ros2
 
 	# Run Rust tests
 	cargo nextest run --no-fail-fast --cargo-profile release-with-debug
 
 	# Run Python tests for launch2dump
+	. install/setup.sh && \
 	cd python && \
-	. /opt/ros/humble/setup.sh && \
 	uv run pytest
 
 .PHONY: format
@@ -42,4 +42,5 @@ lint:
 
 .PHONY: clean
 clean:
+	rm -rf build install log
 	cargo clean
