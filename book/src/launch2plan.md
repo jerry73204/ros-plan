@@ -808,94 +808,116 @@ Generated executable plan with 2 nodes
 
 ## Implementation Plan
 
-### Phase 12.1: Foundation & Basic Visitor (Week 1)
+### Implementation Status
+
+**✓ Phase 1: Foundation & Basic Visitor** (Completed)
+- Created `launch2plan` package structure
+- Implemented branch-exploring visitor that visits ALL branches
+- Created CLI with `convert` command
+- Extract node metadata with condition tracking
+- **Tests**: 3/3 passing
+
+**✓ Phase 2: RMW Introspection Integration** (Completed)
+- Created `IntrospectionService` with caching
+- Socket direction and message type resolution from introspection
+- Graceful handling of introspection failures
+- **Tests**: 5/5 passing
+
+**Current Status**: 8 tests passing, basic visitor and introspection working
+
+---
+
+### Phase 1: Foundation & Basic Visitor ✓ COMPLETED
 
 **Goal**: Set up project structure and basic launch file visiting
 
-**Tasks**:
-1. Create `launch2plan` package structure in `python/launch2plan`
-2. Set up pyproject.toml with dependencies (launch2dump, ros2-introspect)
-3. Create CLI skeleton with `convert` command
-4. Implement basic launch visitor (reuse launch2dump visitor code)
-5. Extract node metadata (package, executable, name, namespace)
+**Implementation**:
+- ✓ Created `launch2plan` package structure in `python/launch2plan`
+- ✓ Set up pyproject.toml with dependencies (ros2-introspect)
+- ✓ Created CLI with `convert` command
+- ✓ Implemented branch-exploring visitor (explores ALL branches, not just true)
+- ✓ Extract node metadata (package, executable, name, namespace, remappings)
+- ✓ Track condition expressions for `when` clause generation
+- ✓ Detect includes (basic - no recursion yet)
 
-**Tests**:
-- `test_visitor.py::test_visit_simple_node` - Single node discovery
-- `test_visitor.py::test_visit_multiple_nodes` - Multiple nodes
-- `test_cli.py::test_convert_command` - Basic CLI invocation
+**Tests** (3/3 passing):
+- ✓ `test_visitor.py::test_visit_simple_node` - Single node discovery
+- ✓ `test_visitor.py::test_visit_multiple_nodes` - Multiple nodes with remappings
+- ✓ `test_cli.py::test_convert_command` - Basic CLI invocation
 
-**Deliverable**: Can visit a simple launch file and list discovered nodes
+**Deliverable**: ✓ Can visit a simple launch file and list discovered nodes
 
 ---
 
-### Phase 12.2: RMW Introspection Integration (Week 1)
+### Phase 2: RMW Introspection Integration ✓ COMPLETED
 
 **Goal**: Integrate ros2-introspect for accurate socket inference
 
-**Tasks**:
-1. Create `introspection.py` module
-2. Implement `IntrospectionService` class with caching
-3. Add `get_socket_info()` method for topic resolution
-4. Handle introspection failures gracefully (fallback to heuristics)
-5. Cache introspection results per package::executable
+**Implementation**:
+- ✓ Created `introspection.py` module
+- ✓ Implemented `IntrospectionService` class with caching
+- ✓ Added `get_socket_info()` method for topic resolution
+- ✓ Added `get_all_topics()` method for full node interface query
+- ✓ Graceful handling of introspection failures (returns None)
+- ✓ Cache introspection results per package::executable
 
-**Tests**:
-- `test_introspection.py::test_introspect_demo_nodes` - Demo nodes (talker/listener)
-- `test_introspection.py::test_introspection_cache` - Caching behavior
-- `test_introspection.py::test_introspection_fallback` - Handle failures
-- `test_introspection.py::test_socket_direction_resolution` - Pub/sub detection
-- `test_introspection.py::test_message_type_resolution` - Type extraction
+**Tests** (5/5 passing):
+- ✓ `test_introspection.py::test_introspect_demo_nodes` - Demo nodes (talker/listener)
+- ✓ `test_introspection.py::test_introspection_cache` - Caching behavior
+- ✓ `test_introspection.py::test_introspection_fallback` - Handle failures
+- ✓ `test_introspection.py::test_socket_direction_resolution` - Pub/sub detection
+- ✓ `test_introspection.py::test_message_type_resolution` - Type extraction
 
-**Deliverable**: Can introspect nodes and determine socket directions + message types
+**Deliverable**: ✓ Can introspect nodes and determine socket directions + message types
 
 ---
 
-### Phase 12.3: Socket Inference & TODO Generation (Week 2)
+### Phase 3: Socket Inference & TODO Generation
 
-**Goal**: Complete socket inference using introspection only, generate TODOs for unknowns
+**Goal**: Integrate introspection with node conversion, generate TODO markers for unknowns
 
 **Tasks**:
 1. Create `inference.py` module
-2. Implement socket direction resolution from introspection
-3. Implement message type resolution from introspection
-4. Generate TODO markers when introspection fails or finds no match
-5. Add helpful comments to TODO markers (remapping info, error messages)
+2. Integrate `IntrospectionService` with node conversion
+3. Match remappings to introspected topics (handle topic name normalization)
+4. Generate TODO markers when introspection fails or socket not found
+5. Add helpful comments to TODO markers (remapping info, introspection errors)
 
 **Tests**:
 - `test_inference.py::test_resolve_from_introspection` - Successful resolution
 - `test_inference.py::test_introspection_not_available` - Generate TODO
 - `test_inference.py::test_socket_not_found_in_introspection` - Generate TODO
 - `test_inference.py::test_todo_comment_generation` - Helpful TODO comments
-- `test_inference.py::test_multiple_remappings` - Multiple sockets per node
+- `test_inference.py::test_topic_name_matching` - Match remapped to introspected names
 
-**Deliverable**: Clean inference with introspection or explicit TODOs
+**Deliverable**: Node conversion with introspection-based inference or explicit TODOs
 
 ---
 
-### Phase 12.4: Plan Builder & Link Generation (Week 2)
+### Phase 4: Plan Builder & Link Generation
 
 **Goal**: Generate complete ROS-Plan YAML with sockets and links
 
 **Tasks**:
-1. Create `builder.py` module
-2. Implement `PlanBuilder` class
-3. Generate node sections with sockets
-4. Infer links from remappings (match src/dst by topic name)
-5. Generate link sections with types from introspection
-6. Add comments showing inference source and confidence
+1. Create `builder.py` module with `PlanBuilder` class
+2. Generate node sections with sockets (use ruamel.yaml for comments)
+3. Infer links by matching remappings (group by resolved topic name)
+4. Generate link sections with message types from introspection
+5. Write complete plan YAML with proper formatting
+6. Add helpful comments showing introspection source
 
 **Tests**:
 - `test_builder.py::test_build_node_section` - Node YAML generation
-- `test_builder.py::test_build_socket_section` - Socket definitions
+- `test_builder.py::test_build_socket_section` - Socket with directions
 - `test_builder.py::test_infer_links_from_remappings` - Link discovery
-- `test_builder.py::test_generate_link_section` - Link YAML generation
-- `test_builder.py::test_add_confidence_comments` - Comment generation
+- `test_builder.py::test_generate_link_section` - Link YAML with types
+- `test_builder.py::test_full_plan_generation` - Complete plan output
 
-**Deliverable**: Generate valid plan YAML files with sockets and links
+**Deliverable**: Generate valid, compilable plan YAML files with sockets and links
 
 ---
 
-### Phase 12.5: Argument & Parameter Conversion (Week 3)
+### Phase 5: Argument & Parameter Conversion
 
 **Goal**: Convert launch arguments and parameters to plan format
 
@@ -916,7 +938,7 @@ Generated executable plan with 2 nodes
 
 ---
 
-### Phase 12.6: Conditional Branch Exploration (Week 3)
+### Phase 6: Conditional Branch Exploration (Week 3)
 
 **Goal**: Handle conditional nodes and generate `when` clauses
 
@@ -938,7 +960,7 @@ Generated executable plan with 2 nodes
 
 ---
 
-### Phase 12.7: Include Handling & Plan Hierarchy (Week 4)
+### Phase 7: Include Handling & Plan Hierarchy (Week 4)
 
 **Goal**: Preserve launch file structure with plan includes
 
@@ -960,7 +982,7 @@ Generated executable plan with 2 nodes
 
 ---
 
-### Phase 12.8: Metadata Tracking & Pattern Learning (Week 4)
+### Phase 8: Metadata Tracking & Pattern Learning (Week 4)
 
 **Goal**: Track conversion state and learn from user edits
 
@@ -983,7 +1005,7 @@ Generated executable plan with 2 nodes
 
 ---
 
-### Phase 12.9: Validation & Compilation (Week 5)
+### Phase 9: Validation & Compilation (Week 5)
 
 **Goal**: Validate generated plans and ensure they compile
 
@@ -1005,7 +1027,7 @@ Generated executable plan with 2 nodes
 
 ---
 
-### Phase 12.10: End-to-End Testing & Examples (Week 5)
+### Phase 10: End-to-End Testing & Examples (Week 5)
 
 **Goal**: Comprehensive testing with real-world launch files
 
@@ -1029,11 +1051,11 @@ Generated executable plan with 2 nodes
 
 ### Summary: 10 Phases, 5 Weeks
 
-**Week 1**: Foundation + Introspection (Phases 12.1-12.2)
-**Week 2**: Inference + Plan Building (Phases 12.3-12.4)
-**Week 3**: Arguments + Conditionals (Phases 12.5-12.6)
-**Week 4**: Includes + Pattern Learning (Phases 12.7-12.8)
-**Week 5**: Validation + E2E Testing (Phases 12.9-12.10)
+**Week 1**: Foundation + Introspection (Phases 1-2)
+**Week 2**: Inference + Plan Building (Phases 3-4)
+**Week 3**: Arguments + Conditionals (Phases 5-6)
+**Week 4**: Includes + Pattern Learning (Phases 7-8)
+**Week 5**: Validation + E2E Testing (Phases 9-10)
 
 **Total Tests**: ~50+ test cases across all phases
 
