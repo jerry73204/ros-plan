@@ -2,26 +2,9 @@
 
 Convert ROS 2 launch files to ROS-Plan format.
 
-## Status: Early Implementation
+## Status: Active Development
 
-This tool is in active development. Basic visitor and introspection infrastructure is complete.
-
-See `book/src/launch2plan.md` for the complete design document with implementation plan.
-
-### Implementation Progress
-
-- [x] Phase 1: Foundation & Basic Visitor (3 tests passing)
-- [x] Phase 2: RMW Introspection Integration (5 tests passing)
-- [ ] Phase 3: Socket Inference & TODO Generation
-- [ ] Phase 4: Plan Builder & Link Generation
-- [ ] Phase 5: Argument & Parameter Conversion
-- [ ] Phase 6: Conditional Branch Exploration
-- [ ] Phase 7: Include Handling & Plan Hierarchy
-- [ ] Phase 8: Metadata Tracking & Pattern Learning
-- [ ] Phase 9: Validation & Compilation
-- [ ] Phase 10: End-to-End Testing & Examples
-
-**Current Status**: 8/8 tests passing, basic visitor working
+This tool is in active development. Core infrastructure for visiting launch files, introspecting nodes, and generating plan YAML is operational.
 
 ### Design Principles
 

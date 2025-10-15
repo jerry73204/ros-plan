@@ -823,7 +823,24 @@ Generated executable plan with 2 nodes
 - Graceful handling of introspection failures
 - **Tests**: 5/5 passing
 
-**Current Status**: 8 tests passing, basic visitor and introspection working
+**✓ Phase 3: Socket Inference & TODO Generation** (Completed)
+- Created `inference.py` module with `SocketInferenceEngine`
+- Integrated introspection with node conversion
+- Implemented topic name normalization (with/without leading slash)
+- Generate TODO markers when introspection fails
+- Helpful comments for TODO markers (remapping info, suggestions)
+- **Tests**: 6/6 passing
+
+**✓ Phase 4: Plan Builder & Link Generation** (Completed)
+- Created `builder.py` module with `PlanBuilder` class
+- Generate node sections with sockets using ruamel.yaml
+- Infer links by matching remappings (group by resolved topic name)
+- Generate link sections with message types from introspection
+- Write complete plan YAML with proper formatting
+- Support TODO markers in links when message type unknown
+- **Tests**: 10/10 passing
+
+**Current Status**: 24 tests passing (385 total across entire project)
 
 ---
 
@@ -872,48 +889,60 @@ Generated executable plan with 2 nodes
 
 ---
 
-### Phase 3: Socket Inference & TODO Generation
+### Phase 3: Socket Inference & TODO Generation ✓ COMPLETED
 
 **Goal**: Integrate introspection with node conversion, generate TODO markers for unknowns
 
-**Tasks**:
-1. Create `inference.py` module
-2. Integrate `IntrospectionService` with node conversion
-3. Match remappings to introspected topics (handle topic name normalization)
-4. Generate TODO markers when introspection fails or socket not found
-5. Add helpful comments to TODO markers (remapping info, introspection errors)
+**Implementation**:
+- ✓ Created `inference.py` module with `SocketInferenceEngine` class
+- ✓ Implemented `infer_sockets_for_node()` with introspection integration
+- ✓ Added topic name normalization (handles with/without leading slash)
+- ✓ Generate TODO markers when introspection fails completely
+- ✓ Generate TODO markers when socket not found in introspection results
+- ✓ Add helpful comments to TODO markers (package::executable, remapping info, suggestions)
+- ✓ Support batch inference with `infer_sockets_for_nodes()` helper
 
-**Tests**:
-- `test_inference.py::test_resolve_from_introspection` - Successful resolution
-- `test_inference.py::test_introspection_not_available` - Generate TODO
-- `test_inference.py::test_socket_not_found_in_introspection` - Generate TODO
-- `test_inference.py::test_todo_comment_generation` - Helpful TODO comments
-- `test_inference.py::test_topic_name_matching` - Match remapped to introspected names
+**Tests** (6/6 passing):
+- ✓ `test_inference.py::test_resolve_from_introspection` - Successful resolution
+- ✓ `test_inference.py::test_introspection_not_available` - Generate TODO when introspection fails
+- ✓ `test_inference.py::test_socket_not_found_in_introspection` - Generate TODO when socket not found
+- ✓ `test_inference.py::test_todo_comment_generation` - Helpful TODO comments
+- ✓ `test_inference.py::test_topic_name_matching` - Topic name normalization
+- ✓ `test_inference.py::test_infer_sockets_for_multiple_nodes` - Batch inference
 
-**Deliverable**: Node conversion with introspection-based inference or explicit TODOs
+**Deliverable**: ✓ Node conversion with introspection-based inference or explicit TODOs
 
 ---
 
-### Phase 4: Plan Builder & Link Generation
+### Phase 4: Plan Builder & Link Generation ✓ COMPLETED
 
 **Goal**: Generate complete ROS-Plan YAML with sockets and links
 
-**Tasks**:
-1. Create `builder.py` module with `PlanBuilder` class
-2. Generate node sections with sockets (use ruamel.yaml for comments)
-3. Infer links by matching remappings (group by resolved topic name)
-4. Generate link sections with message types from introspection
-5. Write complete plan YAML with proper formatting
-6. Add helpful comments showing introspection source
+**Implementation**:
+- ✓ Created `builder.py` module with `PlanBuilder` class
+- ✓ Implemented `build_plan()` to generate complete plan from nodes and sockets
+- ✓ Generate node sections with pkg, exec, namespace, parameters, sockets
+- ✓ Used ruamel.yaml for YAML formatting and preservation
+- ✓ Infer links by grouping remappings by resolved topic name
+- ✓ Generate link sections with message types from introspection
+- ✓ Support TODO markers in links when message type unknown
+- ✓ Handle multiple publishers and subscribers per link
+- ✓ Support conditional nodes with `when` clauses
+- ✓ Write complete plan YAML with proper formatting
 
-**Tests**:
-- `test_builder.py::test_build_node_section` - Node YAML generation
-- `test_builder.py::test_build_socket_section` - Socket with directions
-- `test_builder.py::test_infer_links_from_remappings` - Link discovery
-- `test_builder.py::test_generate_link_section` - Link YAML with types
-- `test_builder.py::test_full_plan_generation` - Complete plan output
+**Tests** (10/10 passing):
+- ✓ `test_builder.py::test_build_node_section` - Node YAML generation
+- ✓ `test_builder.py::test_build_socket_section` - Socket with directions and TODO markers
+- ✓ `test_builder.py::test_infer_links_from_remappings` - Link discovery from remappings
+- ✓ `test_builder.py::test_generate_link_section` - Link YAML with types
+- ✓ `test_builder.py::test_full_plan_generation` - Complete plan output
+- ✓ `test_builder.py::test_plan_with_todo_sockets` - TODO socket handling
+- ✓ `test_builder.py::test_link_with_todo_message_type` - TODO message type in links
+- ✓ `test_builder.py::test_multiple_publishers_and_subscribers` - Multi-endpoint links
+- ✓ `test_builder.py::test_conditional_node` - Node with when clause
+- ✓ `test_builder.py::test_plan_to_yaml_string` - YAML string conversion
 
-**Deliverable**: Generate valid, compilable plan YAML files with sockets and links
+**Deliverable**: ✓ Generate valid, compilable plan YAML files with sockets and links
 
 ---
 
