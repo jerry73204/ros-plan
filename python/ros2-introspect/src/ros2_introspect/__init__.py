@@ -14,7 +14,7 @@ from .data import (
     ServiceInfo,
     SubscriptionInfo,
 )
-from .introspector import introspect_node
+from .introspector import check_rmw_introspect_available, introspect_node
 
 __version__ = "0.1.0"
 
@@ -25,5 +25,6 @@ __all__ = [
     "QoSProfile",
     "ServiceInfo",
     "SubscriptionInfo",
+    "check_rmw_introspect_available",
     "introspect_node",
 ]

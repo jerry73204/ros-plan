@@ -25,6 +25,50 @@ from .data import (
 logger = logging.getLogger(__name__)
 
 
+def check_rmw_introspect_available() -> Tuple[bool, Optional[str]]:
+    """
+    Check if rmw_introspect_cpp is available in the environment.
+
+    Returns:
+        Tuple of (is_available, error_message)
+        If available: (True, None)
+        If not available: (False, helpful error message)
+    """
+    # Check if ROS 2 is sourced
+    if "ROS_DISTRO" not in os.environ:
+        return (
+            False,
+            "ROS 2 environment not sourced. Please run:\n"
+            "  source /opt/ros/humble/setup.bash  # or your ROS 2 distro",
+        )
+
+    # Check if rmw_introspect_cpp is available
+    # The RMW should be in CMAKE_PREFIX_PATH or AMENT_PREFIX_PATH
+    ament_prefix_path = os.environ.get("AMENT_PREFIX_PATH", "")
+    found_rmw = False
+
+    for prefix in ament_prefix_path.split(":"):
+        if not prefix:
+            continue
+        # Check for rmw_introspect_cpp shared library
+        rmw_lib_path = os.path.join(prefix, "lib", "librmw_introspect_cpp.so")
+        if os.path.exists(rmw_lib_path):
+            found_rmw = True
+            break
+
+    if not found_rmw:
+        return (
+            False,
+            "rmw_introspect_cpp not found in environment.\n"
+            "This RMW implementation must be built and its workspace sourced:\n"
+            "  cd /path/to/ros-plan/workspace\n"
+            "  colcon build --packages-select rmw_introspect_cpp\n"
+            "  source install/setup.bash",
+        )
+
+    return (True, None)
+
+
 def introspect_node(
     package: str,
     executable: str,
@@ -67,6 +111,11 @@ def introspect_node(
         ...     for pub in result.publishers:
         ...         print(f"  {pub.topic_name}: {pub.message_type}")
     """
+    # Check if rmw_introspect_cpp is available
+    is_available, error_msg = check_rmw_introspect_available()
+    if not is_available:
+        return IntrospectionResult(success=False, error=error_msg)
+
     # Create temporary file path for JSON output (don't open it yet)
     import uuid
 

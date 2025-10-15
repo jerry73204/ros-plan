@@ -1,4 +1,4 @@
-"""Tests for RMW introspection integration (Phase 12.2)."""
+"""Tests for RMW introspection integration (Phase 2)."""
 
 import pytest
 

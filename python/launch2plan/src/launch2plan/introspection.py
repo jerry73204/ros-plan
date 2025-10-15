@@ -52,7 +52,8 @@ class IntrospectionService:
             timeout: Introspection timeout in seconds
 
         Returns:
-            IntrospectionResult if successful, None otherwise
+            IntrospectionResult if successful, None otherwise.
+            When None is returned, check the error from introspect_node() for details.
         """
         cache_key = f"{package}::{executable}"
 
@@ -67,6 +68,14 @@ class IntrospectionService:
         if result.success:
             self.cache[cache_key] = result
             return result
+
+        # Log error for debugging
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Failed to introspect {package}::{executable}: {result.error if result.error else 'Unknown error'}"
+        )
 
         return None
 
