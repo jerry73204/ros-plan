@@ -14,17 +14,18 @@ The project consists of both Rust (core compiler and runtime) and Python (launch
 
 ## Project Status
 
-**Current Phase**: Phase 11 Complete (Testing & Documentation)
-- ✅ 330 tests passing (73 compiler + 163 format + 47 runtime + 18 CLI + 36 ros-utils)
+**Current Phase**: Phase 12 (Launch-to-Plan Conversion) - In Progress
+- ✅ Phase 6 Complete: Conditional Branch Exploration (18 tests)
+- ✅ 432 tests passing (330 Rust + 25 launch2dump + 9 ros2-introspect + 68 launch2plan)
 - ✅ Zero warnings (clippy + compiler)
-- ✅ 54 features implemented across 11 phases
-- ✅ Complete documentation (user guide, architecture, configuration)
+- ✅ Dependency checking with explicit error messages
+- ✅ 54 features implemented across 11 phases (core system)
 
-**Next Phase**: Phase 12 (Launch-to-Plan Conversion) - Design phase only, no implementation yet
-- See `book/src/launch2plan.md` for design document
-- Multi-pass workflow with TODO stubs and pattern learning
-- Preserves include hierarchy, explores all conditional branches
-- **Do not implement without explicit discussion and approval**
+**Phase 12 Implementation Progress**:
+- ✅ Phase 1-5: Foundation, introspection, socket inference, argument handling, plan generation
+- ✅ Phase 6: Conditional branch exploration with `when` clauses
+- ⏳ Phase 7-12: Include processing, QoS, recursive conversion, pattern learning (not yet started)
+- See `book/src/launch2plan.md` for complete design and progress tracking
 
 ## Core Architecture
 
@@ -68,6 +69,19 @@ The project consists of both Rust (core compiler and runtime) and Python (launch
   - Extracts nodes, parameters, remappings, containers
   - JSON/YAML output formats
   - Uses UV for dependency management (migrated from Rye)
+
+- **ros2-introspect** - ROS 2 node interface introspection
+  - Discovers publishers, subscriptions, services, clients without middleware
+  - Uses rmw_introspect_cpp RMW implementation
+  - Dependency checking with clear error messages
+  - Requires workspace to be built and sourced
+
+- **launch2plan** - Launch-to-Plan conversion tool (Phase 12, in progress)
+  - Converts ROS 2 launch files to ROS-Plan YAML format
+  - Socket inference from introspection and remappings
+  - Conditional branch exploration with `when` clauses
+  - Automatic link generation from topic connections
+  - Argument type inference from default values
 
 ## Key File Formats
 
@@ -147,15 +161,29 @@ cargo run --bin ros2plan -- compile examples/introduction.yaml -o output.launch
 
 ### Python Development
 ```bash
-# Install Python dependencies (launch2dump uses UV)
-cd launch2dump && uv sync
+# Install Python dependencies (uses UV workspace)
+cd python && uv sync
 
 # Run launch2dump
-cd launch2dump && uv run launch2dump <launch-file>
+cd python/launch2dump && uv run launch2dump <launch-file>
 
-# Run Python tests (requires ROS 2 sourced)
-source /opt/ros/humble/setup.bash
-cd launch2dump && uv run pytest
+# Run ros2-introspect (requires workspace sourced)
+source install/setup.bash
+cd python/ros2-introspect && uv run ros2-introspect <package> <executable>
+
+# Run launch2plan (requires workspace sourced)
+source install/setup.bash
+cd python/launch2plan && uv run launch2plan convert <launch-file>
+
+# Run Python tests (requires workspace sourced)
+# Note: Makefile handles environment sourcing automatically
+make test
+
+# Run individual Python test suites
+source install/setup.bash
+cd python/launch2dump && uv run pytest
+cd python/ros2-introspect && uv run pytest
+cd python/launch2plan && uv run pytest
 ```
 
 ## Important Implementation Details
@@ -184,11 +212,22 @@ cd launch2dump && uv run pytest
 - Compatible with standard ROS 2 launch files via launch2dump
 
 ### Testing
-- 330 total tests across all crates
-- Uses cargo-nextest for parallel test execution
-- Python tests require ROS 2 environment sourced
-- All tests run with `release-with-debug` profile for speed
+- 432 total tests (330 Rust + 102 Python)
+  - Rust: 330 tests (format, compiler, runtime, CLI, ros-utils)
+  - Python: 25 launch2dump + 9 ros2-introspect + 68 launch2plan
+- Uses cargo-nextest for parallel Rust test execution
+- Python tests require ROS 2 and workspace sourced (Makefile handles this)
+- All Rust tests run with `release-with-debug` profile for speed
 - Zero tolerance for clippy warnings (`-D warnings`)
+
+### Dependency Management (Python)
+- All Python packages use UV for dependency management
+- ros2-introspect requires rmw_introspect_cpp to be built and sourced
+- Dependency checking provides explicit error messages:
+  - Missing ROS 2: Instructs to source `/opt/ros/humble/setup.bash`
+  - Missing rmw_introspect_cpp: Instructs to build and source workspace
+- Makefile automatically sources workspace before running Python tests
+- Function `check_rmw_introspect_available()` validates dependencies before use
 
 ## Documentation
 
@@ -206,7 +245,30 @@ Comprehensive documentation in `book/src/`:
 2. **During development**: Run `make lint` frequently to catch issues early
 3. **After changes**: Always run `make test` to verify all tests pass
 4. **Before committing**: Ensure `make lint && make test` passes completely
-5. **Phase 12 note**: Do not implement launch2plan without explicit approval - design phase only
+5. **Phase 12 implementation**: Currently implementing launch2plan incrementally
+   - Phases 1-6 complete (foundation through conditional exploration)
+   - See `book/src/launch2plan.md` for design and progress tracking
+   - Follow incremental phase-by-phase approach as documented
+
+## Important Notes
+
+### Makefile Shell Execution
+- **Critical**: Each line in a Makefile target runs in a separate shell
+- Environment sourcing must be on the same line as commands that need it
+- **Correct**: `. install/setup.sh && cd python/launch2plan && uv run pytest`
+- **Incorrect**: Splitting across lines with backslash continuation (sourcing won't persist)
+- This affects all Python test commands that require ROS 2 environment
+
+### Phase 12 (launch2plan) Recent Completions
+- **Phase 6**: Conditional branch exploration complete (18 tests)
+  - Handles IfCondition and UnlessCondition with proper subclass checking
+  - Converts conditions to Lua expressions for `when` clauses
+  - Supports nested conditions with "and" operator
+  - See `visitor.py:extract_condition_expression()` for implementation
+- **Dependency Management**: Added proactive dependency checking
+  - `check_rmw_introspect_available()` validates environment before introspection
+  - Clear error messages guide users to fix missing dependencies
+  - Logs failures with helpful diagnostics
 
 ## Common Patterns
 
