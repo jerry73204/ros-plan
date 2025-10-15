@@ -15,6 +15,7 @@ from ros2_introspect import IntrospectionResult, introspect_node
 class SocketInfo:
     """Information about a socket discovered via introspection."""
 
+    name: str  # Topic name
     direction: str  # '!pub' or '!sub'
     message_type: str
     qos: Optional[Dict] = None
@@ -98,6 +99,7 @@ class IntrospectionService:
                     "depth": pub.qos.depth,
                 }
                 return SocketInfo(
+                    name=pub.topic_name,
                     direction="!pub",
                     message_type=pub.message_type,
                     qos=qos_dict,
@@ -113,6 +115,7 @@ class IntrospectionService:
                     "depth": sub.qos.depth,
                 }
                 return SocketInfo(
+                    name=sub.topic_name,
                     direction="!sub",
                     message_type=sub.message_type,
                     qos=qos_dict,
@@ -149,6 +152,7 @@ class IntrospectionService:
             }
             publishers.append(
                 SocketInfo(
+                    name=pub.topic_name,
                     direction="!pub",
                     message_type=pub.message_type,
                     qos=qos_dict,
@@ -165,6 +169,7 @@ class IntrospectionService:
             }
             subscriptions.append(
                 SocketInfo(
+                    name=sub.topic_name,
                     direction="!sub",
                     message_type=sub.message_type,
                     qos=qos_dict,
