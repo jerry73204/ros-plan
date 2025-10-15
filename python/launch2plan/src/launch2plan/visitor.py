@@ -123,36 +123,129 @@ def extract_condition_expression(condition) -> Optional[str]:
 
     Examples:
     - IfCondition(LaunchConfiguration('use_sim_time')) -> "$(use_sim_time)"
-    - UnlessCondition(...) -> "$(not use_sim_time)"
+    - UnlessCondition(LaunchConfiguration('debug')) -> "$(not debug)"
+    - IfCondition("true") -> "true"
+    - UnlessCondition("false") -> "true"
     """
     from launch.conditions import IfCondition, UnlessCondition
-    from launch.substitutions import LaunchConfiguration
+    from launch.substitutions import LaunchConfiguration, TextSubstitution
 
     if condition is None:
         return None
 
-    # Handle IfCondition
-    if isinstance(condition, IfCondition):
-        # Extract the predicate expression
-        predicate = condition.predicate_expr
-        if isinstance(predicate, list) and len(predicate) == 1:
-            subst = predicate[0]
-            if isinstance(subst, LaunchConfiguration):
-                return f"$({subst.variable_name[0].text})"
-        # Fallback: try to get string representation
-        return "true"  # Placeholder
+    # Check for UnlessCondition first (it's a subclass of IfCondition)
+    if isinstance(condition, UnlessCondition):
+        # UnlessCondition is a subclass of IfCondition, so it uses the same attribute
+        predicate = condition._IfCondition__predicate_expression
 
-    # Handle UnlessCondition
-    elif isinstance(condition, UnlessCondition):
-        predicate = condition.predicate_expr
-        if isinstance(predicate, list) and len(predicate) == 1:
-            subst = predicate[0]
-            if isinstance(subst, LaunchConfiguration):
-                return f"$(not {subst.variable_name[0].text})"
-        return "false"  # Placeholder
+        # Handle list of substitutions
+        if isinstance(predicate, list):
+            if len(predicate) == 0:
+                return "false"
+
+            # Single LaunchConfiguration - negate it
+            if len(predicate) == 1 and isinstance(predicate[0], LaunchConfiguration):
+                var_name = _extract_variable_name(predicate[0])
+                return f"$(not {var_name})"
+
+            # Single TextSubstitution - negate the value
+            if len(predicate) == 1 and isinstance(predicate[0], TextSubstitution):
+                text = predicate[0].text
+                if text.lower() in ("true", "false", "1", "0"):
+                    return "false" if text.lower() in ("true", "1") else "true"
+                # Negate string literal
+                return f'not "{text}"'
+
+            # Multiple substitutions - negate the concatenation
+            parts = []
+            for subst in predicate:
+                if isinstance(subst, LaunchConfiguration):
+                    var_name = _extract_variable_name(subst)
+                    parts.append(f"$({var_name})")
+                elif isinstance(subst, TextSubstitution):
+                    parts.append(f'"{subst.text}"')
+                else:
+                    parts.append('"UNKNOWN"')
+
+            if len(parts) == 1:
+                return f"not {parts[0]}"
+            else:
+                return f"not ({' .. '.join(parts)})"
+
+        # Fallback
+        return "false"
+
+    # Handle IfCondition
+    elif isinstance(condition, IfCondition):
+        # Extract the predicate expression (use name-mangled attribute)
+        predicate = condition._IfCondition__predicate_expression
+
+        # Handle list of substitutions (most common case)
+        if isinstance(predicate, list):
+            if len(predicate) == 0:
+                return "true"
+
+            # Single LaunchConfiguration
+            if len(predicate) == 1 and isinstance(predicate[0], LaunchConfiguration):
+                var_name = _extract_variable_name(predicate[0])
+                return f"$({var_name})"
+
+            # Single TextSubstitution
+            if len(predicate) == 1 and isinstance(predicate[0], TextSubstitution):
+                text = predicate[0].text
+                # Convert string literals
+                if text.lower() in ("true", "false", "1", "0"):
+                    return "true" if text.lower() in ("true", "1") else "false"
+                # Return as string literal in Lua
+                return f'"{text}"'
+
+            # Multiple substitutions - convert to concatenation
+            parts = []
+            for subst in predicate:
+                if isinstance(subst, LaunchConfiguration):
+                    var_name = _extract_variable_name(subst)
+                    parts.append(f"$({var_name})")
+                elif isinstance(subst, TextSubstitution):
+                    parts.append(f'"{subst.text}"')
+                else:
+                    # Unknown substitution type - convert to string
+                    parts.append('"UNKNOWN"')
+
+            # If all parts are text, concatenate them
+            if len(parts) == 1:
+                return parts[0]
+            else:
+                # Multiple parts - concatenate with ..
+                return " .. ".join(parts)
+
+        # Fallback for non-list predicates
+        return "true"
 
     # Unknown condition type
-    return "true"
+    else:
+        return "true"
+
+
+def _extract_variable_name(launch_config: Any) -> str:
+    """
+    Extract variable name from LaunchConfiguration.
+
+    Handles different internal representations of variable_name.
+    """
+    var_name = launch_config.variable_name
+
+    # variable_name can be a list or a string
+    if isinstance(var_name, list) and len(var_name) > 0:
+        first_item = var_name[0]
+        # Check if it has a 'text' attribute
+        if hasattr(first_item, "text"):
+            return first_item.text
+        else:
+            return str(first_item)
+    elif isinstance(var_name, str):
+        return var_name
+    else:
+        return str(var_name)
 
 
 def visit_action(
