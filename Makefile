@@ -23,22 +23,40 @@ test:
 	# Run Rust tests
 	cargo nextest run --no-fail-fast --cargo-profile release-with-debug
 
-	# Run Python tests for launch2dump
+	# Run Python tests (per-package to avoid import conflicts)
+	# Automatically discovers all packages in python/ directory
 	. install/setup.sh && \
-	cd python && \
-	uv run pytest
+	for pkg in python/*/pyproject.toml; do \
+		pkg_dir=$$(dirname $$pkg); \
+		echo "Testing $$pkg_dir..."; \
+		(cd $$pkg_dir && uv run pytest) || exit 1; \
+	done
 
 .PHONY: format
 format:
+	# Format Rust code
 	cargo +nightly fmt
-	cd python && uv run ruff format launch2dump/src/ launch2dump/tests/
+	# Format Python code (automatically discovers all packages)
+	for pkg in python/*/pyproject.toml; do \
+		pkg_dir=$$(dirname $$pkg); \
+		pkg_name=$$(basename $$pkg_dir); \
+		echo "Formatting $$pkg_name..."; \
+		uv run ruff format $$pkg_dir/src/ $$pkg_dir/tests/ 2>/dev/null || true; \
+	done
 
 .PHONY: lint
 lint:
+	# Lint Rust code
 	cargo +nightly fmt --check
 	cargo clippy --all-targets --all-features -- -D warnings
-	cd python && uv run ruff check launch2dump/src/ launch2dump/tests/
-	cd python && uv run ruff format --check launch2dump/src/ launch2dump/tests/
+	# Lint Python code (automatically discovers all packages)
+	for pkg in python/*/pyproject.toml; do \
+		pkg_dir=$$(dirname $$pkg); \
+		pkg_name=$$(basename $$pkg_dir); \
+		echo "Linting $$pkg_name..."; \
+		uv run ruff check $$pkg_dir/src/ $$pkg_dir/tests/ || exit 1; \
+		uv run ruff format --check $$pkg_dir/src/ $$pkg_dir/tests/ || exit 1; \
+	done
 
 .PHONY: clean
 clean:
