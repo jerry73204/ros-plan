@@ -1,0 +1,3 @@
+[submodule "external/rmw_introspect"]
+	path = external/rmw_introspect
+	url = https://github.com/jerry73204/rmw_introspect.git
