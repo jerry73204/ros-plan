@@ -859,7 +859,18 @@ Generated executable plan with 2 nodes
 - Convert conditions to Lua expressions for `when` clauses
 - **Tests**: 18/18 passing (all conditional tests)
 
-**Current Status**: 68 tests passing (429 total across entire project)
+**✓ Phase 7: Include Handling & Plan Hierarchy** (Completed)
+- Enhanced `visit_include_launch_description()` to recursively process includes
+- Implemented include path resolution with name-mangled `_LaunchDescriptionSource__location` attribute
+- Added cycle detection using include_stack to prevent infinite recursion
+- Extended `builder.py` with `_build_include_section()` method
+- Generate include sections with argument forwarding and type inference
+- Support conditional includes with `when` clauses
+- Remove ".launch" suffix from file stem for include names
+- Handle duplicate include names with numeric suffixes
+- **Tests**: 8/8 passing (all include tests)
+
+**Current Status**: 76 tests passing (440 total across entire project)
 
 ---
 
@@ -1056,25 +1067,32 @@ Generated executable plan with 2 nodes
 
 ---
 
-### Phase 7: Include Handling & Plan Hierarchy (Week 4)
+### Phase 7: Include Handling & Plan Hierarchy ✓ COMPLETED
 
 **Goal**: Preserve launch file structure with plan includes
 
-**Tasks**:
-1. Detect `IncludeLaunchDescription` actions
-2. Recursively convert included launch files
-3. Generate plan includes with argument forwarding
-4. Implement cycle detection (prevent infinite recursion)
-5. Map launch arguments to plan include arguments
+**Implementation**:
+- ✓ Enhanced `visit_include_launch_description()` to recursively process includes
+- ✓ Implemented proper include path resolution using `_LaunchDescriptionSource__location` attribute
+- ✓ Added cycle detection using include_stack (prevents infinite recursion)
+- ✓ Extended `builder.py` with `_build_include_section()` method
+- ✓ Generate include sections with file reference and argument forwarding
+- ✓ Infer argument types for included files (!bool, !i64, !f64, !str)
+- ✓ Support conditional includes with `when` clauses
+- ✓ Handle duplicate include names with numeric suffixes
+- ✓ Remove ".launch" suffix from file stems for cleaner include names
 
-**Tests**:
-- `test_visitor.py::test_include_detection` - Detect includes
-- `test_visitor.py::test_recursive_conversion` - Multi-level includes
-- `test_visitor.py::test_cycle_detection` - Prevent infinite loops
-- `test_builder.py::test_generate_include_section` - Include YAML
-- `test_builder.py::test_include_argument_forwarding` - Arg mapping
+**Tests** (8/8 passing):
+- ✓ `test_includes.py::test_include_detection` - Detect includes with path resolution
+- ✓ `test_includes.py::test_include_with_arguments` - Argument capture
+- ✓ `test_includes.py::test_include_with_launch_configuration_arguments` - LaunchConfiguration substitution
+- ✓ `test_includes.py::test_cycle_detection_simple` - Simple cycle prevention
+- ✓ `test_includes.py::test_cycle_detection_nested` - Nested cycle prevention
+- ✓ `test_includes.py::test_include_section_generation` - Include YAML generation
+- ✓ `test_includes.py::test_include_with_duplicate_names` - Duplicate name handling
+- ✓ `test_includes.py::test_include_argument_type_inference` - Argument type inference
 
-**Deliverable**: Support launch file includes with plan includes
+**Deliverable**: ✓ Full support for launch file includes with plan includes, argument forwarding, and cycle detection
 
 ---
 
