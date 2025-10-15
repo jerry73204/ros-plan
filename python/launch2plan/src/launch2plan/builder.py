@@ -11,8 +11,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ruamel.yaml import YAML
 
+from .arg_inference import infer_argument_type
 from .inference import InferredSocket
-from .visitor import NodeMetadata
+from .visitor import LaunchArgumentMetadata, NodeMetadata
 
 
 @dataclass
@@ -40,6 +41,7 @@ class PlanBuilder:
         self,
         nodes: List[NodeMetadata],
         inferred_sockets: Dict[str, List[InferredSocket]],
+        launch_arguments: Optional[List[LaunchArgumentMetadata]] = None,
     ) -> Dict[str, Any]:
         """
         Build a complete plan from nodes and inferred sockets.
@@ -47,11 +49,16 @@ class PlanBuilder:
         Args:
             nodes: List of node metadata from visitor
             inferred_sockets: Map of node_id -> inferred sockets
+            launch_arguments: List of launch argument metadata (optional)
 
         Returns:
             Plan dictionary ready for YAML serialization
         """
         plan = {}
+
+        # Generate arg section if launch arguments exist
+        if launch_arguments:
+            plan["arg"] = self._build_arg_section(launch_arguments)
 
         # Generate node section
         if nodes:
@@ -63,6 +70,42 @@ class PlanBuilder:
             plan["link"] = self._build_link_section(links)
 
         return plan
+
+    def _build_arg_section(self, launch_arguments: List[LaunchArgumentMetadata]) -> Dict[str, Any]:
+        """
+        Build arg section from launch arguments.
+
+        Args:
+            launch_arguments: List of launch argument metadata
+
+        Returns:
+            Dictionary of argument definitions with type tags
+        """
+        arg_section = {}
+
+        for arg in launch_arguments:
+            # Infer type from default value
+            type_tag, converted_value = infer_argument_type(arg.default_value)
+
+            # Create argument entry
+            if type_tag == "!todo":
+                # No default value - mark as TODO
+                arg_section[arg.name] = {type_tag: None}
+            elif type_tag == "!bool":
+                # Boolean value
+                bool_value = converted_value == "true"
+                arg_section[arg.name] = {type_tag: bool_value}
+            elif type_tag == "!i64":
+                # Integer value
+                arg_section[arg.name] = {type_tag: int(converted_value)}
+            elif type_tag == "!f64":
+                # Float value
+                arg_section[arg.name] = {type_tag: float(converted_value)}
+            else:
+                # String value
+                arg_section[arg.name] = {type_tag: converted_value}
+
+        return arg_section
 
     def _build_node_section(
         self,
@@ -119,15 +162,60 @@ class PlanBuilder:
             parameters: List of parameter dictionaries
 
         Returns:
-            Merged parameter dictionary
+            Merged parameter dictionary with LaunchConfiguration substitutions converted
         """
         merged_params = {}
         for param_dict in parameters:
             # Skip __param_file markers (we inline these already)
             if "__param_file" in param_dict:
                 continue
-            merged_params.update(param_dict)
+            # Convert LaunchConfiguration substitutions
+            converted_params = self._convert_launch_configurations(param_dict)
+            merged_params.update(converted_params)
         return merged_params
+
+    def _convert_launch_configurations(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Convert LaunchConfiguration objects to $(arg_name) syntax.
+
+        Recursively processes parameter dictionaries to find and convert
+        LaunchConfiguration references.
+
+        Args:
+            params: Parameter dictionary potentially containing LaunchConfiguration objects
+
+        Returns:
+            Dictionary with LaunchConfiguration objects replaced by $(arg_name) strings
+        """
+        from launch.substitutions import LaunchConfiguration
+
+        converted = {}
+        for key, value in params.items():
+            if isinstance(value, LaunchConfiguration):
+                # Convert to $(arg_name) syntax
+                arg_name = (
+                    value.variable_name[0].text
+                    if hasattr(value.variable_name[0], "text")
+                    else str(value.variable_name[0])
+                )
+                converted[key] = f"$({arg_name})"
+            elif isinstance(value, dict):
+                # Recursively convert nested dictionaries
+                converted[key] = self._convert_launch_configurations(value)
+            elif isinstance(value, list):
+                # Convert lists
+                converted[key] = [
+                    self._convert_launch_configurations(item)
+                    if isinstance(item, dict)
+                    else f"$({item.variable_name[0].text if hasattr(item.variable_name[0], 'text') else str(item.variable_name[0])})"
+                    if isinstance(item, LaunchConfiguration)
+                    else item
+                    for item in value
+                ]
+            else:
+                # Keep other values as-is
+                converted[key] = value
+        return converted
 
     def _build_socket_section(self, sockets: List[InferredSocket]) -> Dict[str, Any]:
         """

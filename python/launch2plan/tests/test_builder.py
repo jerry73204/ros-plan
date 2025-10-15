@@ -8,7 +8,7 @@ import pytest
 
 from launch2plan.builder import PlanBuilder, PlanLink
 from launch2plan.inference import InferredSocket
-from launch2plan.visitor import NodeMetadata
+from launch2plan.visitor import LaunchArgumentMetadata, NodeMetadata
 
 
 @pytest.fixture
@@ -428,3 +428,229 @@ def test_plan_to_yaml_string(plan_builder):
     assert "talker:" in yaml_string
     assert "pkg: demo_nodes_cpp" in yaml_string
     assert "exec: talker" in yaml_string
+
+
+# Phase 5: Argument & Parameter Conversion Tests
+
+
+def test_build_arg_section_with_bool(plan_builder):
+    """Test arg section generation with boolean argument."""
+    # Setup: Boolean argument
+    launch_args = [
+        LaunchArgumentMetadata(
+            name="use_sim_time",
+            default_value="true",
+            description="Use simulation time",
+        )
+    ]
+
+    # Execute: Build plan
+    plan = plan_builder.build_plan([], {}, launch_args)
+
+    # Verify: Arg section with !bool tag
+    assert "arg" in plan
+    assert "use_sim_time" in plan["arg"]
+    assert plan["arg"]["use_sim_time"]["!bool"] is True
+
+
+def test_build_arg_section_with_int(plan_builder):
+    """Test arg section generation with integer argument."""
+    # Setup: Integer argument
+    launch_args = [
+        LaunchArgumentMetadata(
+            name="port",
+            default_value="8080",
+        )
+    ]
+
+    # Execute: Build plan
+    plan = plan_builder.build_plan([], {}, launch_args)
+
+    # Verify: Arg section with !i64 tag
+    assert "arg" in plan
+    assert "port" in plan["arg"]
+    assert plan["arg"]["port"]["!i64"] == 8080
+
+
+def test_build_arg_section_with_float(plan_builder):
+    """Test arg section generation with float argument."""
+    # Setup: Float argument
+    launch_args = [
+        LaunchArgumentMetadata(
+            name="rate",
+            default_value="10.5",
+        )
+    ]
+
+    # Execute: Build plan
+    plan = plan_builder.build_plan([], {}, launch_args)
+
+    # Verify: Arg section with !f64 tag
+    assert "arg" in plan
+    assert "rate" in plan["arg"]
+    assert plan["arg"]["rate"]["!f64"] == 10.5
+
+
+def test_build_arg_section_with_string(plan_builder):
+    """Test arg section generation with string argument."""
+    # Setup: String argument
+    launch_args = [
+        LaunchArgumentMetadata(
+            name="robot_name",
+            default_value="robot1",
+        )
+    ]
+
+    # Execute: Build plan
+    plan = plan_builder.build_plan([], {}, launch_args)
+
+    # Verify: Arg section with !str tag
+    assert "arg" in plan
+    assert "robot_name" in plan["arg"]
+    assert plan["arg"]["robot_name"]["!str"] == "robot1"
+
+
+def test_build_arg_section_with_no_default(plan_builder):
+    """Test arg section generation when no default value provided."""
+    # Setup: Argument with no default
+    launch_args = [
+        LaunchArgumentMetadata(
+            name="required_arg",
+            default_value=None,
+        )
+    ]
+
+    # Execute: Build plan
+    plan = plan_builder.build_plan([], {}, launch_args)
+
+    # Verify: Arg section with !todo tag
+    assert "arg" in plan
+    assert "required_arg" in plan["arg"]
+    assert plan["arg"]["required_arg"]["!todo"] is None
+
+
+def test_build_arg_section_with_multiple_types(plan_builder):
+    """Test arg section generation with multiple argument types."""
+    # Setup: Mixed argument types
+    launch_args = [
+        LaunchArgumentMetadata(name="use_sim_time", default_value="false"),
+        LaunchArgumentMetadata(name="port", default_value="9000"),
+        LaunchArgumentMetadata(name="rate", default_value="20.0"),
+        LaunchArgumentMetadata(name="namespace", default_value="/robot"),
+        LaunchArgumentMetadata(name="required", default_value=None),
+    ]
+
+    # Execute: Build plan
+    plan = plan_builder.build_plan([], {}, launch_args)
+
+    # Verify: All arguments present with correct types
+    assert "arg" in plan
+    assert plan["arg"]["use_sim_time"]["!bool"] is False
+    assert plan["arg"]["port"]["!i64"] == 9000
+    assert plan["arg"]["rate"]["!f64"] == 20.0
+    assert plan["arg"]["namespace"]["!str"] == "/robot"
+    assert plan["arg"]["required"]["!todo"] is None
+
+
+def test_launch_configuration_substitution_in_params(plan_builder):
+    """Test LaunchConfiguration substitution in node parameters."""
+    from launch.substitutions import LaunchConfiguration
+
+    # Setup: Node with LaunchConfiguration in parameters
+    nodes = [
+        NodeMetadata(
+            package="test_pkg",
+            executable="test_node",
+            name="test_node",
+            parameters=[{"use_sim_time": LaunchConfiguration("use_sim_time")}],
+        )
+    ]
+
+    # Execute: Build plan
+    plan = plan_builder.build_plan(nodes, {})
+
+    # Verify: LaunchConfiguration converted to $(arg_name)
+    assert plan["node"]["test_node"]["param"]["use_sim_time"] == "$(use_sim_time)"
+
+
+def test_nested_launch_configuration_in_params(plan_builder):
+    """Test nested LaunchConfiguration in node parameters."""
+    from launch.substitutions import LaunchConfiguration
+
+    # Setup: Node with nested parameters containing LaunchConfiguration
+    nodes = [
+        NodeMetadata(
+            package="test_pkg",
+            executable="test_node",
+            name="test_node",
+            parameters=[
+                {
+                    "config": {
+                        "rate": LaunchConfiguration("publish_rate"),
+                        "enabled": True,
+                    }
+                }
+            ],
+        )
+    ]
+
+    # Execute: Build plan
+    plan = plan_builder.build_plan(nodes, {})
+
+    # Verify: Nested LaunchConfiguration converted
+    assert plan["node"]["test_node"]["param"]["config"]["rate"] == "$(publish_rate)"
+    assert plan["node"]["test_node"]["param"]["config"]["enabled"] is True
+
+
+def test_complete_plan_with_args_and_params(plan_builder):
+    """Test complete plan generation with arguments and parameter substitutions."""
+    from launch.substitutions import LaunchConfiguration
+
+    # Setup: Launch arguments and nodes with parameter substitutions
+    launch_args = [
+        LaunchArgumentMetadata(name="use_sim_time", default_value="false"),
+        LaunchArgumentMetadata(name="rate", default_value="10.0"),
+    ]
+
+    nodes = [
+        NodeMetadata(
+            package="test_pkg",
+            executable="publisher",
+            name="publisher",
+            parameters=[
+                {
+                    "use_sim_time": LaunchConfiguration("use_sim_time"),
+                    "publish_rate": LaunchConfiguration("rate"),
+                }
+            ],
+            remappings=[("output", "/data")],
+        )
+    ]
+
+    inferred_sockets = {
+        "publisher": [
+            InferredSocket(
+                socket_name="output",
+                direction="!pub",
+                message_type="std_msgs/msg/String",
+                remapped_to="/data",
+                source="introspection",
+            )
+        ]
+    }
+
+    # Execute: Build complete plan
+    plan = plan_builder.build_plan(nodes, inferred_sockets, launch_args)
+
+    # Verify: Args section
+    assert "arg" in plan
+    assert plan["arg"]["use_sim_time"]["!bool"] is False
+    assert plan["arg"]["rate"]["!f64"] == 10.0
+
+    # Verify: Node with converted parameters
+    assert "node" in plan
+    assert plan["node"]["publisher"]["param"]["use_sim_time"] == "$(use_sim_time)"
+    assert plan["node"]["publisher"]["param"]["publish_rate"] == "$(rate)"
+
+    # Verify: Socket section
+    assert plan["node"]["publisher"]["socket"]["output"] == "!pub"

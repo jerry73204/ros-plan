@@ -42,6 +42,15 @@ class IncludeMetadata:
 
 
 @dataclass
+class LaunchArgumentMetadata:
+    """Metadata extracted from a DeclareLaunchArgument."""
+
+    name: str
+    default_value: Optional[str] = None
+    description: Optional[str] = None
+
+
+@dataclass
 class BranchExplorerSession:
     """
     Session for exploring all branches in a launch file.
@@ -52,6 +61,7 @@ class BranchExplorerSession:
 
     nodes: List[NodeMetadata] = field(default_factory=list)
     includes: List[IncludeMetadata] = field(default_factory=list)
+    launch_arguments: List[LaunchArgumentMetadata] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
 
     # Condition tracking
@@ -68,6 +78,10 @@ class BranchExplorerSession:
     def add_include(self, include: IncludeMetadata) -> None:
         """Add a discovered include."""
         self.includes.append(include)
+
+    def add_launch_argument(self, arg: LaunchArgumentMetadata) -> None:
+        """Add a discovered launch argument."""
+        self.launch_arguments.append(arg)
 
     def add_error(self, error: str) -> None:
         """Add an error message."""
@@ -164,10 +178,14 @@ def visit_action_by_class(
     action: Action, context: LaunchContext, session: BranchExplorerSession
 ) -> Optional[List[LaunchDescriptionEntity]]:
     """Dispatch action to appropriate visitor based on type."""
+    from launch.actions import DeclareLaunchArgument
+
     if is_a(action, Node):
         return visit_node(action, context, session)
     elif is_a(action, IncludeLaunchDescription):
         return visit_include_launch_description(action, context, session)
+    elif is_a(action, DeclareLaunchArgument):
+        return visit_declare_launch_argument(action, context, session)
     else:
         # For other actions (GroupAction, SetEnvironmentVariable, etc.),
         # execute normally to traverse their children
@@ -364,5 +382,59 @@ def visit_include_launch_description(
     except Exception as e:
         session.add_error(f"Error processing include: {e}")
 
-    # Don't execute the include (we'll handle it in Phase 12.7)
+    # Don't execute the include (we'll handle it in Phase 7)
     return None
+
+
+def visit_declare_launch_argument(
+    declare_arg,
+    context: LaunchContext,
+    session: BranchExplorerSession,
+) -> Optional[List[LaunchDescriptionEntity]]:
+    """
+    Visit a DeclareLaunchArgument and extract metadata.
+
+    Args:
+        declare_arg: DeclareLaunchArgument action
+        context: Launch context
+        session: Branch explorer session
+
+    Returns:
+        None (no child actions to execute)
+    """
+    try:
+        # Extract argument name
+        name = declare_arg.name
+
+        # Extract default value if specified
+        default_value = None
+        if declare_arg.default_value is not None:
+            # default_value can be a string or list of substitutions
+            from launch.utilities import normalize_to_list_of_substitutions, perform_substitutions
+
+            default_value = perform_substitutions(
+                context, normalize_to_list_of_substitutions(declare_arg.default_value)
+            )
+
+        # Extract description
+        description = None
+        if declare_arg.description is not None:
+            description = declare_arg.description
+
+        # Create metadata
+        metadata = LaunchArgumentMetadata(
+            name=name,
+            default_value=default_value,
+            description=description,
+        )
+
+        session.add_launch_argument(metadata)
+
+    except Exception as e:
+        session.add_error(f"Error processing DeclareLaunchArgument: {e}")
+
+    # Execute to register the argument in the context
+    try:
+        return declare_arg.execute(context)
+    except Exception:
+        return None
