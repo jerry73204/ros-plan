@@ -8,8 +8,7 @@ from launch2plan.introspection import IntrospectionService
 # Check if rmw_introspect_cpp is available
 _rmw_available, _rmw_error_msg = check_rmw_introspect_available()
 requires_rmw = pytest.mark.skipif(
-    not _rmw_available,
-    reason=f"rmw_introspect_cpp not available: {_rmw_error_msg}"
+    not _rmw_available, reason=f"rmw_introspect_cpp not available: {_rmw_error_msg}"
 )
 
 

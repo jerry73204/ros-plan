@@ -103,9 +103,7 @@ class PlanBuilder:
                 include_name = f"{include_name}_{idx}"
 
             # Build include definition
-            include_def = {
-                "file": f"{stem}.plan.yaml"
-            }
+            include_def = {"file": f"{stem}.plan.yaml"}
 
             # Add arguments if any
             if include.arguments:

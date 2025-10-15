@@ -23,16 +23,15 @@ def test_include_detection():
     # Note: PythonLaunchDescriptionSource requires an actual file
     # So we create a temporary one
     import tempfile
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.launch.py', delete=False) as f:
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".launch.py", delete=False) as f:
         f.write("from launch import LaunchDescription\n")
         f.write("def generate_launch_description():\n")
         f.write("    return LaunchDescription([])\n")
         include_path = Path(f.name)
 
     try:
-        include = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(str(include_path))
-        )
+        include = IncludeLaunchDescription(PythonLaunchDescriptionSource(str(include_path)))
 
         # Create session and context
         session = BranchExplorerSession()
@@ -56,7 +55,8 @@ def test_include_with_arguments():
     # Create include with arguments
     # Note: PythonLaunchDescriptionSource requires an actual file
     import tempfile
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.launch.py', delete=False) as f:
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".launch.py", delete=False) as f:
         f.write("from launch import LaunchDescription\n")
         f.write("def generate_launch_description():\n")
         f.write("    return LaunchDescription([])\n")

@@ -445,7 +445,9 @@ def visit_include_launch_description(
         if hasattr(launch_description_source, "_LaunchDescriptionSource__location"):
             location = launch_description_source._LaunchDescriptionSource__location
             # Perform substitutions
-            location_str = perform_substitutions(context, normalize_to_list_of_substitutions(location))
+            location_str = perform_substitutions(
+                context, normalize_to_list_of_substitutions(location)
+            )
             file_path = Path(location_str)
         elif hasattr(launch_description_source, "location"):
             # Fallback to public location attribute
