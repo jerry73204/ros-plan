@@ -45,29 +45,22 @@ The tool uses a **multi-pass workflow** where it generates skeleton plans with T
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ Pass 1: Initial Conversion                                        │
+│ Conversion: Launch to Plan                                        │
 │ • Explore all branches (no depth limit, cycle detection)         │
-│ • Generate plan skeleton with nodes and arguments                │
-│ • Mark unknown socket directions/types as TODO with hints        │
+│ • Use rmw_introspect to discover node interfaces                 │
+│ • Generate plan with sockets/links from introspection            │
+│ • Mark unknowns as TODO with helpful context                     │
 │ • Save metadata for tracking                                     │
 └────────────────┬─────────────────────────────────────────────────┘
                  │
                  ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│ User Annotation                                                   │
+│ User Completion                                                   │
 │ • Review generated plan and TODO markers                         │
-│ • Fill in socket directions (!pub or !sub)                       │
-│ • Specify message types                                          │
-│ • Verify when clauses                                            │
-└────────────────┬─────────────────────────────────────────────────┘
-                 │
-                 ▼
-┌──────────────────────────────────────────────────────────────────┐
-│ Pass 2+: Pattern Learning                                        │
-│ • Detect user changes since last pass                           │
-│ • Learn patterns from completed TODOs                            │
-│ • Apply patterns to similar pending TODOs (high confidence)      │
-│ • Update metadata with learned patterns                          │
+│ • Fill in socket directions (!pub or !sub) for failed introspect│
+│ • Specify message types where introspection unavailable          │
+│ • Verify when clauses and conditions                             │
+│ • Adjust node parameters and remappings as needed                │
 └────────────────┬─────────────────────────────────────────────────┘
                  │
                  ▼
@@ -1096,26 +1089,539 @@ Generated executable plan with 2 nodes
 
 ---
 
-### Phase 8: Metadata Tracking & Pattern Learning (Week 4)
+### Phase 8: Metadata Tracking (Week 4)
 
-**Goal**: Track conversion state and learn from user edits
+**Goal**: Track conversion state for transparency and debugging
 
-**Tasks**:
-1. Create `metadata.py` module
-2. Implement metadata JSON structure (source file, TODOs, patterns)
-3. Save/load metadata alongside plan files
-4. Detect changes between plan versions (diff)
-5. Extract patterns from user completions
-6. Apply learned patterns to similar cases
+**Micro-Steps**:
+
+1. **F66: Metadata Data Structures** (2 hours)
+   - Define dataclasses: `ConversionMetadata`, `TodoItem`, `TodoContext`, `NodeSource`, `ConversionStats`
+   - Define enums: `TodoStatus`, `TodoReason`
+   - Create type annotations and validation
+
+2. **F67: TODO Collection During Conversion** (3 hours)
+   - Modify `builder.py` to collect TODOs during plan generation
+   - Track location, field, value, and context for each TODO
+   - Record node sources (file, line, include path, condition)
+   - Generate metadata alongside plan YAML
+
+3. **F68: Metadata Persistence** (2 hours)
+   - Implement `save_metadata()` - serialize to JSON with pretty printing
+   - Implement `load_metadata()` - deserialize from JSON
+   - Handle missing metadata files gracefully
+   - Validate metadata schema on load
+
+4. **F69: Plan YAML Parsing & TODO Discovery** (4 hours)
+   - Implement `parse_plan_yaml()` - load plan YAML structure
+   - Implement `find_todos_in_plan()` - scan for `!todo` and `"TODO"` values
+   - Build JSONPath for each discovered TODO
+   - Compare plan TODOs against metadata TODOs
+
+5. **F70: TODO Status Update** (3 hours)
+   - Implement `detect_completed_todos()` - find TODOs resolved by user
+   - Compare metadata TODO list with current plan state
+   - Update TODO status to COMPLETED when user fills in value
+   - Handle TODOs that were removed entirely
+
+6. **F71: Conversion Statistics** (2 hours)
+   - Implement `calculate_stats()` - compute all statistics
+   - Count introspection success/failure rates
+   - Calculate completion rate
+   - Track performance metrics (timing)
+
+7. **F72: CLI Integration** (2 hours)
+   - Add `--metadata` flag to `convert` command
+   - Add `status` subcommand to show TODO completion status
+   - Display statistics in human-readable format
+   - Warn if metadata is stale (source file changed)
 
 **Tests**:
+- `test_metadata.py::test_dataclass_serialization` - JSON round-trip
 - `test_metadata.py::test_save_load_metadata` - Persistence
-- `test_metadata.py::test_detect_user_changes` - Diff detection
-- `test_metadata.py::test_extract_patterns` - Pattern extraction
-- `test_metadata.py::test_apply_patterns` - Pattern application
-- `test_metadata.py::test_confidence_increase` - Pattern confidence
+- `test_metadata.py::test_todo_collection` - Collection during conversion
+- `test_metadata.py::test_plan_yaml_parsing` - YAML structure parsing
+- `test_metadata.py::test_find_todos_in_plan` - TODO discovery
+- `test_metadata.py::test_detect_completed_todos` - User edit detection
+- `test_metadata.py::test_calculate_stats` - Statistics computation
+- `test_metadata.py::test_stale_metadata_detection` - Source hash checking
+- `test_metadata.py::test_status_command` - CLI status display
 
-**Deliverable**: Multi-pass workflow with pattern learning
+**Deliverable**: Transparent conversion tracking with explicit TODO markers and user edit detection
+
+---
+
+## Phase 8: Metadata Structure Design
+
+### Design Principle: Explicit Tracking, No Guessing
+
+The metadata system tracks the conversion process for transparency and debugging:
+1. **Progress tracking** - What TODOs remain, what's been completed by user
+2. **Source traceability** - Map plan elements back to launch file origins
+3. **Reproducibility** - Understand how a plan was generated
+4. **Statistics** - Clear view of conversion completeness
+
+**No heuristics, no guessing, no confidence scoring.** The tool uses only:
+- **RMW introspection** - Actual node interfaces (direction, message type, QoS)
+- **Launch file structure** - Explicit information (nodes, args, remappings, conditions)
+- **User input** - Manual completion of TODOs where information is missing
+
+### Metadata File Structure
+
+Metadata is stored as JSON alongside the generated plan file:
+- Plan file: `robot.plan.yaml`
+- Metadata file: `robot.plan.meta.json`
+
+This separation keeps the plan file clean and human-readable while preserving conversion context.
+
+### Core Data Model
+
+```python
+@dataclass
+class ConversionMetadata:
+    """Complete metadata for a plan conversion."""
+
+    # Source information
+    source_file: str              # Original launch file path
+    source_hash: str              # SHA256 hash for change detection
+    generated_at: str             # ISO 8601 timestamp
+    converter_version: str        # launch2plan version
+
+    # TODO tracking
+    todos: List[TodoItem]
+
+    # Conversion statistics
+    stats: ConversionStats
+
+    # Node-to-source mapping (for debugging)
+    node_sources: Dict[str, NodeSource]  # node_id -> source info
+```
+
+#### TodoItem: Track Incomplete Conversions
+
+```python
+@dataclass
+class TodoItem:
+    """A single TODO marker in the generated plan."""
+
+    # Location in plan
+    location: str                 # JSONPath-style: "node.camera.socket.image"
+    field: str                    # "direction" | "message_type" | "arg_type"
+
+    # Current state
+    current_value: str            # "!todo" or "TODO"
+    status: TodoStatus            # pending | completed
+
+    # Context for user
+    context: TodoContext
+
+@dataclass
+class TodoContext:
+    """Context information to help user complete TODO."""
+
+    # What we know
+    node_package: Optional[str]
+    node_executable: Optional[str]
+    remapping: Optional[Tuple[str, str]]  # (from, to)
+
+    # Why it's unknown
+    reason: TodoReason            # introspection_failed | socket_not_found
+    error_message: Optional[str]  # Detailed error if available
+
+    # Helpful hint
+    hint: Optional[str]           # Human-readable suggestion for completion
+
+@enum
+class TodoStatus(Enum):
+    PENDING = "pending"           # Not yet resolved
+    COMPLETED = "completed"       # User manually completed
+
+@enum
+class TodoReason(Enum):
+    INTROSPECTION_FAILED = "introspection_failed"     # ros2-introspect failed
+    SOCKET_NOT_FOUND = "socket_not_found"             # Socket not in introspection results
+    DYNAMIC_CODE = "dynamic_code"                     # OpaqueFunction or runtime code
+    MISSING_PACKAGE = "missing_package"               # Package not available
+
+@dataclass
+class NodeSource:
+    """Track where a node came from in the launch file."""
+
+    launch_file: str              # Path to launch file
+    line_number: Optional[int]    # Line number in launch file (if available)
+    include_path: List[str]       # Chain of includes leading to this node
+    condition: Optional[str]      # Condition expression (if any)
+```
+
+**Design Decision: Location as JSONPath**
+
+Using JSONPath-style strings like `"node.camera.socket.image"` provides:
+- ✓ **Unambiguous addressing** - Precisely identifies where in the plan file
+- ✓ **Human-readable** - Easy to understand when reviewing metadata
+- ✓ **Programmatic access** - Can be parsed to navigate the plan structure
+- ✓ **Stable across edits** - Survives minor formatting changes
+
+Alternative considered: Line numbers (rejected - fragile to edits)
+
+#### ConversionStats: Progress Tracking
+
+```python
+@dataclass
+class ConversionStats:
+    """Statistics about the conversion."""
+
+    # Counts
+    total_nodes: int
+    total_includes: int
+    total_links: int
+    total_arguments: int
+
+    # TODO tracking
+    total_todos: int
+    pending_todos: int
+    completed_todos: int
+
+    # Introspection results
+    nodes_introspected: int              # Nodes successfully introspected
+    nodes_failed_introspection: int      # Nodes where introspection failed
+    sockets_from_introspection: int      # Sockets resolved via introspection
+    sockets_requiring_user_input: int    # Sockets marked as TODO
+
+    # Completion rate
+    completion_rate: float               # TODOs completed / total TODOs
+
+    # Performance
+    introspection_time_ms: int
+    conversion_time_ms: int
+```
+
+### Metadata Operations
+
+#### Save/Load (F68: Metadata Persistence)
+
+```python
+class MetadataManager:
+    """Manage metadata persistence."""
+
+    def save_metadata(self, metadata: ConversionMetadata, plan_path: Path):
+        """Save metadata as JSON alongside plan file."""
+        meta_path = plan_path.with_suffix('.meta.json')
+
+        # Serialize to JSON with pretty printing
+        json_str = json.dumps(
+            asdict(metadata),
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False
+        )
+
+        meta_path.write_text(json_str)
+
+    def load_metadata(self, plan_path: Path) -> Optional[ConversionMetadata]:
+        """Load metadata from JSON file."""
+        meta_path = plan_path.with_suffix('.meta.json')
+
+        if not meta_path.exists():
+            return None
+
+        try:
+            data = json.loads(meta_path.read_text())
+            # Validate schema version if present
+            if 'converter_version' in data:
+                self._validate_version(data['converter_version'])
+            return ConversionMetadata(**data)
+        except (json.JSONDecodeError, TypeError, KeyError) as e:
+            logging.error(f"Failed to load metadata: {e}")
+            return None
+```
+
+#### Plan YAML Parsing (F69: Plan YAML Parsing & TODO Discovery)
+
+```python
+class PlanParser:
+    """Parse plan YAML files and discover TODOs."""
+
+    def parse_plan_yaml(self, plan_path: Path) -> Dict:
+        """Load and parse plan YAML file."""
+        from ruamel.yaml import YAML
+
+        yaml = YAML()
+        with plan_path.open() as f:
+            return yaml.load(f)
+
+    def find_todos_in_plan(self, plan_data: Dict) -> List[DiscoveredTodo]:
+        """
+        Scan plan YAML structure for TODO markers.
+
+        Returns list of TODOs found in the current plan state.
+        """
+        todos = []
+
+        # Scan node sockets
+        if 'node' in plan_data:
+            for node_id, node_def in plan_data['node'].items():
+                if 'socket' in node_def:
+                    for socket_name, socket_value in node_def['socket'].items():
+                        # Check for !todo tag
+                        if isinstance(socket_value, str) and socket_value == "!todo":
+                            todos.append(DiscoveredTodo(
+                                location=f"node.{node_id}.socket.{socket_name}",
+                                field="direction",
+                                current_value="!todo"
+                            ))
+
+        # Scan link message types
+        if 'link' in plan_data:
+            for link_id, link_def in plan_data['link'].items():
+                if isinstance(link_def, dict) and link_def.get('type') == 'TODO':
+                    todos.append(DiscoveredTodo(
+                        location=f"link.{link_id}.type",
+                        field="message_type",
+                        current_value="TODO"
+                    ))
+
+        # Scan argument types
+        if 'arg' in plan_data:
+            for arg_name, arg_def in plan_data['arg'].items():
+                if isinstance(arg_def, dict):
+                    if arg_def.get('type') == '!todo':
+                        todos.append(DiscoveredTodo(
+                            location=f"arg.{arg_name}.type",
+                            field="arg_type",
+                            current_value="!todo"
+                        ))
+
+        return todos
+
+    def get_value_at_path(self, plan_data: Dict, location: str) -> Any:
+        """
+        Navigate plan structure using JSONPath-style location.
+
+        Example: "node.camera.socket.image" -> plan_data['node']['camera']['socket']['image']
+        """
+        parts = location.split('.')
+        current = plan_data
+
+        for part in parts:
+            if not isinstance(current, dict) or part not in current:
+                return None
+            current = current[part]
+
+        return current
+
+@dataclass
+class DiscoveredTodo:
+    """A TODO marker found in the current plan."""
+    location: str
+    field: str
+    current_value: str
+```
+
+#### TODO Status Update (F70: TODO Status Update)
+
+```python
+class TodoStatusUpdater:
+    """Detect and update TODO completion status."""
+
+    def detect_completed_todos(
+        self,
+        metadata: ConversionMetadata,
+        plan_data: Dict
+    ) -> List[CompletedTodo]:
+        """
+        Compare metadata TODOs against current plan to find user edits.
+
+        Algorithm:
+        1. For each TODO in metadata with status=PENDING
+        2. Get current value at TODO location in plan
+        3. If current value differs from metadata value AND is not a TODO marker
+        4. Mark as COMPLETED and record the new value
+        """
+        parser = PlanParser()
+        completed = []
+
+        for todo in metadata.todos:
+            if todo.status != TodoStatus.PENDING:
+                continue  # Already completed or removed
+
+            # Get current value from plan
+            current_value = parser.get_value_at_path(plan_data, todo.location)
+
+            # Check if user filled in the TODO
+            if current_value is not None and \
+               current_value != todo.current_value and \
+               current_value not in ["!todo", "TODO"]:
+
+                completed.append(CompletedTodo(
+                    location=todo.location,
+                    field=todo.field,
+                    old_value=todo.current_value,
+                    new_value=current_value
+                ))
+
+                # Update status in metadata
+                todo.status = TodoStatus.COMPLETED
+
+        return completed
+
+    def update_metadata_from_plan(
+        self,
+        metadata: ConversionMetadata,
+        plan_path: Path
+    ) -> ConversionMetadata:
+        """
+        Update metadata by comparing against current plan state.
+
+        This is called when user runs `launch2plan status` to see progress.
+        """
+        parser = PlanParser()
+        plan_data = parser.parse_plan_yaml(plan_path)
+
+        # Detect completed TODOs
+        completed = self.detect_completed_todos(metadata, plan_data)
+
+        if completed:
+            logging.info(f"Detected {len(completed)} completed TODOs")
+            for c in completed:
+                logging.debug(f"  {c.location}: {c.old_value} -> {c.new_value}")
+
+        # Recalculate statistics
+        metadata.stats = self._calculate_stats(metadata, plan_data)
+
+        return metadata
+
+    def check_metadata_staleness(
+        self,
+        metadata: ConversionMetadata,
+        source_path: Path
+    ) -> Optional[str]:
+        """
+        Check if source file has changed since conversion.
+
+        Returns warning message if stale, None if up-to-date.
+        """
+        import hashlib
+
+        # Calculate current source hash
+        current_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
+
+        if current_hash != metadata.source_hash:
+            return (
+                f"Warning: Source file has changed since conversion.\n"
+                f"  Expected: {metadata.source_hash[:8]}...\n"
+                f"  Current:  {current_hash[:8]}...\n"
+                f"Consider re-running conversion to ensure plan is up-to-date."
+            )
+
+        return None
+
+@dataclass
+class CompletedTodo:
+    """Record of a TODO that was completed by user."""
+    location: str
+    field: str
+    old_value: str      # Original TODO marker
+    new_value: str      # User-provided value
+```
+
+**Design Decision: Explicit TODO Discovery**
+
+The system discovers TODOs by scanning the plan YAML structure:
+
+1. **Load plan YAML** - Parse with ruamel.yaml to preserve structure
+2. **Scan known locations** - Check node sockets, link types, arg types
+3. **Build JSONPath** - Create stable location identifiers
+4. **Compare with metadata** - Match discovered TODOs against saved list
+5. **Detect completions** - Find TODOs that user has filled in
+
+**Key Principles:**
+- ✓ **Structural scan** - Navigate YAML tree, don't use regex on text
+- ✓ **Stable addressing** - JSONPath survives formatting changes
+- ✓ **Explicit comparison** - Exact value matching, no fuzzy logic
+- ✓ **No inference** - If metadata missing, regenerate from scratch
+
+### Example Metadata File
+
+```json
+{
+  "source_file": "/path/to/robot.launch.py",
+  "source_hash": "sha256:1234abcd...",
+  "generated_at": "2025-10-16T14:30:00Z",
+  "converter_version": "0.1.0",
+
+  "todos": [
+    {
+      "location": "node.camera.socket.image_raw",
+      "field": "direction",
+      "current_value": "!todo",
+      "status": "pending",
+      "context": {
+        "node_package": "sensor_pkg",
+        "node_executable": "camera_node",
+        "remapping": ["image_raw", "/camera/image"],
+        "reason": "introspection_failed",
+        "error_message": "Failed to spawn node: package 'sensor_pkg' not found",
+        "hint": "Specify !pub if camera publishes images, !sub if it subscribes"
+      }
+    },
+    {
+      "location": "link.camera_image.type",
+      "field": "message_type",
+      "current_value": "TODO",
+      "status": "pending",
+      "context": {
+        "reason": "socket_not_found",
+        "hint": "Common image types: sensor_msgs/msg/Image, sensor_msgs/msg/CompressedImage"
+      }
+    }
+  ],
+
+  "node_sources": {
+    "camera": {
+      "launch_file": "/path/to/robot.launch.py",
+      "line_number": 42,
+      "include_path": [],
+      "condition": null
+    },
+    "detector": {
+      "launch_file": "/path/to/vision.launch.py",
+      "line_number": 15,
+      "include_path": ["robot.launch.py"],
+      "condition": "$(use_vision)"
+    }
+  },
+
+  "stats": {
+    "total_nodes": 2,
+    "total_includes": 1,
+    "total_links": 1,
+    "total_arguments": 3,
+    "total_todos": 2,
+    "pending_todos": 2,
+    "completed_todos": 0,
+    "nodes_introspected": 1,
+    "nodes_failed_introspection": 1,
+    "sockets_from_introspection": 3,
+    "sockets_requiring_user_input": 2,
+    "completion_rate": 0.0,
+    "introspection_time_ms": 1500,
+    "conversion_time_ms": 3200
+  }
+}
+```
+
+### Key Design Decisions Summary
+
+1. **Separate metadata file** - Keep plan YAML clean and human-readable
+2. **JSONPath addressing** - Unambiguous, stable location identifiers for TODOs
+3. **Explicit TODO tracking** - Every unknown gets tracked with helpful context
+4. **No heuristics or guessing** - Only introspection and user input, no pattern learning
+5. **Rich context** - Help users understand why TODOs exist and how to complete them
+6. **Node source tracking** - Map each node back to its launch file origin
+7. **Simple status tracking** - Pending or completed, nothing inferred
+8. **Statistics for progress** - Clear view of what was introspected vs. requiring user input
+9. **Transparency** - Metadata makes conversion process fully visible and debuggable
+10. **User control** - Tool never guesses, user makes all decisions about unknowns
 
 ---
 
