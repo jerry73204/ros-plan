@@ -83,6 +83,16 @@ The project consists of both Rust (core compiler and runtime) and Python (launch
   - Automatic link generation from topic connections
   - Argument type inference from default values
 
+### External Dependencies (Git Submodules)
+
+- **rmw_introspect** - Located at `external/rmw_introspect/` (git submodule)
+  - Separately maintained at https://github.com/jerry73204/rmw_introspect
+  - Contains rmw_introspect_cpp (C++ RMW) and ros2_introspect (Python wrapper)
+  - Not included in main project's `make test` or `make lint` targets
+  - Build independently: `cd external/rmw_introspect && make build`
+  - Test independently: `cd external/rmw_introspect && make test`
+  - Required by launch2plan for node interface introspection
+
 ## Key File Formats
 
 ### Plan Files (*.yaml)
@@ -112,6 +122,10 @@ make build
 
 # Build specific crate
 cargo build -p ros-plan-compiler --profile release-with-debug
+
+# Build external dependencies (rmw_introspect)
+# Note: External modules are built independently
+cd external/rmw_introspect && source /opt/ros/humble/setup.bash && make build
 ```
 
 ### Testing
