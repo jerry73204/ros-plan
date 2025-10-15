@@ -13,7 +13,7 @@ from ruamel.yaml import YAML
 
 from .arg_inference import infer_argument_type
 from .inference import InferredSocket
-from .visitor import LaunchArgumentMetadata, NodeMetadata
+from .visitor import IncludeMetadata, LaunchArgumentMetadata, NodeMetadata
 
 
 @dataclass
@@ -42,6 +42,7 @@ class PlanBuilder:
         nodes: List[NodeMetadata],
         inferred_sockets: Dict[str, List[InferredSocket]],
         launch_arguments: Optional[List[LaunchArgumentMetadata]] = None,
+        includes: Optional[List[IncludeMetadata]] = None,
     ) -> Dict[str, Any]:
         """
         Build a complete plan from nodes and inferred sockets.
@@ -50,6 +51,7 @@ class PlanBuilder:
             nodes: List of node metadata from visitor
             inferred_sockets: Map of node_id -> inferred sockets
             launch_arguments: List of launch argument metadata (optional)
+            includes: List of include metadata (optional)
 
         Returns:
             Plan dictionary ready for YAML serialization
@@ -59,6 +61,10 @@ class PlanBuilder:
         # Generate arg section if launch arguments exist
         if launch_arguments:
             plan["arg"] = self._build_arg_section(launch_arguments)
+
+        # Generate include section if includes exist
+        if includes:
+            plan["include"] = self._build_include_section(includes)
 
         # Generate node section
         if nodes:
@@ -70,6 +76,63 @@ class PlanBuilder:
             plan["link"] = self._build_link_section(links)
 
         return plan
+
+    def _build_include_section(self, includes: List[IncludeMetadata]) -> Dict[str, Any]:
+        """
+        Build include section from launch includes.
+
+        Args:
+            includes: List of include metadata
+
+        Returns:
+            Dictionary of include definitions
+        """
+        include_section = {}
+
+        for idx, include in enumerate(includes):
+            # Generate include identifier from file name (without extension)
+            # Remove ".launch" suffix if present (e.g., "camera.launch.py" -> "camera")
+            stem = include.file_path.stem
+            if stem.endswith(".launch"):
+                stem = stem[:-7]  # Remove ".launch"
+
+            include_name = stem
+
+            # Handle duplicate names
+            if include_name in include_section:
+                include_name = f"{include_name}_{idx}"
+
+            # Build include definition
+            include_def = {
+                "file": f"{stem}.plan.yaml"
+            }
+
+            # Add arguments if any
+            if include.arguments:
+                arg_dict = {}
+                for arg_name, arg_value in include.arguments.items():
+                    # Infer type and convert value
+                    type_tag, converted_value = infer_argument_type(arg_value)
+
+                    if type_tag == "!bool":
+                        arg_dict[arg_name] = {type_tag: converted_value == "true"}
+                    elif type_tag == "!i64":
+                        arg_dict[arg_name] = {type_tag: int(converted_value)}
+                    elif type_tag == "!f64":
+                        arg_dict[arg_name] = {type_tag: float(converted_value)}
+                    else:
+                        # String or substitution
+                        arg_dict[arg_name] = arg_value
+
+                include_def["arg"] = arg_dict
+
+            # Add when clause if conditional
+            if include.condition_expr:
+                include_def["when"] = include.condition_expr
+
+            include_section[include_name] = include_def
+
+        return include_section
 
     def _build_arg_section(self, launch_arguments: List[LaunchArgumentMetadata]) -> Dict[str, Any]:
         """

@@ -433,22 +433,46 @@ def visit_include_launch_description(
     session: BranchExplorerSession,
 ) -> Optional[List[LaunchDescriptionEntity]]:
     """
-    Visit an include and extract metadata.
+    Visit an include and recursively process the included launch file.
 
-    Note: We don't recursively process includes yet (Phase 12.7).
-    For now, we just record them.
+    Phase 7: Implements recursive conversion with cycle detection.
     """
-    # TODO: Phase 12.7 will implement recursive conversion
-    # For now, just record the include
-
     try:
         # Try to get the file path
         launch_description_source = include.launch_description_source
-        if hasattr(launch_description_source, "location"):
-            file_path = Path(launch_description_source.location)
+
+        # Access the private __location attribute which contains the list of substitutions
+        if hasattr(launch_description_source, "_LaunchDescriptionSource__location"):
+            location = launch_description_source._LaunchDescriptionSource__location
+            # Perform substitutions
+            location_str = perform_substitutions(context, normalize_to_list_of_substitutions(location))
+            file_path = Path(location_str)
+        elif hasattr(launch_description_source, "location"):
+            # Fallback to public location attribute
+            location = launch_description_source.location
+            if isinstance(location, str):
+                file_path = Path(location)
+            elif isinstance(location, list):
+                # Perform substitutions for list
+                location_str = perform_substitutions(context, location)
+                file_path = Path(location_str)
+            else:
+                # Single substitution object
+                location_str = perform_substitutions(
+                    context, normalize_to_list_of_substitutions(location)
+                )
+                file_path = Path(location_str)
         else:
             # Can't determine file path
             session.add_error("Include with unknown file path")
+            return None
+
+        # Normalize file path
+        file_path = file_path.resolve()
+
+        # Check for cycles
+        if session.check_cycle(file_path):
+            session.add_error(f"Cycle detected: {file_path} already in include stack")
             return None
 
         # Get launch arguments
@@ -472,11 +496,22 @@ def visit_include_launch_description(
 
         session.add_include(metadata)
 
+        # Recursively process the included file
+        # Push file onto include stack for cycle detection
+        session.include_stack.append(file_path)
+        session.visited_files.add(file_path)
+
+        try:
+            # Load and execute the included launch description
+            # This will recursively discover nodes and includes
+            return include.execute(context)
+        finally:
+            # Pop from stack when done
+            session.include_stack.pop()
+
     except Exception as e:
         session.add_error(f"Error processing include: {e}")
-
-    # Don't execute the include (we'll handle it in Phase 7)
-    return None
+        return None
 
 
 def visit_declare_launch_argument(
