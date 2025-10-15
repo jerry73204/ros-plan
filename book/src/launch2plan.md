@@ -840,7 +840,26 @@ Generated executable plan with 2 nodes
 - Support TODO markers in links when message type unknown
 - **Tests**: 10/10 passing
 
-**Current Status**: 24 tests passing (385 total across entire project)
+**✓ Phase 5: Argument & Parameter Conversion** (Completed)
+- Extended `visitor.py` to capture `DeclareLaunchArgument` actions
+- Created `arg_inference.py` module for type inference from default values
+- Extended `builder.py` to generate `arg` section with type tags (!bool, !i64, !f64, !str, !todo)
+- Implemented LaunchConfiguration substitution to $(arg_name) syntax
+- Convert node parameters with LaunchConfiguration references
+- Support nested parameter dictionaries with recursive conversion
+- **Tests**: 26/26 passing (17 arg_inference + 9 builder tests)
+
+**✓ Phase 6: Conditional Branch Exploration** (Completed)
+- Enhanced `extract_condition_expression()` to handle IfCondition and UnlessCondition
+- Support for LaunchConfiguration substitutions in conditions
+- Support for TextSubstitution (literal "true"/"false", numeric "1"/"0")
+- Proper handling of UnlessCondition as subclass of IfCondition (check order matters)
+- Nested condition tracking with compound "and" expressions
+- Condition stack management via context manager
+- Convert conditions to Lua expressions for `when` clauses
+- **Tests**: 18/18 passing (all conditional tests)
+
+**Current Status**: 68 tests passing (429 total across entire project)
 
 ---
 
@@ -946,46 +965,94 @@ Generated executable plan with 2 nodes
 
 ---
 
-### Phase 5: Argument & Parameter Conversion
+### Phase 5: Argument & Parameter Conversion ✓ COMPLETED
 
 **Goal**: Convert launch arguments and parameters to plan format
 
-**Tasks**:
-1. Convert `DeclareLaunchArgument` to plan `arg` section
-2. Infer types from default values (string, int, float, bool)
-3. Convert node parameters to plan `param` section
-4. Handle `LaunchConfiguration` substitutions → `$(arg_name)`
-5. Preserve help/description text
+**Implementation**:
+- ✓ Extended `visitor.py` to capture `DeclareLaunchArgument` actions
+- ✓ Added `LaunchArgumentMetadata` dataclass with name, default_value, description
+- ✓ Created `arg_inference.py` module for type inference from default values
+- ✓ Infer types: bool (true/false), i64 (integers), f64 (floats), str (strings), todo (no default)
+- ✓ Extended `builder.py` with `_build_arg_section()` method
+- ✓ Generate arg section with proper type tags (!bool, !i64, !f64, !str, !todo)
+- ✓ Implemented `_convert_launch_configurations()` to handle LaunchConfiguration substitutions
+- ✓ Recursive conversion for nested parameter dictionaries
+- ✓ Support LaunchConfiguration in lists and nested structures
+- ✓ Convert LaunchConfiguration references to $(arg_name) syntax
 
-**Tests**:
-- `test_builder.py::test_convert_launch_arguments` - Arg conversion
-- `test_builder.py::test_infer_argument_types` - Type inference
-- `test_builder.py::test_convert_node_parameters` - Param conversion
-- `test_builder.py::test_launch_configuration_substitution` - $(var) syntax
+**Tests** (26/26 passing):
+- ✓ `test_arg_inference.py::test_infer_bool_true` - Boolean true inference
+- ✓ `test_arg_inference.py::test_infer_bool_false` - Boolean false inference
+- ✓ `test_arg_inference.py::test_infer_bool_case_insensitive` - Case-insensitive boolean
+- ✓ `test_arg_inference.py::test_infer_integer_positive` - Positive integer
+- ✓ `test_arg_inference.py::test_infer_integer_negative` - Negative integer
+- ✓ `test_arg_inference.py::test_infer_integer_zero` - Zero value
+- ✓ `test_arg_inference.py::test_infer_float_decimal` - Decimal float
+- ✓ `test_arg_inference.py::test_infer_float_scientific` - Scientific notation
+- ✓ `test_arg_inference.py::test_infer_float_negative` - Negative float
+- ✓ `test_arg_inference.py::test_infer_string_path` - Path string
+- ✓ `test_arg_inference.py::test_infer_string_namespace` - Namespace string
+- ✓ `test_arg_inference.py::test_infer_string_general` - General string
+- ✓ `test_arg_inference.py::test_infer_none_default` - TODO marker for no default
+- ✓ `test_arg_inference.py::test_infer_empty_string` - Empty string
+- ✓ `test_arg_inference.py::test_infer_whitespace_handling` - Whitespace stripping
+- ✓ `test_arg_inference.py::test_infer_mixed_alphanumeric` - Mixed alphanumeric
+- ✓ `test_arg_inference.py::test_infer_numeric_string_with_units` - Numeric with units
+- ✓ `test_builder.py::test_build_arg_section_with_bool` - Boolean arg generation
+- ✓ `test_builder.py::test_build_arg_section_with_int` - Integer arg generation
+- ✓ `test_builder.py::test_build_arg_section_with_float` - Float arg generation
+- ✓ `test_builder.py::test_build_arg_section_with_string` - String arg generation
+- ✓ `test_builder.py::test_build_arg_section_with_no_default` - TODO arg generation
+- ✓ `test_builder.py::test_build_arg_section_with_multiple_types` - Multiple types
+- ✓ `test_builder.py::test_launch_configuration_substitution_in_params` - LaunchConfiguration in params
+- ✓ `test_builder.py::test_nested_launch_configuration_in_params` - Nested LaunchConfiguration
+- ✓ `test_builder.py::test_complete_plan_with_args_and_params` - Complete plan with args and params
 
-**Deliverable**: Complete argument and parameter handling
+**Deliverable**: ✓ Complete argument and parameter handling with type inference and substitution
 
 ---
 
-### Phase 6: Conditional Branch Exploration (Week 3)
+### Phase 6: Conditional Branch Exploration ✓ COMPLETED
 
 **Goal**: Handle conditional nodes and generate `when` clauses
 
-**Tasks**:
-1. Extend visitor to track condition context
-2. Extract condition expressions from `IfCondition`/`UnlessCondition`
-3. Convert Python conditions to Lua expressions for `when` clauses
-4. Handle nested conditions (compound expressions)
-5. Generate nodes with appropriate `when` clauses
+**Implementation**:
+- ✓ Enhanced `extract_condition_expression()` function with robust condition handling
+- ✓ Check UnlessCondition before IfCondition (subclass relationship)
+- ✓ Extract predicate from name-mangled attribute `_IfCondition__predicate_expression`
+- ✓ Handle LaunchConfiguration substitutions → `$(var_name)`
+- ✓ Handle UnlessCondition with negation → `$(not var_name)`
+- ✓ Support TextSubstitution for literal values ("true", "false", "1", "0")
+- ✓ Case-insensitive boolean text handling
+- ✓ Multiple substitutions with Lua concatenation (..)
+- ✓ Nested condition tracking with condition_stack
+- ✓ Compound expressions with "and" operator for nested conditions
+- ✓ Helper function `_extract_variable_name()` for variable name extraction
+- ✓ Condition context manager for proper stack management
+- ✓ Node with conditional when clauses (already implemented in Phase 4)
 
-**Tests**:
-- `test_visitor.py::test_conditional_node` - IfCondition handling
-- `test_visitor.py::test_unless_condition` - UnlessCondition handling
-- `test_visitor.py::test_nested_conditions` - Nested conditionals
-- `test_visitor.py::test_when_clause_generation` - Lua conversion
-- `test_builder.py::test_build_conditional_node` - Node with `when`
+**Tests** (18/18 passing):
+- ✓ `test_conditionals.py::test_extract_ifcondition_with_launch_configuration` - IfCondition with LaunchConfiguration
+- ✓ `test_conditionals.py::test_extract_unlesscondition_with_launch_configuration` - UnlessCondition with LaunchConfiguration
+- ✓ `test_conditionals.py::test_extract_ifcondition_with_text_true` - IfCondition with literal true
+- ✓ `test_conditionals.py::test_extract_ifcondition_with_text_false` - IfCondition with literal false
+- ✓ `test_conditionals.py::test_extract_unlesscondition_with_text_true` - UnlessCondition with literal true
+- ✓ `test_conditionals.py::test_extract_unlesscondition_with_text_false` - UnlessCondition with literal false
+- ✓ `test_conditionals.py::test_extract_none_condition` - None condition returns None
+- ✓ `test_conditionals.py::test_condition_stack_single_level` - Single condition
+- ✓ `test_conditionals.py::test_condition_stack_nested_conditions` - Two nested conditions
+- ✓ `test_conditionals.py::test_condition_stack_three_levels` - Three nested conditions
+- ✓ `test_conditionals.py::test_condition_context_none` - None doesn't affect stack
+- ✓ `test_conditionals.py::test_condition_stack_mixed_if_unless` - Mixed If/Unless conditions
+- ✓ `test_conditionals.py::test_ifcondition_with_numeric_text` - Numeric text "1"/"0"
+- ✓ `test_conditionals.py::test_unlesscondition_with_numeric_text` - Numeric negation
+- ✓ `test_conditionals.py::test_ifcondition_with_arbitrary_text` - Custom text values
+- ✓ `test_conditionals.py::test_unlesscondition_with_arbitrary_text` - Custom text negation
+- ✓ `test_conditionals.py::test_extract_empty_condition` - Empty predicate lists
+- ✓ `test_conditionals.py::test_case_insensitive_boolean_text` - Case-insensitive booleans
 
-**Deliverable**: Support conditional nodes with `when` clauses
+**Deliverable**: ✓ Complete support for conditional nodes with `when` clauses
 
 ---
 
