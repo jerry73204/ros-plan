@@ -22,9 +22,6 @@ dev = [
     "ruff>=0.8.0",
 ]
 
-[tool.uv.sources]
-ros2-introspect = { workspace = true }
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

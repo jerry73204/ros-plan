@@ -6,7 +6,6 @@ requires-python = "==3.10.*"
 members = [
     "launch2dump",
     "launch2plan",
-    "ros2-introspect",
 ]
 
 [[package]]
@@ -71,7 +70,7 @@ requires-dist = [
     { name = "lark", specifier = ">=1.2.2" },
     { name = "packaging", specifier = ">=24.1" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "ros2-introspect", editable = "ros2-introspect" },
+    { name = "ros2-introspect", editable = "../external/rmw_introspect/ros2_introspect" },
     { name = "ruamel-yaml", specifier = ">=0.18.6" },
 ]
 
@@ -100,7 +99,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "ros2-introspect", editable = "ros2-introspect" },
+    { name = "ros2-introspect", editable = "../external/rmw_introspect/ros2_introspect" },
     { name = "ruamel-yaml", specifier = ">=0.18.6" },
 ]
 
@@ -175,14 +174,13 @@ wheels = [
 [[package]]
 name = "ros2-introspect"
 version = "0.1.0"
-source = { editable = "ros2-introspect" }
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
+source = { editable = "../external/rmw_introspect/ros2_introspect" }
+dependencies = [
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
+requires-dist = [{ name = "pyyaml", specifier = ">=6.0" }]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8.1.1" }]

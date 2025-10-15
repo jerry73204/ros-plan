@@ -21,3 +21,8 @@ wheels/
 /build/
 /install/
 /log/
+
+# External modules
+/external/*/build/
+/external/*/install/
+/external/*/log/

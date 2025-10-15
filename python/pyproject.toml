@@ -1,5 +1,8 @@
 [tool.uv.workspace]
-members = ["launch2dump", "ros2-introspect", "launch2plan"]
+members = ["launch2dump", "launch2plan"]
+
+[tool.uv.sources]
+ros2-introspect = { path = "../external/rmw_introspect/ros2_introspect", editable = true }
 
 [tool.uv]
 dev-dependencies = []
