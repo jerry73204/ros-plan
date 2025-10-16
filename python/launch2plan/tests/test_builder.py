@@ -75,7 +75,7 @@ def test_build_socket_section(plan_builder):
     ]
 
     # Execute: Build socket section
-    socket_section = plan_builder._build_socket_section(sockets)
+    socket_section = plan_builder._build_socket_section(sockets, "test_node")
 
     # Verify: Both sockets present
     assert socket_section["output"] == "!pub"

@@ -4,8 +4,6 @@ Tests for argument type inference module.
 Phase 5: Argument & Parameter Conversion
 """
 
-import pytest
-
 from launch2plan.arg_inference import infer_argument_type
 
 

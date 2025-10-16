@@ -1,0 +1,31 @@
+{
+  "converter_version": "0.1.0",
+  "generated_at": "2025-10-16T08:56:28.655038",
+  "node_sources": {
+    "talker": {
+      "condition": null,
+      "include_path": null,
+      "launch_file": "/home/aeon/repos/ros-plan/python/launch2plan/tests/fixtures/simple.launch.py",
+      "line_number": null
+    }
+  },
+  "source_file": "/home/aeon/repos/ros-plan/python/launch2plan/tests/fixtures/simple.launch.py",
+  "source_hash": "f9ea739a1c76061a045a71ecca6a4caeffaf619b6450fd48bf59c863940ba857",
+  "stats": {
+    "completed_todos": 0,
+    "completion_rate": 1.0,
+    "conversion_time_ms": 0,
+    "introspection_time_ms": 0,
+    "nodes_failed_introspection": 0,
+    "nodes_introspected": 0,
+    "pending_todos": 0,
+    "sockets_from_introspection": 0,
+    "sockets_requiring_user_input": 0,
+    "total_arguments": 0,
+    "total_includes": 0,
+    "total_links": 0,
+    "total_nodes": 1,
+    "total_todos": 0
+  },
+  "todos": []
+}

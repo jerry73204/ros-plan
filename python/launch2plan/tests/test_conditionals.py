@@ -4,8 +4,6 @@ Tests for conditional branch exploration.
 Phase 6: Conditional Branch Exploration
 """
 
-import pytest
-from launch import LaunchContext
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, TextSubstitution
 

@@ -73,9 +73,8 @@ class IntrospectionService:
         import logging
 
         logger = logging.getLogger(__name__)
-        logger.error(
-            f"Failed to introspect {package}::{executable}: {result.error if result.error else 'Unknown error'}"
-        )
+        error_msg = result.error if result.error else "Unknown error"
+        logger.error(f"Failed to introspect {package}::{executable}: {error_msg}")
 
         return None
 

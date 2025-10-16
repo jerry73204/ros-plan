@@ -7,7 +7,6 @@ with proper argument forwarding and cycle detection.
 
 from pathlib import Path
 
-import pytest
 from launch import LaunchContext
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource

@@ -3,10 +3,24 @@ CLI entry point for launch2plan.
 """
 
 import argparse
+import hashlib
 import sys
+from datetime import datetime
 from pathlib import Path
 
+from .builder import PlanBuilder
 from .converter import convert_launch_file
+from .inference import infer_sockets_for_nodes
+from .introspection import IntrospectionService
+from .metadata import (
+    METADATA_VERSION,
+    ConversionMetadata,
+    ConversionStats,
+    MetadataManager,
+    NodeSource,
+    TodoStatusUpdater,
+)
+from .statistics import calculate_stats
 
 
 def main() -> int:
@@ -45,30 +59,20 @@ def main() -> int:
 
     if args.command == "convert":
         return handle_convert(args)
+    elif args.command == "status":
+        return handle_status(args)
     else:
         # Other commands not yet implemented
         print(f"launch2plan: {args.command} command")
         print()
         print("STATUS: Not Yet Implemented")
         print()
-        print("Implementation progress:")
-        print("  [x] Phase 12.1: Foundation & Basic Visitor")
-        print("  [ ] Phase 12.2: RMW Introspection Integration")
-        print("  [ ] Phase 12.3: Socket Inference & TODO Generation")
-        print("  [ ] Phase 12.4: Plan Builder & Link Generation")
-        print("  [ ] Phase 12.5: Argument & Parameter Conversion")
-        print("  [ ] Phase 12.6: Conditional Branch Exploration")
-        print("  [ ] Phase 12.7: Include Handling & Plan Hierarchy")
-        print("  [ ] Phase 12.8: Metadata Tracking & Pattern Learning")
-        print("  [ ] Phase 12.9: Validation & Compilation")
-        print("  [ ] Phase 12.10: End-to-End Testing & Examples")
-        print()
         print(f"Requested command '{args.command}' is not yet implemented.")
         return 1
 
 
 def handle_convert(args) -> int:
-    """Handle the convert command."""
+    """Handle the convert command (with Phase 8 metadata generation)."""
     launch_file = Path(args.launch_file)
 
     if not launch_file.exists():
@@ -86,6 +90,7 @@ def handle_convert(args) -> int:
     print()
 
     try:
+        # Phase 1: Discover nodes and includes
         result = convert_launch_file(launch_file)
 
         print(f"✓ Discovered {len(result.nodes)} nodes")
@@ -96,14 +101,17 @@ def handle_convert(args) -> int:
             for error in result.errors:
                 print(f"  - {error}")
 
-        print()
-        print("Nodes found:")
-        for node in result.nodes:
-            condition = f" (when: {node.condition_expr})" if node.condition_expr else ""
-            print(f"  - {node.package}::{node.executable}{condition}")
-            if node.remappings:
-                for from_topic, to_topic in node.remappings:
-                    print(f"    remap: {from_topic} -> {to_topic}")
+        # Show discovered nodes
+        if result.nodes:
+            print()
+            print("Nodes found:")
+            for node in result.nodes:
+                condition = f" (when: {node.condition_expr})" if node.condition_expr else ""
+                # Show package::executable for clarity
+                print(f"  - {node.package}::{node.executable}{condition}")
+                if node.remappings:
+                    for from_topic, to_topic in node.remappings:
+                        print(f"    remap: {from_topic} -> {to_topic}")
 
         if result.includes:
             print()
@@ -113,11 +121,66 @@ def handle_convert(args) -> int:
                 print(f"  - {inc.file_path}{condition}")
 
         print()
-        print("Note: Phase 12.1 complete - basic visitor working!")
-        print("Next phases will add:")
-        print("  - RMW introspection for socket inference")
-        print("  - Plan YAML generation with links")
-        print("  - Argument and parameter conversion")
+
+        # Phase 2: Introspection and socket inference
+        introspection_service = IntrospectionService()
+        inferred_sockets = infer_sockets_for_nodes(result.nodes, introspection_service)
+
+        # Phase 3: Build plan
+        builder = PlanBuilder()
+        plan = builder.build_plan(
+            nodes=result.nodes,
+            inferred_sockets=inferred_sockets,
+            launch_arguments=None,  # TODO: Extract launch arguments from visitor
+            includes=result.includes,
+        )
+
+        # Phase 4: Write plan YAML
+        builder.write_plan(plan, output_file)
+        print(f"✓ Generated plan: {output_file}")
+
+        # Phase 5: Create metadata (F67)
+        source_hash = hashlib.sha256(launch_file.read_bytes()).hexdigest()
+
+        # Build node_sources mapping
+        node_sources = {}
+        for node in result.nodes:
+            node_id = node.name if node.name else f"{node.package}::{node.executable}"
+            node_sources[node_id] = NodeSource(
+                launch_file=str(launch_file),
+                condition=node.condition_expr,
+            )
+
+        # Create metadata with TODOs collected during build
+        metadata = ConversionMetadata(
+            source_file=str(launch_file),
+            source_hash=source_hash,
+            generated_at=datetime.now().isoformat(),
+            converter_version=METADATA_VERSION,
+            todos=builder.get_todos(),
+            stats=ConversionStats(),  # Will be calculated below
+            node_sources=node_sources,
+        )
+
+        # Calculate statistics
+        metadata.stats = calculate_stats(metadata, plan)
+
+        # Save metadata
+        manager = MetadataManager()
+        manager.save_metadata(metadata, output_file)
+        print(f"✓ Generated metadata: {output_file.with_suffix('.plan.meta.json')}")
+        print()
+
+        # Display TODO summary
+        if metadata.todos:
+            print("TODO Status:")
+            print(f"  Total TODOs: {len(metadata.todos)}")
+            print(f"  Run 'launch2plan status {output_file}' for details")
+        else:
+            print("✓ No TODOs - conversion complete!")
+
+        print()
+        print(f"Run 'ros2plan compile {output_file}' to compile the plan.")
 
         return 0
 
@@ -127,6 +190,88 @@ def handle_convert(args) -> int:
 
         traceback.print_exc()
         return 1
+
+
+def handle_status(args) -> int:
+    """Handle the status command (F72)."""
+    plan_file = Path(args.plan_file)
+
+    if not plan_file.exists():
+        print(f"Error: Plan file not found: {plan_file}")
+        return 1
+
+    # Load metadata
+    manager = MetadataManager()
+    metadata = manager.load_metadata(plan_file)
+
+    if not metadata:
+        print(f"Error: No metadata found for {plan_file}")
+        print(f"Expected: {plan_file.with_suffix('.plan.meta.json')}")
+        print()
+        print("Metadata is generated when you run 'launch2plan convert'.")
+        return 1
+
+    # Check if source file has changed
+    source_path = Path(metadata.source_file)
+    if source_path.exists():
+        updater = TodoStatusUpdater()
+        staleness_warning = updater.check_metadata_staleness(metadata, source_path)
+        if staleness_warning:
+            print(staleness_warning)
+            print()
+
+    # Update metadata with current plan state
+    updater = TodoStatusUpdater()
+    metadata = updater.update_metadata_from_plan(metadata, plan_file)
+
+    # Save updated metadata
+    manager.save_metadata(metadata, plan_file)
+
+    # Display status
+    stats = metadata.stats
+
+    print(f"Conversion Status: {plan_file}")
+    print(f"Source: {metadata.source_file}")
+    print(f"Generated: {metadata.generated_at}")
+    print()
+
+    print("Structure:")
+    print(f"  Nodes:     {stats.total_nodes}")
+    print(f"  Includes:  {stats.total_includes}")
+    print(f"  Links:     {stats.total_links}")
+    print(f"  Arguments: {stats.total_arguments}")
+    print()
+
+    print("TODO Status:")
+    print(f"  Total:     {stats.total_todos}")
+    print(f"  Pending:   {stats.pending_todos}")
+    print(f"  Completed: {stats.completed_todos}")
+    print(f"  Progress:  {stats.completion_rate:.1%}")
+    print()
+
+    print("Introspection:")
+    print(f"  Nodes introspected:         {stats.nodes_introspected}")
+    print(f"  Nodes failed introspection: {stats.nodes_failed_introspection}")
+    print(f"  Sockets from introspection: {stats.sockets_from_introspection}")
+    print(f"  Sockets requiring input:    {stats.sockets_requiring_user_input}")
+    print()
+
+    if stats.pending_todos > 0:
+        print("Pending TODOs:")
+        for todo in metadata.todos:
+            if todo.status == "pending":
+                print(f"  - {todo.location}")
+                print(f"    Field: {todo.field}")
+                print(f"    Value: {todo.current_value}")
+                if todo.context.hint:
+                    print(f"    Hint: {todo.context.hint}")
+        print()
+        print(f"Run 'launch2plan validate {plan_file}' to check if plan compiles.")
+    else:
+        print("✓ All TODOs completed!")
+        print(f"Run 'ros2plan compile {plan_file}' to compile the plan.")
+
+    return 0
 
 
 if __name__ == "__main__":

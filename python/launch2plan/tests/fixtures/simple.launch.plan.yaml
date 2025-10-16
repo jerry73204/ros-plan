@@ -1,0 +1,5 @@
+node:
+  talker:
+    pkg: demo_nodes_cpp
+    exec: talker
+    ns: <node_namespace_unspecified>

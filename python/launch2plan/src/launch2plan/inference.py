@@ -24,6 +24,11 @@ class InferredSocket:
     remapped_to: Optional[str] = None  # The target topic name
     comment: Optional[str] = None  # Helpful comment for TODO markers
     source: str = "unknown"  # "introspection", "todo"
+    # For TODO tracking
+    node_package: Optional[str] = None
+    node_executable: Optional[str] = None
+    introspection_failed: bool = False
+    error_message: Optional[str] = None
 
 
 def socket_info_to_dict(socket_info: SocketInfo) -> Dict:
@@ -105,6 +110,9 @@ class SocketInferenceEngine:
                     f"Remapping: {socket_name} -> {remapped_to}"
                 ),
                 source="todo",
+                node_package=node.package,
+                node_executable=node.executable,
+                introspection_failed=True,
             )
 
         # Try to find socket in introspection results
@@ -121,6 +129,9 @@ class SocketInferenceEngine:
                 remapped_to=remapped_to,
                 comment=None,  # No comment needed for successful inference
                 source="introspection",
+                node_package=node.package,
+                node_executable=node.executable,
+                introspection_failed=False,
             )
 
         # Socket not found in introspection results
@@ -135,6 +146,9 @@ class SocketInferenceEngine:
                 f"(!pub or !sub) and message type. Remapping: {socket_name} -> {remapped_to}"
             ),
             source="todo",
+            node_package=node.package,
+            node_executable=node.executable,
+            introspection_failed=False,
         )
 
     def _find_socket_in_introspection(

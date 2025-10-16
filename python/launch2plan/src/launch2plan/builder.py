@@ -13,6 +13,7 @@ from ruamel.yaml import YAML
 
 from .arg_inference import infer_argument_type
 from .inference import InferredSocket
+from .metadata import TodoContext, TodoItem, TodoReason, TodoStatus
 from .visitor import IncludeMetadata, LaunchArgumentMetadata, NodeMetadata
 
 
@@ -36,6 +37,7 @@ class PlanBuilder:
         self.yaml.default_flow_style = False
         self.yaml.preserve_quotes = True
         self.yaml.width = 100
+        self.todos: List[TodoItem] = []  # Collect TODOs during build
 
     def build_plan(
         self,
@@ -152,6 +154,22 @@ class PlanBuilder:
             if type_tag == "!todo":
                 # No default value - mark as TODO
                 arg_section[arg.name] = {type_tag: None}
+
+                # Record TODO
+                self.todos.append(
+                    TodoItem(
+                        location=f"arg.{arg.name}.type",
+                        field="arg_type",
+                        current_value="!todo",
+                        status=TodoStatus.PENDING.value,
+                        context=TodoContext(
+                            hint=(
+                                f"Specify type for argument '{arg.name}' "
+                                "(no default value provided)"
+                            ),
+                        ),
+                    )
+                )
             elif type_tag == "!bool":
                 # Boolean value
                 bool_value = converted_value == "true"
@@ -205,7 +223,7 @@ class PlanBuilder:
 
             # Add sockets if any remappings exist
             if node_id in inferred_sockets and inferred_sockets[node_id]:
-                node_def["socket"] = self._build_socket_section(inferred_sockets[node_id])
+                node_def["socket"] = self._build_socket_section(inferred_sockets[node_id], node_id)
 
             # Add when clause if conditional
             if node.condition_expr:
@@ -265,25 +283,32 @@ class PlanBuilder:
                 converted[key] = self._convert_launch_configurations(value)
             elif isinstance(value, list):
                 # Convert lists
-                converted[key] = [
-                    self._convert_launch_configurations(item)
-                    if isinstance(item, dict)
-                    else f"$({item.variable_name[0].text if hasattr(item.variable_name[0], 'text') else str(item.variable_name[0])})"
-                    if isinstance(item, LaunchConfiguration)
-                    else item
-                    for item in value
-                ]
+                result_list = []
+                for item in value:
+                    if isinstance(item, dict):
+                        result_list.append(self._convert_launch_configurations(item))
+                    elif isinstance(item, LaunchConfiguration):
+                        arg_name = (
+                            item.variable_name[0].text
+                            if hasattr(item.variable_name[0], "text")
+                            else str(item.variable_name[0])
+                        )
+                        result_list.append(f"$({arg_name})")
+                    else:
+                        result_list.append(item)
+                converted[key] = result_list
             else:
                 # Keep other values as-is
                 converted[key] = value
         return converted
 
-    def _build_socket_section(self, sockets: List[InferredSocket]) -> Dict[str, Any]:
+    def _build_socket_section(self, sockets: List[InferredSocket], node_id: str) -> Dict[str, Any]:
         """
         Build socket section from inferred sockets.
 
         Args:
             sockets: List of inferred sockets
+            node_id: Node identifier for TODO tracking
 
         Returns:
             Dictionary of socket definitions
@@ -297,6 +322,43 @@ class PlanBuilder:
             else:
                 # TODO marker needed
                 socket_section[socket.socket_name] = "!todo"
+
+                # Determine reason
+                reason = TodoReason.SOCKET_NOT_FOUND.value
+                hint = f"Specify direction (!pub or !sub) for socket '{socket.socket_name}'"
+                error_message = None
+
+                if hasattr(socket, "introspection_failed") and socket.introspection_failed:
+                    reason = TodoReason.INTROSPECTION_FAILED.value
+                    hint = (
+                        "Introspection failed for node. "
+                        "Check if package is available and node can be introspected."
+                    )
+                    error_message = getattr(socket, "error_message", None)
+
+                # Record TODO
+                self.todos.append(
+                    TodoItem(
+                        location=f"node.{node_id}.socket.{socket.socket_name}",
+                        field="direction",
+                        current_value="!todo",
+                        status=TodoStatus.PENDING.value,
+                        context=TodoContext(
+                            node_package=socket.node_package
+                            if hasattr(socket, "node_package")
+                            else None,
+                            node_executable=socket.node_executable
+                            if hasattr(socket, "node_executable")
+                            else None,
+                            remapping=(socket.socket_name, socket.remapped_to)
+                            if socket.remapped_to
+                            else None,
+                            reason=reason,
+                            error_message=error_message,
+                            hint=hint,
+                        ),
+                    )
+                )
 
         return socket_section
 
@@ -420,6 +482,23 @@ class PlanBuilder:
                 }
             }
 
+            # Record TODO if message type is unknown
+            if link.message_type == "TODO":
+                self.todos.append(
+                    TodoItem(
+                        location=f"link.{link.name}.type",
+                        field="message_type",
+                        current_value="TODO",
+                        status=TodoStatus.PENDING.value,
+                        context=TodoContext(
+                            hint=f"Specify message type for link '{link.name}'. "
+                            f"Unable to determine from introspection. "
+                            f"Sources: {', '.join(link.sources)}, "
+                            f"Destinations: {', '.join(link.destinations)}",
+                        ),
+                    )
+                )
+
             link_section[link.name] = link_def
 
         return link_section
@@ -450,3 +529,12 @@ class PlanBuilder:
         stream = io.StringIO()
         self.yaml.dump(plan, stream)
         return stream.getvalue()
+
+    def get_todos(self) -> List[TodoItem]:
+        """
+        Get list of TODOs collected during plan building.
+
+        Returns:
+            List of TodoItem objects
+        """
+        return self.todos
