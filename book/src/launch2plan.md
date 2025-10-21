@@ -863,7 +863,18 @@ Generated executable plan with 2 nodes
 - Handle duplicate include names with numeric suffixes
 - **Tests**: 8/8 passing (all include tests)
 
-**Current Status**: 76 tests passing (440 total across entire project)
+**✓ Phase 8: Metadata Tracking** (Completed)
+- Created `metadata.py` with data structures (TodoItem, ConversionMetadata, ConversionStats, TodoContext, TodoReason, TodoStatus, NodeSource)
+- Modified `builder.py` to collect TODOs during plan generation with rich context (node package, executable, remapping, reason, hints)
+- Implemented `MetadataManager` for saving/loading metadata to JSON (`.plan.meta.json` files)
+- Created `PlanParser` for plan YAML parsing and TODO discovery with JSONPath addressing
+- Implemented `TodoStatusUpdater` for detecting user-completed TODOs by comparing metadata against current plan
+- Added `statistics.py` for conversion statistics calculation (nodes, links, TODOs, completion rate, introspection metrics)
+- Integrated metadata generation into `handle_convert()` CLI command with SHA256 staleness detection
+- Added `status` subcommand to display TODO completion progress and statistics
+- **Tests**: 13/13 passing (all metadata tests)
+
+**Current Status**: 85 tests passing (440 total across entire project)
 
 ---
 
@@ -1089,65 +1100,69 @@ Generated executable plan with 2 nodes
 
 ---
 
-### Phase 8: Metadata Tracking (Week 4)
+### Phase 8: Metadata Tracking ✓ COMPLETED
 
 **Goal**: Track conversion state for transparency and debugging
 
 **Micro-Steps**:
 
-1. **F66: Metadata Data Structures** (2 hours)
+1. ✓ **F66: Metadata Data Structures** (2 hours)
    - Define dataclasses: `ConversionMetadata`, `TodoItem`, `TodoContext`, `NodeSource`, `ConversionStats`
    - Define enums: `TodoStatus`, `TodoReason`
    - Create type annotations and validation
 
-2. **F67: TODO Collection During Conversion** (3 hours)
+2. ✓ **F67: TODO Collection During Conversion** (3 hours)
    - Modify `builder.py` to collect TODOs during plan generation
    - Track location, field, value, and context for each TODO
    - Record node sources (file, line, include path, condition)
    - Generate metadata alongside plan YAML
 
-3. **F68: Metadata Persistence** (2 hours)
+3. ✓ **F68: Metadata Persistence** (2 hours)
    - Implement `save_metadata()` - serialize to JSON with pretty printing
    - Implement `load_metadata()` - deserialize from JSON
    - Handle missing metadata files gracefully
    - Validate metadata schema on load
 
-4. **F69: Plan YAML Parsing & TODO Discovery** (4 hours)
+4. ✓ **F69: Plan YAML Parsing & TODO Discovery** (4 hours)
    - Implement `parse_plan_yaml()` - load plan YAML structure
    - Implement `find_todos_in_plan()` - scan for `!todo` and `"TODO"` values
    - Build JSONPath for each discovered TODO
    - Compare plan TODOs against metadata TODOs
 
-5. **F70: TODO Status Update** (3 hours)
+5. ✓ **F70: TODO Status Update** (3 hours)
    - Implement `detect_completed_todos()` - find TODOs resolved by user
    - Compare metadata TODO list with current plan state
    - Update TODO status to COMPLETED when user fills in value
    - Handle TODOs that were removed entirely
 
-6. **F71: Conversion Statistics** (2 hours)
+6. ✓ **F71: Conversion Statistics** (2 hours)
    - Implement `calculate_stats()` - compute all statistics
    - Count introspection success/failure rates
    - Calculate completion rate
    - Track performance metrics (timing)
 
-7. **F72: CLI Integration** (2 hours)
+7. ✓ **F72: CLI Integration** (2 hours)
    - Add `--metadata` flag to `convert` command
    - Add `status` subcommand to show TODO completion status
    - Display statistics in human-readable format
    - Warn if metadata is stale (source file changed)
 
-**Tests**:
-- `test_metadata.py::test_dataclass_serialization` - JSON round-trip
-- `test_metadata.py::test_save_load_metadata` - Persistence
-- `test_metadata.py::test_todo_collection` - Collection during conversion
-- `test_metadata.py::test_plan_yaml_parsing` - YAML structure parsing
-- `test_metadata.py::test_find_todos_in_plan` - TODO discovery
-- `test_metadata.py::test_detect_completed_todos` - User edit detection
-- `test_metadata.py::test_calculate_stats` - Statistics computation
-- `test_metadata.py::test_stale_metadata_detection` - Source hash checking
-- `test_metadata.py::test_status_command` - CLI status display
+**Tests** (13/13 passing):
+- ✓ `test_metadata.py::test_dataclass_serialization` - JSON round-trip
+- ✓ `test_metadata.py::test_save_load_metadata` - Persistence
+- ✓ `test_metadata.py::test_load_missing_metadata` - Missing metadata handling
+- ✓ `test_metadata.py::test_plan_yaml_parsing` - YAML structure parsing
+- ✓ `test_metadata.py::test_find_todos_in_plan` - TODO discovery
+- ✓ `test_metadata.py::test_get_value_at_path` - JSONPath navigation
+- ✓ `test_metadata.py::test_detect_completed_todos` - User edit detection
+- ✓ `test_metadata.py::test_detect_completed_todos_ignores_todo_markers` - TODO marker filtering
+- ✓ `test_metadata.py::test_check_metadata_staleness` - Source hash checking
+- ✓ `test_metadata.py::test_calculate_stats` - Statistics computation
+- ✓ `test_metadata.py::test_calculate_stats_empty_plan` - Empty plan statistics
+- ✓ `test_metadata.py::test_builder_collects_socket_todos` - Socket TODO collection
+- ✓ `test_metadata.py::test_builder_collects_link_todos` - Link TODO collection
 
-**Deliverable**: Transparent conversion tracking with explicit TODO markers and user edit detection
+**Deliverable**: ✓ Transparent conversion tracking with explicit TODO markers and user edit detection
 
 ---
 
