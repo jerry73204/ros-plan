@@ -76,29 +76,27 @@ def convert_launch_file(
     # Note: execute() can return Actions, Events, or LaunchDescriptions
     from launch import LaunchDescription
 
-    import logging
-
-    logger = logging.getLogger(__name__)
-    logger.info(f"Processing {len(expanded_actions)} expanded actions")
-
     for entity in expanded_actions:
         # If it's a LaunchDescription, visit its entities
         if isinstance(entity, LaunchDescription):
-            logger.info(f"Found LaunchDescription with {len(entity.entities)} entities")
             for action in entity.entities:
                 try:
-                    visit_action(action, context, session)
+                    returned_entities = visit_action(action, context, session)
+                    # Recursively visit any returned entities (e.g., from GroupAction)
+                    if returned_entities:
+                        for child in returned_entities:
+                            if hasattr(child, 'condition'):  # It's an Action
+                                visit_action(child, context, session)
                 except Exception as e:
-                    session.errors.append(f"Error visiting action {type(action).__name__}: {e}")
-                    logger.error(f"Error visiting {type(action).__name__}: {e}")
+                    error_msg = f"Error visiting action {type(action).__name__}: {e}"
+                    session.errors.append(error_msg)
         # If it's an Action, visit it directly
         elif hasattr(entity, "condition"):
-            logger.info(f"Found action: {type(entity).__name__}")
             try:
                 visit_action(entity, context, session)
             except Exception as e:
-                session.errors.append(f"Error visiting entity {type(entity).__name__}: {e}")
-                logger.error(f"Error visiting {type(entity).__name__}: {e}")
+                error_msg = f"Error visiting entity {type(entity).__name__}: {e}"
+                session.errors.append(error_msg)
         # Otherwise skip (e.g., events)
 
     # Return the collected data

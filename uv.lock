@@ -85,6 +85,7 @@ name = "launch2plan"
 version = "0.1.0"
 source = { editable = "python/launch2plan" }
 dependencies = [
+    { name = "lark" },
     { name = "pyyaml" },
     { name = "ros2-introspect" },
     { name = "ruamel-yaml" },
@@ -98,6 +99,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "lark", specifier = ">=1.1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ros2-introspect", editable = "external/rmw_introspect/ros2_introspect" },
     { name = "ruamel-yaml", specifier = ">=0.18.6" },
