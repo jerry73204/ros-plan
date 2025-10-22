@@ -15,8 +15,8 @@ The project consists of both Rust (core compiler and runtime) and Python (launch
 ## Project Status
 
 **Current Phase**: Phase 12 (Launch-to-Plan Conversion) - In Progress
-- ✅ Phase 6 Complete: Conditional Branch Exploration (18 tests)
-- ✅ 432 tests passing (330 Rust + 25 launch2dump + 9 ros2-introspect + 68 launch2plan)
+- ✅ Phase 8 Complete: Metadata Tracking (13 tests)
+- ✅ 440 tests passing (330 Rust + 25 launch2dump + 9 ros2-introspect + 85 launch2plan)
 - ✅ Zero warnings (clippy + compiler)
 - ✅ Dependency checking with explicit error messages
 - ✅ 54 features implemented across 11 phases (core system)
@@ -24,7 +24,9 @@ The project consists of both Rust (core compiler and runtime) and Python (launch
 **Phase 12 Implementation Progress**:
 - ✅ Phase 1-5: Foundation, introspection, socket inference, argument handling, plan generation
 - ✅ Phase 6: Conditional branch exploration with `when` clauses
-- ⏳ Phase 7-12: Include processing, QoS, recursive conversion, pattern learning (not yet started)
+- ✅ Phase 7: Include handling & plan hierarchy (8 tests)
+- ✅ Phase 8: Metadata tracking with TODO completion detection (13 tests)
+- ⏳ Phase 9-12: Validation, end-to-end testing, QoS, recursive conversion (not yet started)
 - See `book/src/launch2plan.md` for complete design and progress tracking
 
 ## Core Architecture
@@ -82,6 +84,9 @@ The project consists of both Rust (core compiler and runtime) and Python (launch
   - Conditional branch exploration with `when` clauses
   - Automatic link generation from topic connections
   - Argument type inference from default values
+  - Include handling with cycle detection and argument forwarding
+  - Metadata tracking with TODO completion detection (JSONPath addressing)
+  - CLI commands: `convert` (generates plan + metadata), `status` (shows TODO progress)
 
 ### External Dependencies (Git Submodules)
 
@@ -226,9 +231,9 @@ cd python/launch2plan && uv run pytest
 - Compatible with standard ROS 2 launch files via launch2dump
 
 ### Testing
-- 432 total tests (330 Rust + 102 Python)
+- 440 total tests (330 Rust + 110 Python)
   - Rust: 330 tests (format, compiler, runtime, CLI, ros-utils)
-  - Python: 25 launch2dump + 9 ros2-introspect + 68 launch2plan
+  - Python: 25 launch2dump + 9 ros2-introspect + 85 launch2plan (4 skipped - require rmw_introspect_cpp)
 - Uses cargo-nextest for parallel Rust test execution
 - Python tests require ROS 2 and workspace sourced (Makefile handles this)
 - All Rust tests run with `release-with-debug` profile for speed
@@ -251,7 +256,7 @@ Comprehensive documentation in `book/src/`:
 - `runtime_user_guide.md` - Runtime system usage
 - `runtime_architecture.md` - Internal design
 - `runtime_config.md` - Configuration reference
-- `launch2plan.md` - Launch-to-plan conversion design (Phase 12, not yet implemented)
+- `launch2plan.md` - Launch-to-plan conversion design (Phase 12, phases 1-8 complete)
 
 ## Development Workflow
 
@@ -260,7 +265,7 @@ Comprehensive documentation in `book/src/`:
 3. **After changes**: Always run `make test` to verify all tests pass
 4. **Before committing**: Ensure `make lint && make test` passes completely
 5. **Phase 12 implementation**: Currently implementing launch2plan incrementally
-   - Phases 1-6 complete (foundation through conditional exploration)
+   - Phases 1-8 complete (foundation through metadata tracking)
    - See `book/src/launch2plan.md` for design and progress tracking
    - Follow incremental phase-by-phase approach as documented
 
@@ -274,15 +279,24 @@ Comprehensive documentation in `book/src/`:
 - This affects all Python test commands that require ROS 2 environment
 
 ### Phase 12 (launch2plan) Recent Completions
+- **Phase 8**: Metadata tracking complete (13 tests)
+  - Created `metadata.py` with data structures (TodoItem, ConversionMetadata, ConversionStats, TodoContext, etc.)
+  - Modified `builder.py` to collect TODOs during plan generation with rich context
+  - Implemented metadata persistence with save/load to JSON (`.plan.meta.json` files)
+  - Created `PlanParser` for YAML parsing and TODO discovery with JSONPath addressing
+  - Implemented `TodoStatusUpdater` for detecting user-completed TODOs
+  - Added `statistics.py` for conversion statistics calculation
+  - Integrated metadata into `convert` CLI command with SHA256 staleness detection
+  - Added `status` subcommand to display TODO completion progress
+  - See `metadata.py`, `statistics.py`, and `__main__.py:handle_status()` for implementation
+- **Phase 7**: Include handling complete (8 tests)
+  - Recursive include processing with cycle detection
+  - Argument forwarding with type inference
+  - Conditional includes with `when` clauses
 - **Phase 6**: Conditional branch exploration complete (18 tests)
   - Handles IfCondition and UnlessCondition with proper subclass checking
   - Converts conditions to Lua expressions for `when` clauses
   - Supports nested conditions with "and" operator
-  - See `visitor.py:extract_condition_expression()` for implementation
-- **Dependency Management**: Added proactive dependency checking
-  - `check_rmw_introspect_available()` validates environment before introspection
-  - Clear error messages guide users to fix missing dependencies
-  - Logs failures with helpful diagnostics
 
 ## Common Patterns
 
