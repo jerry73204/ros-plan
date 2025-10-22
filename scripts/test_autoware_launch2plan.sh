@@ -51,11 +51,10 @@ fi
 
 (cd "$REPO_ROOT/python/launch2plan" && uv run launch2plan convert \
     "$LAUNCH_FILE" \
-    -o "$OUTPUT_FILE" \
-    -- \
     map_path:="$MAP_PATH" \
     vehicle_model:=sample_vehicle \
-    sensor_model:=sample_sensor_kit)
+    sensor_model:=sample_sensor_kit \
+    -o "$OUTPUT_FILE")
 
 echo ""
 echo "=== Conversion Complete ==="
