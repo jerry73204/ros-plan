@@ -3,7 +3,7 @@
 # Test launch2dump with Autoware Planning Simulator
 #
 # Prerequisites:
-# - Autoware installed and sourced
+# - Autoware symlink configured: scripts/autoware -> /path/to/autoware/workspace
 # - Autoware sample maps downloaded to ~/autoware_map/sample-map-planning
 
 set -e
@@ -11,12 +11,16 @@ set -e
 # Determine script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+AUTOWARE_WS="$SCRIPT_DIR/autoware"
 
-# Check environment
-if [ -z "$AMENT_PREFIX_PATH" ]; then
-    echo "Error: ROS 2 environment not sourced" >&2
+# Check if Autoware symlink exists
+if [ ! -L "$AUTOWARE_WS" ]; then
+    echo "Error: Autoware symlink not configured"
+    echo "Please create symlink: ln -s /path/to/autoware/workspace scripts/autoware"
     exit 1
 fi
+
+source "$AUTOWARE_WS/install/setup.bash"
 
 # Configuration
 MAP_PATH="${HOME}/autoware_map/sample-map-planning"
