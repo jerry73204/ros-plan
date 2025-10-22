@@ -165,7 +165,13 @@ class MetadataManager:
 
     def save_metadata(self, metadata: ConversionMetadata, plan_path: Path):
         """Save metadata as JSON alongside plan file."""
-        meta_path = plan_path.with_suffix(".plan.meta.json")
+        # Handle both .yaml and .plan.yaml extensions
+        if plan_path.suffix == ".yaml" and plan_path.stem.endswith(".plan"):
+            # e.g., foo.plan.yaml -> foo.plan.meta.json
+            meta_path = plan_path.with_suffix(".meta.json")
+        else:
+            # e.g., foo.yaml -> foo.plan.meta.json
+            meta_path = plan_path.with_suffix(".plan.meta.json")
 
         # Convert dataclasses to dict
         data = asdict(metadata)
@@ -178,7 +184,13 @@ class MetadataManager:
 
     def load_metadata(self, plan_path: Path) -> Optional[ConversionMetadata]:
         """Load metadata from JSON file."""
-        meta_path = plan_path.with_suffix(".plan.meta.json")
+        # Handle both .yaml and .plan.yaml extensions
+        if plan_path.suffix == ".yaml" and plan_path.stem.endswith(".plan"):
+            # e.g., foo.plan.yaml -> foo.plan.meta.json
+            meta_path = plan_path.with_suffix(".meta.json")
+        else:
+            # e.g., foo.yaml -> foo.plan.meta.json
+            meta_path = plan_path.with_suffix(".plan.meta.json")
 
         if not meta_path.exists():
             logging.debug(f"Metadata file not found: {meta_path}")

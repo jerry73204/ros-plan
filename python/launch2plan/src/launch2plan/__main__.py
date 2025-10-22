@@ -7,6 +7,7 @@ import hashlib
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Dict, List
 
 from .builder import PlanBuilder
 from .converter import convert_launch_file
@@ -23,6 +24,31 @@ from .metadata import (
 from .statistics import calculate_stats
 
 
+def parse_launch_arguments(arg_list: List[str]) -> Dict[str, str]:
+    """
+    Parse launch arguments from list of 'key:=value' strings.
+
+    Args:
+        arg_list: List of argument strings
+
+    Returns:
+        Dictionary of launch arguments
+    """
+    arguments = {}
+    if not arg_list:
+        return arguments
+
+    for arg in arg_list:
+        if ":=" not in arg:
+            print(f"Error: Invalid argument format '{arg}'. Expected 'key:=value'")
+            sys.exit(1)
+
+        key, value = arg.split(":=", 1)
+        arguments[key] = value
+
+    return arguments
+
+
 def main() -> int:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -35,6 +61,11 @@ def main() -> int:
     # convert command
     convert_parser = subparsers.add_parser("convert", help="Convert launch file to plan")
     convert_parser.add_argument("launch_file", help="Path to launch file")
+    convert_parser.add_argument(
+        "launch_args",
+        nargs="*",
+        help="Launch arguments in key:=value format",
+    )
     convert_parser.add_argument(
         "-o", "--output", help="Output plan file (default: <input>.plan.yaml)"
     )
@@ -85,13 +116,18 @@ def handle_convert(args) -> int:
     else:
         output_file = launch_file.with_suffix(".plan.yaml")
 
+    # Parse launch arguments
+    launch_arguments = parse_launch_arguments(args.launch_args)
+
     print(f"Converting: {launch_file}")
+    if launch_arguments:
+        print(f"Arguments: {launch_arguments}")
     print(f"Output: {output_file}")
     print()
 
     try:
         # Phase 1: Discover nodes and includes
-        result = convert_launch_file(launch_file)
+        result = convert_launch_file(launch_file, launch_arguments=launch_arguments)
 
         print(f"✓ Discovered {len(result.nodes)} nodes")
         print(f"✓ Discovered {len(result.includes)} includes")
@@ -168,7 +204,13 @@ def handle_convert(args) -> int:
         # Save metadata
         manager = MetadataManager()
         manager.save_metadata(metadata, output_file)
-        print(f"✓ Generated metadata: {output_file.with_suffix('.plan.meta.json')}")
+
+        # Determine metadata path for display (same logic as MetadataManager)
+        if output_file.suffix == ".yaml" and output_file.stem.endswith(".plan"):
+            meta_path = output_file.with_suffix(".meta.json")
+        else:
+            meta_path = output_file.with_suffix(".plan.meta.json")
+        print(f"✓ Generated metadata: {meta_path}")
         print()
 
         # Display TODO summary
