@@ -505,8 +505,28 @@ def visit_include_launch_description(
 
         try:
             # Load and execute the included launch description
-            # This will recursively discover nodes and includes
-            return include.execute(context)
+            # This returns the entities from the included file
+            returned_entities = include.execute(context)
+
+            # Recursively visit the returned entities
+            if returned_entities:
+                from launch import LaunchDescription
+
+                for entity in returned_entities:
+                    # If it's a LaunchDescription, visit its entities
+                    if isinstance(entity, LaunchDescription):
+                        for action in entity.entities:
+                            child_entities = visit_action(action, context, session)
+                            # Recursively visit children returned from actions like GroupAction
+                            if child_entities:
+                                for child in child_entities:
+                                    if hasattr(child, 'condition'):
+                                        visit_action(child, context, session)
+                    # If it's an Action, visit it directly
+                    elif hasattr(entity, 'condition'):
+                        visit_action(entity, context, session)
+
+            return returned_entities
         finally:
             # Pop from stack when done
             session.include_stack.pop()
