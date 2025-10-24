@@ -37,9 +37,100 @@ The tool uses a **multi-pass workflow** where it generates skeleton plans with T
 
 1. **No depth limits** - Handle arbitrarily complex nested conditionals and includes
 2. **Multi-pass workflow** - Iterative refinement with user input
-3. **Preserve structure** - Generate plan includes matching launch includes
+3. **Preserve structure** - Generate plan includes matching launch includes (Phase 13: modular plan generation)
 4. **Always validate** - Compile after generation to catch errors early
 5. **TODO-driven** - Leave clear markers for manual completion with helpful hints
+
+## Graph Equivalence Analysis
+
+### Current Implementation: Single Plan File with Inlining
+
+**Status as of Phase 8 (Completed):**
+
+The current implementation generates **one monolithic plan file** per `launch2plan convert` invocation:
+
+```
+launch2plan convert robot.launch.py
+# Generates: robot.plan.yaml (single file with all content)
+```
+
+**How it works:**
+- `convert_launch_file()` creates a single `BranchExplorerSession`
+- All nodes from ALL visited launch files are collected into this one session
+- Returns a single `ConversionResult` containing all discovered entities
+- `PlanBuilder.build_plan()` generates one unified plan YAML file
+- Include relationships are recorded as `IncludeMetadata` but content is inlined
+
+### Launch Graph vs. Current Plan Structure
+
+**Launch File Structure (Hierarchical):**
+```
+planning_simulator.launch.xml
+├── includes: common_sensors.launch.xml (args: vehicle=truck)
+│   ├── node: camera
+│   └── node: lidar
+└── includes: common_sensors.launch.xml (args: vehicle=car)
+    ├── node: camera  (different params!)
+    └── node: lidar   (different params!)
+```
+
+**Current Plan Output (Flat):**
+```yaml
+# Single planning_simulator.plan.yaml file
+node:
+  camera_1: { ... }    # From first include
+  lidar_1: { ... }
+  camera_2: { ... }    # From second include (merged/duplicated)
+  lidar_2: { ... }
+# No separate common_sensors.plan.yaml files
+# No modular structure preserving launch hierarchy
+```
+
+### Problem: Multiple Inclusion with Different Arguments
+
+**Current Behavior in `visitor.py:234-244`:**
+```python
+# Check for cycles (prevents A→B→A)
+if session.check_cycle(file_path):
+    return None
+
+# Mark as visited (prevents processing same path twice)
+if file_path in session.visited_files:
+    return None
+session.visited_files.add(file_path)
+```
+
+**Issue:** The `visited_files` check means:
+- First inclusion: File is visited and content is inlined
+- Second inclusion (same file, different args): **SKIPPED entirely** ❌
+- No way to represent "include X with args Y" separately from "include X with args Z"
+
+### Why Graph Equivalence is NOT Achieved
+
+**Fundamental problems with current architecture:**
+
+1. **No Separate Output Files**: Only one plan file is generated, not one per launch file
+2. **Content Inlining**: Included files' content is merged rather than referenced
+3. **Deduplication Prevents Multi-Inclusion**: Same file can only be processed once
+4. **No Argument-Aware Instantiation**: Can't represent "same file + different args = different instance"
+
+**Graph equivalence requires:**
+- Each launch file → Separate plan file
+- Include relationships → Plan include references (not inlining)
+- Same file + different args → Different plan instances
+- Same file + same args → Reference same plan instance
+
+### Solution: Phase 13 - Modular Plan Generation
+
+To achieve graph equivalence, Phase 13 will implement:
+
+1. **Multi-file output**: Generate one plan file per visited launch file
+2. **Include references**: Use ROS-Plan's `include` feature instead of inlining
+3. **Argument-based instantiation**: Same file + different args = different plan file
+4. **Deduplication**: Same file + same args = reuse same plan file
+5. **Relative path resolution**: Ensure include paths work correctly
+
+See Phase 13 implementation plan below for detailed design and work items.
 
 ### Workflow Stages
 
@@ -1166,6 +1257,202 @@ Generated executable plan with 2 nodes
 
 ---
 
+### Phase 13: Modular Plan Generation (NOT STARTED)
+
+**Goal**: Achieve graph equivalence between launch tree and plan structure
+
+**Status**: Design complete, implementation not yet started
+
+**Problem Statement**:
+
+Current implementation (Phases 1-8) generates a single monolithic plan file with all included content inlined. This does NOT achieve graph equivalence with the launch file structure, where each launch file is a separate modular entity with include relationships.
+
+**Architecture Changes**:
+
+Transform from:
+```
+launch2plan convert robot.launch.py
+→ robot.plan.yaml (single file, all content inlined)
+```
+
+To:
+```
+launch2plan convert robot.launch.py
+→ robot.plan.yaml (parent file with include references)
+→ sensor.plan.yaml (separate file for sensor.launch.py)
+→ sensor__vehicle_truck.plan.yaml (same file, different args)
+→ common.plan.yaml (shared dependency)
+```
+
+**Micro-Steps**:
+
+1. **F73: Multi-File Output Infrastructure** (6 hours)
+   - Modify `convert_launch_file()` to track per-file conversion results
+   - Create `MultiFileConversionResult` dataclass to store mappings
+   - Implement `FileRegistry` to track (file_path, args) → output_plan_path
+   - Update `BranchExplorerSession` to maintain per-file context
+   - Return dict mapping launch files to their plan files
+
+2. **F74: Include References (Not Inlining)** (5 hours)
+   - Modify `visit_include_launch_description()` to NOT inline content
+   - Instead, recursively convert included file and get its plan path
+   - Update `builder.py` to reference external plan files in include section
+   - Use ROS-Plan's `include` directive with `file:` parameter
+   - Ensure relative paths work correctly from parent plan directory
+
+3. **F75: Argument-Based Instantiation** (8 hours)
+   - Implement (file_path, sorted_args) tuple as instance identifier
+   - Create `generate_instance_filename()` function with arg hashing
+   - Example: `sensor.launch.py` + `{vehicle: truck}` → `sensor__vehicle_truck.plan.yaml`
+   - Remove `visited_files` check that prevents multiple inclusions
+   - Replace with `visited_instances` dict tracking (file, args) tuples
+   - Allow same file to be converted multiple times with different arguments
+
+4. **F76: Deduplication by Arguments** (4 hours)
+   - Check if (file_path, args) instance already converted
+   - Reuse existing plan file if exact match found
+   - Update include reference to point to existing plan file
+   - Track instance dependencies for topological ordering
+   - Handle circular dependencies (error reporting)
+
+5. **F77: Output Directory Management** (3 hours)
+   - Create output directory structure for multi-file plans
+   - Example: `robot.plan/` directory containing all generated plans
+   - Update metadata to track all generated files
+   - Implement relative path resolution between plan files
+   - Add `--output-dir` CLI option
+
+**Testing Strategy**:
+
+Each micro-step includes unit tests:
+
+**Test Fixtures**:
+
+1. **Simple Multi-File Test** (`test_multifile_simple.py`)
+   ```python
+   # parent.launch.py
+   IncludeLaunchDescription('child.launch.py')
+
+   # Expected output:
+   # parent.plan.yaml → includes child.plan.yaml
+   # child.plan.yaml → contains child's nodes
+   ```
+
+2. **Multiple Inclusion Test** (`test_multifile_multiple_inclusion.py`)
+   ```python
+   # parent.launch.py
+   IncludeLaunchDescription('common.launch.py', args={'mode': 'a'})
+   IncludeLaunchDescription('common.launch.py', args={'mode': 'b'})
+
+   # Expected output:
+   # parent.plan.yaml → includes common__mode_a.plan.yaml and common__mode_b.plan.yaml
+   # common__mode_a.plan.yaml → nodes with mode=a
+   # common__mode_b.plan.yaml → nodes with mode=b
+   ```
+
+3. **Nested Includes Test** (`test_multifile_nested.py`)
+   ```python
+   # top.launch.py → includes middle.launch.py → includes bottom.launch.py
+
+   # Expected output:
+   # top.plan.yaml → includes middle.plan.yaml
+   # middle.plan.yaml → includes bottom.plan.yaml
+   # bottom.plan.yaml → contains bottom's nodes
+   ```
+
+4. **Conditional Includes Test** (`test_multifile_conditional.py`)
+   ```python
+   # parent.launch.py
+   IncludeLaunchDescription('optional.launch.py', condition=IfCondition(...))
+
+   # Expected output:
+   # parent.plan.yaml → includes optional.plan.yaml with when clause
+   # optional.plan.yaml → contains conditional nodes
+   ```
+
+5. **Diamond Dependency Test** (`test_multifile_diamond.py`)
+   ```python
+   # top.launch.py
+   IncludeLaunchDescription('left.launch.py')
+   IncludeLaunchDescription('right.launch.py')
+
+   # left.launch.py and right.launch.py both include:
+   IncludeLaunchDescription('shared.launch.py')
+
+   # Expected output:
+   # top.plan.yaml → includes left.plan.yaml, right.plan.yaml
+   # left.plan.yaml → includes shared.plan.yaml
+   # right.plan.yaml → includes shared.plan.yaml (same instance!)
+   # shared.plan.yaml → generated once, referenced twice
+   ```
+
+**Test Counts**:
+- F73: 5 tests (registry, per-file context, result mapping)
+- F74: 6 tests (include references, path resolution, no inlining)
+- F75: 8 tests (instance naming, arg hashing, multiple inclusions)
+- F76: 5 tests (deduplication, reuse detection, dependency tracking)
+- F77: 4 tests (directory creation, relative paths, metadata updates)
+- Integration tests: 5 tests (simple, multiple, nested, conditional, diamond)
+
+**Total: ~33 new tests**
+
+**Deliverable**: Modular plan generation with graph equivalence to launch file structure
+
+**Design Decisions**:
+
+1. **Instance Identifier: (file_path, sorted_args) Tuple**
+   - Uniquely identifies each plan instance
+   - Same file + same args → same plan instance
+   - Same file + different args → different plan instances
+   - Args are sorted for deterministic hashing
+
+2. **Filename Generation Strategy**
+   - Base case: `sensor.launch.py` → `sensor.plan.yaml`
+   - With args: `sensor.launch.py` + `{vehicle: truck}` → `sensor__vehicle_truck.plan.yaml`
+   - Hash long arg strings to avoid filesystem limits
+   - Preserve readability for common cases
+
+3. **Include Path Resolution**
+   - Use relative paths between plan files
+   - Example: `robot.plan.yaml` includes `./sensors/camera.plan.yaml`
+   - Ensures portability of plan directory
+   - Absolute paths only if crossing filesystem boundaries
+
+4. **Deduplication Algorithm**
+   ```python
+   def get_or_create_plan_instance(file_path, args):
+       instance_key = (file_path, frozenset(args.items()))
+
+       if instance_key in instance_registry:
+           return instance_registry[instance_key]
+
+       # Convert and generate new plan
+       plan_path = convert_to_plan(file_path, args)
+       instance_registry[instance_key] = plan_path
+       return plan_path
+   ```
+
+5. **Metadata for Multi-File Conversions**
+   - Extend `ConversionMetadata` with `generated_files: List[str]`
+   - Track all plan files generated from root launch file
+   - Include dependency graph for debugging
+   - Store instance registry for reproducibility
+
+**Breaking Changes**:
+
+- CLI behavior changes: `convert` now generates directory instead of single file
+- `--output` flag now specifies directory, not file
+- Backward compatibility: Add `--single-file` flag to preserve old behavior
+
+**Migration Path**:
+
+1. Implement F73-F77 with feature flag `--modular-output`
+2. Test thoroughly with Autoware and other large projects
+3. Make modular output the default in next major version
+4. Deprecate single-file output with warning
+
+---
+
 ## Phase 8: Metadata Structure Design
 
 ### Design Principle: Explicit Tracking, No Guessing
@@ -1698,22 +1985,24 @@ The system discovers TODOs by scanning the plan YAML structure:
 
 ### Current Limitations
 
-1. **Dynamic Behavior**: Cannot analyze `OpaqueFunction` or runtime-evaluated code (will generate TODO markers)
-2. **Introspection Failures**: Nodes that cannot be introspected require manual TODO completion
-3. **Complex Conditions**: Some Python expressions may not convert cleanly to Lua (will be marked as TODO)
-4. **Custom Packages**: Nodes from packages not available in the environment require manual specification
-5. **No Heuristics**: Tool will not guess - unknown information becomes explicit TODO markers for user completion
+1. **Single-File Output** (Phases 1-8): Current implementation generates one monolithic plan file with all included content inlined. This does NOT preserve the modular structure of launch files. Phase 13 (Modular Plan Generation) will address this limitation.
+2. **Dynamic Behavior**: Cannot analyze `OpaqueFunction` or runtime-evaluated code (will generate TODO markers)
+3. **Introspection Failures**: Nodes that cannot be introspected require manual TODO completion
+4. **Complex Conditions**: Some Python expressions may not convert cleanly to Lua (will be marked as TODO)
+5. **Custom Packages**: Nodes from packages not available in the environment require manual specification
+6. **No Heuristics**: Tool will not guess - unknown information becomes explicit TODO markers for user completion
 
 ### Future Enhancements
 
-1. **XML/YAML Launch Support**: Extend beyond Python launch files
-2. **Interactive Mode**: Guide user through TODO completion with prompts
-3. **Template Library**: Pre-built patterns for common ROS packages (nav2, moveit2)
-4. **Diff Visualization**: Web UI for viewing changes between passes
-5. **Batch Conversion**: Convert entire workspace of launch files at once
-6. **QoS Profile Preservation**: Extract and preserve QoS settings from introspection
-7. **Composition Support**: Handle component container nodes
-8. **Lifecycle Node Handling**: Proper support for managed nodes
+1. **Modular Plan Generation** (Phase 13): Generate separate plan files for each launch file with include references instead of inlining. Achieve graph equivalence between launch tree and plan structure. Detailed design documented above.
+2. **XML/YAML Launch Support**: Extend beyond Python launch files
+3. **Interactive Mode**: Guide user through TODO completion with prompts
+4. **Template Library**: Pre-built patterns for common ROS packages (nav2, moveit2)
+5. **Diff Visualization**: Web UI for viewing changes between passes
+6. **Batch Conversion**: Convert entire workspace of launch files at once
+7. **QoS Profile Preservation**: Extract and preserve QoS settings from introspection
+8. **Composition Support**: Handle component container nodes
+9. **Lifecycle Node Handling**: Proper support for managed nodes
 
 ## References
 
