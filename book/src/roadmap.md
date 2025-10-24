@@ -5,7 +5,9 @@
 **Status:** All 4 core phases (Phases 1-4) plus Phases 6-11 are complete. The ROS-Plan compiler and runtime system with comprehensive documentation are production-ready.
 
 **Key Achievements:**
-- ✅ **330 tests passing** (73 compiler + 163 format + 47 runtime + 18 CLI + 36 ros-utils)
+- ✅ **432 tests passing** (330 Rust + 102 Python)
+  - Rust: 73 compiler + 163 format + 47 runtime + 18 CLI + 36 ros-utils
+  - Python: 25 launch2dump + 9 ros2-introspect + 68 launch2plan
 - ✅ **Zero warnings** (clippy + compiler)
 - ✅ **54/70+ features implemented** (Core + Launch + Runtime + Updates + Tracking + Status + Testing + Docs)
 - ✅ **Comprehensive test coverage** across all subsystems
@@ -17,6 +19,7 @@
 - ✅ **Status reporting** with table and JSON output formats
 - ✅ **Event logging** with circular buffer and filtering
 - ✅ **Metrics collection** tracking starts, stops, crashes, and restarts
+- ✅ **launch2plan** - 8/13 phases complete (85 tests passing)
 
 **What Works:**
 - Node socket references and linking
@@ -66,7 +69,7 @@ This page tracks the implementation status of the node/link connection design fe
 - **Phase 9** (Launch File Reload): ✅ 100% - 4/4 features complete (F50-F53)
 - **Phase 10** (Control Interface & Status): ✅ 100% - 4/4 features complete (F54-F57)
 - **Phase 11** (Testing & Documentation): ✅ 100% - 3/3 features complete (F58-F60)
-- **Phase 12** (Launch-to-Plan Conversion): ❌ 0% - 0/5 features (F61-F65) - Future
+- **Phase 12** (Launch-to-Plan Conversion): ✅ 62% - 8/13 phases complete (Phases 1-8 ✅; Phases 9-13 🔴)
 - **Phase 13** (Advanced Features): ❌ 0% - 0/5+ features (F66+) - Future
 
 **Feature Categories:**
@@ -90,7 +93,10 @@ This page tracks the implementation status of the node/link connection design fe
 - Launch-to-Plan Conversion (Phase 12): 0/5 complete (future work)
 - Advanced Features (Phase 13): 0/5+ complete (future work)
 
-**Test Coverage:** 330 tests passing (73 compiler, 163 format, 47 runtime, 18 CLI, 36 ros-utils)
+**Test Coverage:**
+- **Rust**: 330 tests (73 compiler, 163 format, 47 runtime, 18 CLI, 36 ros-utils)
+- **Python**: 102 tests (25 launch2dump, 9 ros2-introspect, 68 launch2plan)
+- **Total**: 432 tests passing (330 Rust + 102 Python)
 
 ---
 
@@ -1770,28 +1776,460 @@ Phase 6 integrates Python-based ROS 2 launch file loading directly into the ros-
 
 ## Phase 12: Launch-to-Plan Conversion Tool (launch2plan)
 
-**Timeline**: TBD
-**Status**: 🔴 Not Started (Future Work)
-**Dependencies**: Phase 11 complete (optional)
+**Timeline**: Phases 1-8 complete (85 tests passing), Phases 9-13 future work
+**Status**: 🟢 Phases 1-8 Complete | 🔴 Phases 9-13 Not Started
+**Dependencies**: Phase 6 (Launch Integration) complete
 
 **Goal**: Create a tool to convert ROS 2 launch files to ROS-Plan format, enabling migration from traditional launch files.
 
-**Overview**: This phase is deferred as future work. The launch2plan tool would explore all conditional branches in launch files and generate complete plan files with appropriate `when` clauses.
+**Overview**: launch2plan explores all conditional branches in launch files and generates complete plan files with `when` clauses. Uses RMW introspection for accurate socket inference, generates TODO markers for unknowns, and tracks conversion metadata.
 
-### F61: Branch-Exploring Launch Visitor
-**Description**: Modified launch visitor that explores all conditional branches instead of evaluating them.
+**Current Status**:
+- ✅ **Phase 1-8**: 85 tests passing (8 phases complete)
+- 🔴 **Phase 9-13**: Future work (validation, end-to-end testing, QoS handling, pattern learning, modular plan generation)
 
-### F62: Socket and Link Inference
-**Description**: Infer socket declarations from node remappings and determine socket directions using heuristics.
+**Test Coverage**: 85 tests (3 + 5 + 6 + 10 + 26 + 18 + 8 + 13)
 
-### F63: Plan Builder
-**Description**: Construct complete plan YAML from explored launch structure.
+---
 
-### F64: CLI Tool
-**Description**: Command-line tool for converting launch files: `launch2plan convert input.launch.py output.yaml`
+### Phase 1: Foundation & Basic Visitor ✅ COMPLETE
 
-### F65: Testing and Examples
-**Description**: Comprehensive tests and examples for launch-to-plan conversion.
+**Goal**: Set up project structure and basic launch file visiting
+
+**Status**: ✅ Complete (3/3 tests passing)
+
+**Implementation**:
+- ✅ Created `launch2plan` package structure in `python/launch2plan`
+- ✅ Set up pyproject.toml with dependencies (ros2-introspect)
+- ✅ Created CLI with `convert` command
+- ✅ Implemented branch-exploring visitor (explores ALL branches, not just true)
+- ✅ Extract node metadata (package, executable, name, namespace, remappings)
+- ✅ Track condition expressions for `when` clause generation
+- ✅ Detect includes (basic - no recursion yet)
+
+**Test Cases** (3/3 passing):
+- ✅ `test_visitor.py::test_visit_simple_node` - Single node discovery
+- ✅ `test_visitor.py::test_visit_multiple_nodes` - Multiple nodes with remappings
+- ✅ `test_cli.py::test_convert_command` - Basic CLI invocation
+
+**Deliverable**: ✅ Can visit a simple launch file and list discovered nodes
+
+---
+
+### Phase 2: RMW Introspection Integration ✅ COMPLETE
+
+**Goal**: Integrate ros2-introspect for accurate socket inference
+
+**Status**: ✅ Complete (5/5 tests passing)
+
+**Implementation**:
+- ✅ Created `introspection.py` module
+- ✅ Implemented `IntrospectionService` class with caching
+- ✅ Added `get_socket_info()` method for topic resolution
+- ✅ Added `get_all_topics()` method for full node interface query
+- ✅ Graceful handling of introspection failures (returns None)
+- ✅ Cache introspection results per package::executable
+
+**Test Cases** (5/5 passing):
+- ✅ `test_introspection.py::test_introspect_demo_nodes` - Demo nodes (talker/listener)
+- ✅ `test_introspection.py::test_introspection_cache` - Caching behavior
+- ✅ `test_introspection.py::test_introspection_fallback` - Handle failures
+- ✅ `test_introspection.py::test_socket_direction_resolution` - Pub/sub detection
+- ✅ `test_introspection.py::test_message_type_resolution` - Type extraction
+
+**Deliverable**: ✅ Can introspect nodes and determine socket directions + message types
+
+---
+
+### Phase 3: Socket Inference & TODO Generation ✅ COMPLETE
+
+**Goal**: Integrate introspection with node conversion, generate TODO markers for unknowns
+
+**Status**: ✅ Complete (6/6 tests passing)
+
+**Implementation**:
+- ✅ Created `inference.py` module with `SocketInferenceEngine` class
+- ✅ Implemented `infer_sockets_for_node()` with introspection integration
+- ✅ Added topic name normalization (handles with/without leading slash)
+- ✅ Generate TODO markers when introspection fails completely
+- ✅ Generate TODO markers when socket not found in introspection results
+- ✅ Add helpful comments to TODO markers (package::executable, remapping info, suggestions)
+- ✅ Support batch inference with `infer_sockets_for_nodes()` helper
+
+**Test Cases** (6/6 passing):
+- ✅ `test_inference.py::test_resolve_from_introspection` - Successful resolution
+- ✅ `test_inference.py::test_introspection_not_available` - Generate TODO when introspection fails
+- ✅ `test_inference.py::test_socket_not_found_in_introspection` - Generate TODO when socket not found
+- ✅ `test_inference.py::test_todo_comment_generation` - Helpful TODO comments
+- ✅ `test_inference.py::test_topic_name_matching` - Topic name normalization
+- ✅ `test_inference.py::test_infer_sockets_for_multiple_nodes` - Batch inference
+
+**Deliverable**: ✅ Node conversion with introspection-based inference or explicit TODOs
+
+---
+
+### Phase 4: Plan Builder & Link Generation ✅ COMPLETE
+
+**Goal**: Generate complete ROS-Plan YAML with sockets and links
+
+**Status**: ✅ Complete (10/10 tests passing)
+
+**Implementation**:
+- ✅ Created `builder.py` module with `PlanBuilder` class
+- ✅ Implemented `build_plan()` to generate complete plan from nodes and sockets
+- ✅ Generate node sections with pkg, exec, namespace, parameters, sockets
+- ✅ Used ruamel.yaml for YAML formatting and preservation
+- ✅ Infer links by grouping remappings by resolved topic name
+- ✅ Generate link sections with message types from introspection
+- ✅ Support TODO markers in links when message type unknown
+- ✅ Handle multiple publishers and subscribers per link
+- ✅ Support conditional nodes with `when` clauses
+- ✅ Write complete plan YAML with proper formatting
+
+**Test Cases** (10/10 passing):
+- ✅ `test_builder.py::test_build_node_section` - Node YAML generation
+- ✅ `test_builder.py::test_build_socket_section` - Socket with directions and TODO markers
+- ✅ `test_builder.py::test_infer_links_from_remappings` - Link discovery from remappings
+- ✅ `test_builder.py::test_generate_link_section` - Link YAML with types
+- ✅ `test_builder.py::test_full_plan_generation` - Complete plan output
+- ✅ `test_builder.py::test_plan_with_todo_sockets` - TODO socket handling
+- ✅ `test_builder.py::test_link_with_todo_message_type` - TODO message type in links
+- ✅ `test_builder.py::test_multiple_publishers_and_subscribers` - Multi-endpoint links
+- ✅ `test_builder.py::test_conditional_node` - Node with when clause
+- ✅ `test_builder.py::test_plan_to_yaml_string` - YAML string conversion
+
+**Deliverable**: ✅ Generate valid, compilable plan YAML files with sockets and links
+
+---
+
+### Phase 5: Argument & Parameter Conversion ✅ COMPLETE
+
+**Goal**: Convert launch arguments and parameters to plan format
+
+**Status**: ✅ Complete (26/26 tests passing)
+
+**Implementation**:
+- ✅ Extended `visitor.py` to capture `DeclareLaunchArgument` actions
+- ✅ Added `LaunchArgumentMetadata` dataclass with name, default_value, description
+- ✅ Created `arg_inference.py` module for type inference from default values
+- ✅ Infer types: bool (true/false), i64 (integers), f64 (floats), str (strings), todo (no default)
+- ✅ Extended `builder.py` with `_build_arg_section()` method
+- ✅ Generate arg section with proper type tags (!bool, !i64, !f64, !str, !todo)
+- ✅ Implemented `_convert_launch_configurations()` to handle LaunchConfiguration substitutions
+- ✅ Recursive conversion for nested parameter dictionaries
+- ✅ Support LaunchConfiguration in lists and nested structures
+- ✅ Convert LaunchConfiguration references to $(arg_name) syntax
+
+**Test Cases** (26/26 passing):
+- ✅ 17 arg_inference tests (bool, int, float, string, edge cases)
+- ✅ 9 builder tests (arg section generation, LaunchConfiguration substitution)
+
+**Deliverable**: ✅ Complete argument and parameter handling with type inference and substitution
+
+---
+
+### Phase 6: Conditional Branch Exploration ✅ COMPLETE
+
+**Goal**: Handle conditional nodes and generate `when` clauses
+
+**Status**: ✅ Complete (18/18 tests passing)
+
+**Implementation**:
+- ✅ Enhanced `extract_condition_expression()` function with robust condition handling
+- ✅ Check UnlessCondition before IfCondition (subclass relationship)
+- ✅ Extract predicate from name-mangled attribute `_IfCondition__predicate_expression`
+- ✅ Handle LaunchConfiguration substitutions → `$(var_name)`
+- ✅ Handle UnlessCondition with negation → `$(not var_name)`
+- ✅ Support TextSubstitution for literal values ("true", "false", "1", "0")
+- ✅ Case-insensitive boolean text handling
+- ✅ Multiple substitutions with Lua concatenation (..)
+- ✅ Nested condition tracking with condition_stack
+- ✅ Compound expressions with "and" operator for nested conditions
+
+**Test Cases** (18/18 passing):
+- ✅ IfCondition and UnlessCondition with LaunchConfiguration
+- ✅ Literal text values (true/false, 1/0, custom)
+- ✅ None condition handling
+- ✅ Single and nested condition stacks
+- ✅ Mixed If/Unless conditions
+- ✅ Case-insensitive boolean text
+
+**Deliverable**: ✅ Complete support for conditional nodes with `when` clauses
+
+---
+
+### Phase 7: Include Handling & Plan Hierarchy ✅ COMPLETE
+
+**Goal**: Preserve launch file structure with plan includes
+
+**Status**: ✅ Complete (8/8 tests passing)
+
+**Implementation**:
+- ✅ Enhanced `visit_include_launch_description()` to recursively process includes
+- ✅ Implemented proper include path resolution using `_LaunchDescriptionSource__location` attribute
+- ✅ Added cycle detection using include_stack (prevents infinite recursion)
+- ✅ Extended `builder.py` with `_build_include_section()` method
+- ✅ Generate include sections with file reference and argument forwarding
+- ✅ Infer argument types for included files (!bool, !i64, !f64, !str)
+- ✅ Support conditional includes with `when` clauses
+- ✅ Handle duplicate include names with numeric suffixes
+- ✅ Remove ".launch" suffix from file stems for cleaner include names
+
+**Test Cases** (8/8 passing):
+- ✅ Include detection with path resolution
+- ✅ Argument capture and type inference
+- ✅ LaunchConfiguration substitution in arguments
+- ✅ Simple and nested cycle prevention
+- ✅ Include section YAML generation
+- ✅ Duplicate name handling
+
+**Deliverable**: ✅ Full support for launch file includes with plan includes, argument forwarding, and cycle detection
+
+**Limitation**: Current implementation inlines included content into single plan file. Phase 13 will generate separate plan files for each launch file.
+
+---
+
+### Phase 8: Metadata Tracking ✅ COMPLETE
+
+**Goal**: Track conversion state for transparency and debugging
+
+**Status**: ✅ Complete (13/13 tests passing)
+
+**Implementation**:
+- ✅ Created `metadata.py` with data structures (TodoItem, ConversionMetadata, ConversionStats, TodoContext, TodoReason, TodoStatus, NodeSource)
+- ✅ Modified `builder.py` to collect TODOs during plan generation with rich context
+- ✅ Implemented `MetadataManager` for saving/loading metadata to JSON (`.plan.meta.json` files)
+- ✅ Created `PlanParser` for plan YAML parsing and TODO discovery with JSONPath addressing
+- ✅ Implemented `TodoStatusUpdater` for detecting user-completed TODOs
+- ✅ Added `statistics.py` for conversion statistics calculation
+- ✅ Integrated metadata generation into `handle_convert()` CLI command with SHA256 staleness detection
+- ✅ Added `status` subcommand to display TODO completion progress and statistics
+
+**Test Cases** (13/13 passing):
+- ✅ Dataclass serialization and JSON round-trip
+- ✅ Metadata persistence (save/load)
+- ✅ Plan YAML parsing and TODO discovery
+- ✅ JSONPath navigation
+- ✅ User edit detection (completed TODOs)
+- ✅ Source hash checking for staleness
+- ✅ Statistics computation
+- ✅ Builder TODO collection
+
+**Deliverable**: ✅ Transparent conversion tracking with explicit TODO markers and user edit detection
+
+---
+
+### Phase 9: Validation & Compilation (Future Work)
+
+**Goal**: Validate generated plans and ensure they compile
+
+**Status**: 🔴 Not Started
+
+**Planned Features**:
+1. Create `validator.py` module
+2. Implement plan compilation check (call `ros2plan compile`)
+3. Parse and report compilation errors
+4. Add `validate` CLI command
+5. Enhance `status` CLI command
+
+**Test Plan**:
+- Test validate simple plan
+- Test compilation errors
+- Test status command
+- Test CLI validate command
+
+---
+
+### Phase 10: End-to-End Testing & Examples (Future Work)
+
+**Goal**: Comprehensive testing with real-world launch files
+
+**Status**: 🔴 Not Started
+
+**Planned Features**:
+1. Create test fixtures (simple, complex, with includes)
+2. Test complete conversion workflow
+3. Validate all generated plans compile successfully
+4. Create example conversions for documentation
+5. Test edge cases (missing packages, invalid syntax)
+
+**Test Plan**:
+- Convert simple launch file
+- Convert complex launch with conditions
+- Convert multi-file launch with includes
+- Test with demo nodes (talker/listener)
+- Verify compilation success
+
+---
+
+### Phase 11: QoS Profile Handling (Future Work)
+
+**Goal**: Preserve QoS settings from introspection
+
+**Status**: 🔴 Not Started
+
+**Planned Features**:
+1. Extract QoS profiles from introspection results
+2. Generate QoS sections in plan YAML
+3. Support common QoS presets
+4. Handle custom QoS settings
+
+**Test Plan**:
+- Extract QoS from introspection
+- Generate QoS YAML
+- Test various QoS presets
+- Test custom QoS values
+
+---
+
+### Phase 12: Pattern Learning (Future Work)
+
+**Goal**: Learn from user corrections to auto-fill similar TODOs
+
+**Status**: 🔴 Not Started
+
+**Planned Features**:
+1. Detect user completions of TODO markers
+2. Build pattern database
+3. Apply patterns to similar cases
+4. `refine` CLI command for pattern application
+
+**Test Plan**:
+- Learn socket direction patterns
+- Learn message type patterns
+- Apply patterns to new conversions
+- Test pattern matching accuracy
+
+---
+
+### Phase 13: Modular Plan Generation (Future Work)
+
+**Goal**: Achieve strict 1-to-1 graph equivalence between launch file tree and plan file tree
+
+**Status**: 🔴 Not Started (Design complete - see launch2plan.md)
+
+**Problem Statement**: Current implementation (Phases 1-8) generates a single monolithic plan file with all included content inlined. This does NOT achieve graph equivalence with the launch file structure.
+
+**Core Principle**: **One launch file → one plan file** (regardless of how many times included or with what arguments)
+
+**Architecture Changes**:
+
+Transform from:
+```
+launch2plan convert robot.launch.py
+→ robot.plan.yaml (single file, all content inlined)
+```
+
+To:
+```
+launch2plan convert robot.launch.py --output-dir output/
+→ output/robot.plan.yaml           (parent with include references)
+→ output/sensors/camera.plan.yaml  (separate file, accepts arguments)
+→ output/nav2_bringup/launch/navigation.plan.yaml  (package-based)
+→ output/_path/home/user/custom/special.plan.yaml  (path-based)
+```
+
+**Work Items**:
+
+1. **F73: Multi-File Output Infrastructure** (6 hours)
+   - Modify `convert_launch_file()` to track per-file conversion results
+   - Create `MultiFileConversionResult` dataclass
+   - Implement `FileRegistry` to track `file_path → output_plan_path`
+   - Update `BranchExplorerSession` to maintain per-file context
+   - Return dict mapping launch files to plan files
+
+2. **F74: Package Detection** (4 hours)
+   - Implement `detect_package_membership(abs_path)` using `ament_index_python`
+   - Extract package name and relative path within share directory
+   - Generate output path: `$outdir/{package}/{rel_path}.plan.yaml`
+   - Handle path-based (non-package) files: `$outdir/_path{abs_path}.plan.yaml`
+
+3. **F75: Include References (Not Inlining)** (5 hours)
+   - Modify `visit_include_launch_description()` to NOT inline content
+   - Recursively convert included file and get its plan path
+   - Update `builder.py` to reference external plan files
+   - Use ROS-Plan's `include` directive with `file:` parameter
+   - Generate relative paths from `$outdir`
+
+4. **F76: Argument Substitution Generation** (4 hours)
+   - Convert include arguments to plan argument substitutions
+   - Example: `launch_args={'device': '/dev/video0'}` → `arg: {device: "/dev/video0"}`
+   - Handle LaunchConfiguration references → `$(arg_name)` syntax
+   - Ensure plan files accept arguments via `arg` section
+
+5. **F77: Deduplication by File Path** (3 hours)
+   - Track `visited_files: Set[Path]` to prevent regeneration
+   - Same launch file always generates same plan file
+   - Skip conversion if file already visited
+   - Update include reference to existing plan path
+
+6. **F78: Output Directory Management** (3 hours)
+   - Create output directory structure matching package hierarchy
+   - Handle `--output-dir` CLI option (default: same dir as input)
+   - Handle `-o` option (overrides root plan file name only)
+   - Update metadata to track all generated files
+   - Implement relative path resolution between plan files
+
+**Test Fixtures**:
+
+1. **Simple Multi-File**: Parent includes child → 2 plan files
+2. **Multiple Inclusion**: Same file included twice with different args → 2 plan references, 1 plan file
+3. **Nested Includes**: Three-level hierarchy → 3 plan files
+4. **Package-based Include**: Uses FindPackageShare → plan in package subdirectory
+5. **Path-based Include**: Uses absolute path → plan in _path subdirectory
+6. **Diamond Dependency**: Multiple paths to shared file → file generated once, referenced multiple times
+
+**Test Count**: ~30 new tests (5+5+6+5+4+5 integration)
+
+**Design Decisions**:
+
+1. **File Identification**: Absolute path only
+   - Same file path → same plan file (always)
+   - Arguments handled via substitutions in plan file
+   - No per-argument file variations
+
+2. **Filename Generation**:
+   - Package-based: `$outdir/{package}/{rel_path}.plan.yaml`
+   - Path-based: `$outdir/_path{abs_path}.plan.yaml`
+   - Root file: User-specified via `-o` or default naming
+
+3. **Include Path Resolution**:
+   - All paths relative to `$outdir`
+   - Package-based: `"sensors/camera.plan.yaml"`
+   - Path-based: `"_path/home/user/custom/special.plan.yaml"`
+
+4. **Deduplication Algorithm**:
+   ```python
+   visited_files: Set[Path] = set()
+
+   def get_or_create_plan_file(launch_file_path: Path) -> Path:
+       abs_path = launch_file_path.resolve()
+
+       if abs_path in visited_files:
+           return get_output_path(abs_path)  # Already converted
+
+       visited_files.add(abs_path)
+       plan_path = convert_to_plan(abs_path)
+       return plan_path
+   ```
+
+5. **Metadata Extensions**:
+   - Add `generated_files: Dict[str, str]` (launch path → plan path)
+   - Track plan file tree structure
+   - Record include relationships
+
+**CLI Changes**:
+- Add `--output-dir DIR` option (where to generate plan files)
+- `-o FILE` overrides root plan filename only
+- Default: Generate in same directory as input launch file
+
+**Migration Path**:
+1. Implement F73-F78 incrementally
+2. Test with simple multi-file examples
+3. Test with Autoware (large project)
+4. Document migration guide
+
+**Deliverable**: Modular plan generation with strict 1-to-1 graph equivalence to launch file structure
 
 ---
 
