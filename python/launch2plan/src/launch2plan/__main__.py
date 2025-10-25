@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from .builder import PlanBuilder
-from .converter import convert_launch_file
+from .converter import convert_launch_file, convert_launch_file_tree
 from .inference import infer_sockets_for_nodes
 from .introspection import IntrospectionService
 from .metadata import (
@@ -21,7 +21,9 @@ from .metadata import (
     NodeSource,
     TodoStatusUpdater,
 )
+from .reporting import print_conversion_summary
 from .statistics import calculate_stats
+from .writer import ensure_output_directory, write_all_plans
 
 
 def parse_launch_arguments(arg_list: List[str]) -> Dict[str, str]:
@@ -49,6 +51,74 @@ def parse_launch_arguments(arg_list: List[str]) -> Dict[str, str]:
     return arguments
 
 
+def handle_multi_file_convert(
+    launch_file: Path,
+    launch_arguments: Dict[str, str],
+    output_dir_str: str,
+) -> int:
+    """
+    Handle multi-file conversion (Phase 9.6).
+
+    Args:
+        launch_file: Root launch file to convert
+        launch_arguments: Launch arguments
+        output_dir_str: Output directory path
+
+    Returns:
+        Exit code (0 for success, 1 for error)
+    """
+    output_dir = Path(output_dir_str)
+
+    print(f"Converting (multi-file): {launch_file}")
+    if launch_arguments:
+        print(f"Arguments: {launch_arguments}")
+    print(f"Output directory: {output_dir}")
+    print()
+
+    try:
+        # Phase 9.6: Ensure output directory exists
+        ensure_output_directory(output_dir)
+
+        # Convert launch file tree
+        print("Phase 1: Discovering files and nodes...")
+        result = convert_launch_file_tree(launch_file, output_dir, launch_arguments)
+
+        print(f"✓ Discovered {len(result.file_registry)} launch files")
+        print()
+
+        # Phase 2: Introspection and plan generation
+        print("Phase 2: Performing introspection and generating plans...")
+        introspection_service = IntrospectionService()
+        written_files = write_all_plans(result, introspection_service)
+
+        print(f"✓ Generated {len(written_files)} plan files")
+        print()
+
+        # Phase 3: Display summary (Phase 9.6)
+        print_conversion_summary(result)
+
+        # Success message
+        print()
+        print("✓ Multi-file conversion complete!")
+        print()
+        print("To compile the root plan:")
+        root_output = result.file_registry.get_output_path(result.root_file)
+        if root_output:
+            print(f"  ros2plan compile {root_output}")
+
+        return 0
+
+    except OSError as e:
+        print(f"Error: {e}")
+        return 1
+    except Exception as e:
+        print(f"Error during conversion: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return 1
+
+
 def main() -> int:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -68,6 +138,10 @@ def main() -> int:
     )
     convert_parser.add_argument(
         "-o", "--output", help="Output plan file (default: <input>.plan.yaml)"
+    )
+    convert_parser.add_argument(
+        "--output-dir",
+        help="Output directory for multi-file conversion (Phase 9.6)",
     )
 
     # validate command
@@ -110,14 +184,19 @@ def handle_convert(args) -> int:
         print(f"Error: Launch file not found: {launch_file}")
         return 1
 
+    # Parse launch arguments
+    launch_arguments = parse_launch_arguments(args.launch_args)
+
+    # Phase 9.6: Check if multi-file conversion is requested
+    if args.output_dir:
+        return handle_multi_file_convert(launch_file, launch_arguments, args.output_dir)
+
+    # Single-file conversion (original behavior)
     # Determine output file
     if args.output:
         output_file = Path(args.output)
     else:
         output_file = launch_file.with_suffix(".plan.yaml")
-
-    # Parse launch arguments
-    launch_arguments = parse_launch_arguments(args.launch_args)
 
     print(f"Converting: {launch_file}")
     if launch_arguments:
