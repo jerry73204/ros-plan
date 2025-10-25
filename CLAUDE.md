@@ -92,11 +92,17 @@ The project consists of both Rust (core compiler and runtime) and Python (launch
 
 - **rmw_introspect** - Located at `external/rmw_introspect/` (git submodule)
   - Separately maintained at https://github.com/jerry73204/rmw_introspect
-  - Contains rmw_introspect_cpp (C++ RMW) and ros2_introspect (Python wrapper)
-  - Not included in main project's `make test` or `make lint` targets
-  - Build independently: `cd external/rmw_introspect && make build`
-  - Test independently: `cd external/rmw_introspect && make test`
-  - Required by launch2plan for node interface introspection
+  - Contains two packages:
+    - `rmw_introspect_cpp/` - C++ RMW implementation for lightweight introspection
+    - `ros2_introspect/` - Python wrapper for the RMW implementation
+  - **Integration with build system**:
+    - `ros2/rmw_introspect_cpp` is a symlink to `external/rmw_introspect/rmw_introspect_cpp`
+    - Built automatically via `make build` using colcon
+    - `ros2-introspect` (Python) added to UV workspace via `python/pyproject.toml`
+  - **Dependency chain**:
+    - launch2plan (Python) → ros2-introspect (Python) → rmw_introspect_cpp (ROS 2 C++)
+    - launch2plan tests require workspace sourced (for rmw_introspect_cpp)
+  - Required by launch2plan for node interface introspection without middleware
 
 ## Key File Formats
 
