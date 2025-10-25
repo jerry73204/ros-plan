@@ -20,11 +20,11 @@
 **Features:** F22 ✅, F23 ✅, F24 ✅, F25 ✅, F26 ✅, F27 ✅
 
 **Deliverables:**
-- ✅ Dev-dependencies added to all crates
-- ✅ Unit test framework for format parsing (F22, F23, F24, F25)
-- ✅ Unit test framework for compiler algorithms (F26, F27)
-- ✅ Test fixtures and basic test utilities
-- ✅ CI integration for automated testing (via Makefile)
+- [X] Dev-dependencies added to all crates
+- [X] Unit test framework for format parsing (F22, F23, F24, F25)
+- [X] Unit test framework for compiler algorithms (F26, F27)
+- [X] Test fixtures and basic test utilities
+- [X] CI integration for automated testing (via Makefile)
 
 **Current Status:**
 - 192 total tests (up from 2 baseline)
@@ -46,11 +46,11 @@
 **Features:** F1 ✅, F2 ✅, F6 ✅, F9 ✅, F28 ✅, F29 ✅
 
 **Deliverables:**
-- ✅ Node socket `ros_name` attribute (F1)
-- ✅ Link `topic` attribute (F2)
-- ✅ Single-source topic derivation algorithm (F6, F9)
-- ✅ Unit tests for socket resolution (F28)
-- ✅ Unit tests for link resolution (F29)
+- [X] Node socket `ros_name` attribute (F1)
+- [X] Link `topic` attribute (F2)
+- [X] Single-source topic derivation algorithm (F6, F9)
+- [X] Unit tests for socket resolution (F28)
+- [X] Unit tests for link resolution (F29)
 
 **Current Status:**
 - 192 total tests passing
@@ -70,10 +70,10 @@
 **Features:** F3 ✅, F7 ✅, F10 ✅, F15 ✅, F30 ✅
 
 **Deliverables:**
-- ✅ Plan socket `topic` attribute (F3)
-- ✅ Multi-source validation and errors (F7, F15)
-- ✅ Plan socket topic resolution (F10)
-- ✅ Integration test suite with fixtures (F30)
+- [X] Plan socket `topic` attribute (F3)
+- [X] Multi-source validation and errors (F7, F15)
+- [X] Plan socket topic resolution (F10)
+- [X] Integration test suite with fixtures (F30)
 
 **Current Status:**
 - 192 total tests passing
@@ -94,22 +94,22 @@
 **Features:** F4 ✅, F11 ✅, F12 ✅, F13 ✅, F14 ✅, F16 ✅, F31 ✅
 
 **Deliverables:**
-- ✅ Include `transparent` flag (F4)
-- ✅ Socket reference depth validation (F11)
-- ✅ Transparent resolution algorithm (F12)
-- ✅ Namespace hierarchy tracking (F14)
-- ✅ Invalid reference error types (F16)
-- ✅ Plan socket forwarding validation (F13)
-- ✅ Error scenario integration tests (F31)
+- [X] Include `transparent` flag (F4)
+- [X] Socket reference depth validation (F11)
+- [X] Transparent resolution algorithm (F12)
+- [X] Namespace hierarchy tracking (F14)
+- [X] Invalid reference error types (F16)
+- [X] Plan socket forwarding validation (F13)
+- [X] Error scenario integration tests (F31)
 
 **Final Status:**
 - 207 total tests passing (48 in ros-plan-compiler, 159 in ros-plan-format)
-- ✅ Transparent flag parsing and tracking (F4)
-- ✅ Depth validation with transparency support (F11/F12)
-- ✅ Single and multi-level transparent includes working (F12)
-- ✅ Namespace hierarchy tracking (F14)
-- ✅ Comprehensive error handling (F16)
-- ✅ 8 integration tests covering all encapsulation scenarios (F31)
+- [X] Transparent flag parsing and tracking (F4)
+- [X] Depth validation with transparency support (F11/F12)
+- [X] Single and multi-level transparent includes working (F12)
+- [X] Namespace hierarchy tracking (F14)
+- [X] Comprehensive error handling (F16)
+- [X] 8 integration tests covering all encapsulation scenarios (F31)
 
 ---
 
@@ -120,13 +120,13 @@
 **Status:** ✅ Mostly Complete (4/5 features)
 
 **Completed Features:**
-- ✅ F5: Empty `src`/`dst` support (commit 0478573)
-- ✅ F8: Absolute/relative topic path resolution (commit 0478573)
-- ✅ F17: Type compatibility checking (commit 0478573)
-- ✅ F18: QoS requirement satisfaction (commit e7cd9ff)
+- [X] F5: Empty `src`/`dst` support (commit 0478573)
+- [X] F8: Absolute/relative topic path resolution (commit 0478573)
+- [X] F17: Type compatibility checking (commit 0478573)
+- [X] F18: QoS requirement satisfaction (commit e7cd9ff)
 
 **Remaining Features:**
-- ❌ F21: Real-world example suite (documentation)
+- [ ] F21: Real-world example suite (documentation)
 
 **Recent Progress:**
 - Added comprehensive empty link support (publish-only and consume-only patterns)

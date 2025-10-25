@@ -28,10 +28,10 @@
 **Description:** Create the `ros-plan-runtime` workspace member with foundational types and architecture
 
 **Test Cases:**
-- [x] Runtime crate compiles successfully
-- [x] Can create Runtime instance with plan file
-- [x] Can load configuration from defaults
-- [x] Basic types serialize/deserialize correctly
+- [X] Runtime crate compiles successfully
+- [X] Can create Runtime instance with plan file
+- [X] Can load configuration from defaults
+- [X] Basic types serialize/deserialize correctly
 
 **Files Added:**
 - `ros-plan-runtime/Cargo.toml`
@@ -47,13 +47,13 @@
 **Description:** Implement process spawning, tracking, and termination for ROS nodes
 
 **Test Cases:**
-- [x] Spawn simple ROS node successfully
-- [x] Track PID and state correctly
-- [x] Graceful shutdown with SIGTERM
-- [x] Forceful shutdown with SIGKILL after timeout
-- [x] Detect node crash and update state
-- [x] Handle spawn failures gracefully
-- [x] Clean up zombie processes
+- [X] Spawn simple ROS node successfully
+- [X] Track PID and state correctly
+- [X] Graceful shutdown with SIGTERM
+- [X] Forceful shutdown with SIGKILL after timeout
+- [X] Detect node crash and update state
+- [X] Handle spawn failures gracefully
+- [X] Clean up zombie processes
 
 **Files Added:**
 - `ros-plan-runtime/src/process_manager.rs` (300+ lines)
@@ -65,11 +65,11 @@
 **Description:** Implement full runtime lifecycle including startup, running, and shutdown phases
 
 **Test Cases:**
-- [x] Start runtime with simple plan (2 nodes)
-- [x] All nodes start successfully
-- [x] Graceful shutdown stops all nodes
-- [x] SIGINT triggers clean shutdown
-- [x] Partial startup failure handled correctly
+- [X] Start runtime with simple plan (2 nodes)
+- [X] All nodes start successfully
+- [X] Graceful shutdown stops all nodes
+- [X] SIGINT triggers clean shutdown
+- [X] Partial startup failure handled correctly
 
 **Files Added:**
 - `ros-plan-runtime/src/runtime.rs` (192 lines)
@@ -81,11 +81,11 @@
 **Description:** Implement comprehensive node state tracking, crash detection, and configurable restart policies
 
 **Test Cases:**
-- [x] Detect node crash correctly
-- [x] Record crash in history with timestamp
-- [x] RestartPolicy::Never does not restart
-- [x] RestartPolicy::OnFailure restarts up to max_retries
-- [x] RestartPolicy::Always restarts indefinitely
+- [X] Detect node crash correctly
+- [X] Record crash in history with timestamp
+- [X] RestartPolicy::Never does not restart
+- [X] RestartPolicy::OnFailure restarts up to max_retries
+- [X] RestartPolicy::Always restarts indefinitely
 
 ---
 

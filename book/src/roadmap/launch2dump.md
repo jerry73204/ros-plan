@@ -22,12 +22,12 @@
 **Overview:** Integrates Python-based ROS 2 launch file loading directly into the ros-plan compiler. Using PyO3 and a launch2dump utility, the compiler can now load and merge launch files at compile-time, extracting node metadata and incorporating it into the compiled program.
 
 **Completed Features:**
-- ✅ F32: UV Python Package Manager Integration
-- ✅ F33: Launch2Dump Python Loader API
-- ✅ F34: Launch2Dump CLI Tool
-- ✅ F35: Serialization Format Improvements
-- ✅ F36: PyO3 Integration for Launch Loading
-- ✅ F39: Launch Integration Tests
+- [X] F32: UV Python Package Manager Integration
+- [X] F33: Launch2Dump Python Loader API
+- [X] F34: Launch2Dump CLI Tool
+- [X] F35: Serialization Format Improvements
+- [X] F36: PyO3 Integration for Launch Loading
+- [X] F39: Launch Integration Tests
 
 **Key Achievements:**
 - Python launch file loading via PyO3 FFI
