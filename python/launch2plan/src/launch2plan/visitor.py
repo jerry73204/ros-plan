@@ -17,6 +17,8 @@ from launch.launch_description_entity import LaunchDescriptionEntity
 from launch.utilities import is_a, normalize_to_list_of_substitutions, perform_substitutions
 from launch_ros.actions.node import Node
 
+from .package_detector import detect_package
+
 
 @dataclass
 class NodeMetadata:
@@ -39,6 +41,7 @@ class IncludeMetadata:
     file_path: Path
     arguments: Dict[str, Any] = field(default_factory=dict)
     condition_expr: Optional[str] = None
+    package_info: Optional[Any] = None  # PackageInfo from package_detector
 
 
 @dataclass
@@ -472,6 +475,9 @@ def visit_include_launch_description(
         # Normalize file path
         file_path = file_path.resolve()
 
+        # Detect package for this file
+        pkg_info = detect_package(file_path)
+
         # Check for cycles
         if session.check_cycle(file_path):
             session.add_error(f"Cycle detected: {file_path} already in include stack")
@@ -493,7 +499,10 @@ def visit_include_launch_description(
 
         # Create metadata
         metadata = IncludeMetadata(
-            file_path=file_path, arguments=launch_arguments, condition_expr=condition_expr
+            file_path=file_path,
+            arguments=launch_arguments,
+            condition_expr=condition_expr,
+            package_info=pkg_info,
         )
 
         session.add_include(metadata)
