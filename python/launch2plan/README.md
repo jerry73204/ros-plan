@@ -30,15 +30,38 @@ launch2plan status robot.plan.yaml
 
 ## Dependencies
 
-- `ros2-introspect`: RMW introspection for node interface discovery
-- `launch2dump`: Launch file visitor infrastructure (reused)
-- `ros2plan`: Plan compiler for validation
+### Python Dependencies
+- `ros2-introspect`: RMW introspection for node interface discovery (from `external/rmw_introspect/`)
+- `ruamel-yaml`: YAML generation with proper formatting
+- `pyyaml`: YAML parsing
+- `lark`: Expression parsing
+
+### ROS 2 Dependencies (Runtime)
+- `rmw_introspect_cpp`: Custom RMW implementation for lightweight node introspection
+  - Located in `external/rmw_introspect/rmw_introspect_cpp/`
+  - Built via `make build` (symlinked in `ros2/`)
+  - Must be sourced before running launch2plan
+
+## Setup
+
+```bash
+# 1. Build rmw_introspect_cpp (required for introspection)
+make build
+
+# 2. Source the workspace
+source install/setup.bash
+
+# 3. Install Python dependencies
+cd python/launch2plan
+uv sync
+```
 
 ## Development
 
 ```bash
+# Run tests (requires workspace sourced)
+source install/setup.bash
 cd python/launch2plan
-uv sync
 uv run pytest
 ```
 
