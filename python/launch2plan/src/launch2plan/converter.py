@@ -74,8 +74,6 @@ def convert_launch_file(
     # Visit all expanded actions
     # These are the actions from the included launch file
     # Note: execute() can return Actions, Events, or LaunchDescriptions
-    from launch import LaunchDescription
-
     for entity in expanded_actions:
         # If it's a LaunchDescription, visit its entities
         if isinstance(entity, LaunchDescription):
@@ -85,7 +83,7 @@ def convert_launch_file(
                     # Recursively visit any returned entities (e.g., from GroupAction)
                     if returned_entities:
                         for child in returned_entities:
-                            if hasattr(child, 'condition'):  # It's an Action
+                            if hasattr(child, "condition"):  # It's an Action
                                 visit_action(child, context, session)
                 except Exception as e:
                     error_msg = f"Error visiting action {type(action).__name__}: {e}"

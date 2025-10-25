@@ -520,10 +520,10 @@ def visit_include_launch_description(
                             # Recursively visit children returned from actions like GroupAction
                             if child_entities:
                                 for child in child_entities:
-                                    if hasattr(child, 'condition'):
+                                    if hasattr(child, "condition"):
                                         visit_action(child, context, session)
                     # If it's an Action, visit it directly
-                    elif hasattr(entity, 'condition'):
+                    elif hasattr(entity, "condition"):
                         visit_action(entity, context, session)
 
             return returned_entities
