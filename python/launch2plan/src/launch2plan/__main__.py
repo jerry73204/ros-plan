@@ -103,23 +103,41 @@ def handle_multi_file_convert(
         # Success message
         print()
         print("✓ Multi-file conversion complete!")
+        sys.stdout.flush()  # Flush immediately after this line
         print()
         print("To compile the root plan:")
         root_output = result.file_registry.get_output_path(result.root_file)
         if root_output:
             print(f"  ros2plan compile {root_output}")
 
-        return 0
+        # Force flush to ensure all output is written
+        sys.stdout.flush()
+        sys.stderr.flush()
+
+        # Exit immediately with os._exit to avoid threading shutdown hang
+        # This is safe because all work is complete and output is flushed
+        import os as os_mod
+        os_mod._exit(0)
 
     except OSError as e:
         print(f"Error: {e}")
-        return 1
+        sys.stdout.flush()
+        import os as os_mod
+
+        os_mod._exit(1)
     except Exception as e:
         print(f"Error during conversion: {e}")
         import traceback
 
         traceback.print_exc()
-        return 1
+        sys.stdout.flush()
+        import os as os_mod
+
+        os_mod._exit(1)
+    finally:
+        # Force flush output before exiting
+        sys.stdout.flush()
+        sys.stderr.flush()
 
 
 def main() -> int:
@@ -399,4 +417,10 @@ def handle_status(args) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    import os
+
+    exit_code = main()
+
+    # Force exit without waiting for threads to avoid hanging
+    # This is safe because all work is complete and output is flushed
+    os._exit(exit_code)

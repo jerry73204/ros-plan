@@ -77,52 +77,57 @@ def convert_launch_file(
     launch_service = LaunchService(argv=argv)
     context = launch_service.context
 
-    # Create an IncludeLaunchDescription to properly handle launch_arguments
-    include_action = IncludeLaunchDescription(
-        AnyLaunchDescriptionSource(str(launch_file)),
-        launch_arguments=launch_args,
-    )
+    try:
+        # Create an IncludeLaunchDescription to properly handle launch_arguments
+        include_action = IncludeLaunchDescription(
+            AnyLaunchDescriptionSource(str(launch_file)),
+            launch_arguments=launch_args,
+        )
 
-    # Execute the include to get the expanded actions
-    # This properly handles launch arguments
-    expanded_actions = include_action.execute(context)
+        # Execute the include to get the expanded actions
+        # This properly handles launch arguments
+        expanded_actions = include_action.execute(context)
 
-    # Create branch explorer session
-    session = BranchExplorerSession()
+        # Create branch explorer session
+        session = BranchExplorerSession()
 
-    # Visit all expanded actions
-    # These are the actions from the included launch file
-    # Note: execute() can return Actions, Events, or LaunchDescriptions
-    for entity in expanded_actions:
-        # If it's a LaunchDescription, visit its entities
-        if isinstance(entity, LaunchDescription):
-            for action in entity.entities:
+        # Visit all expanded actions
+        # These are the actions from the included launch file
+        # Note: execute() can return Actions, Events, or LaunchDescriptions
+        for entity in expanded_actions:
+            # If it's a LaunchDescription, visit its entities
+            if isinstance(entity, LaunchDescription):
+                for action in entity.entities:
+                    try:
+                        returned_entities = visit_action(action, context, session)
+                        # Recursively visit any returned entities (e.g., from GroupAction)
+                        if returned_entities:
+                            for child in returned_entities:
+                                if hasattr(child, "condition"):  # It's an Action
+                                    visit_action(child, context, session)
+                    except Exception as e:
+                        error_msg = f"Error visiting action {type(action).__name__}: {e}"
+                        session.errors.append(error_msg)
+            # If it's an Action, visit it directly
+            elif hasattr(entity, "condition"):
                 try:
-                    returned_entities = visit_action(action, context, session)
-                    # Recursively visit any returned entities (e.g., from GroupAction)
-                    if returned_entities:
-                        for child in returned_entities:
-                            if hasattr(child, "condition"):  # It's an Action
-                                visit_action(child, context, session)
+                    visit_action(entity, context, session)
                 except Exception as e:
-                    error_msg = f"Error visiting action {type(action).__name__}: {e}"
+                    error_msg = f"Error visiting entity {type(entity).__name__}: {e}"
                     session.errors.append(error_msg)
-        # If it's an Action, visit it directly
-        elif hasattr(entity, "condition"):
-            try:
-                visit_action(entity, context, session)
-            except Exception as e:
-                error_msg = f"Error visiting entity {type(entity).__name__}: {e}"
-                session.errors.append(error_msg)
-        # Otherwise skip (e.g., events)
+            # Otherwise skip (e.g., events)
 
-    # Return the collected data
-    return ConversionResult(
-        nodes=session.nodes,
-        includes=session.includes,
-        launch_arguments=session.launch_arguments,
-        errors=session.errors,
-    )
+        # Return the collected data
+        return ConversionResult(
+            nodes=session.nodes,
+            includes=session.includes,
+            launch_arguments=session.launch_arguments,
+            errors=session.errors,
+        )
+    finally:
+        # Explicitly shutdown the launch service to clean up threads/async contexts
+        # This prevents the process from hanging after completion
+        launch_service.shutdown()
 
 
 def convert_launch_file_tree(
