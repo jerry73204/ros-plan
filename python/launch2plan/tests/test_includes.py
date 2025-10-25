@@ -90,7 +90,7 @@ def test_include_with_arguments():
 
 
 def test_include_with_launch_configuration_arguments():
-    """Test that LaunchConfiguration arguments are substituted."""
+    """Test that LaunchConfiguration arguments are preserved as $(arg_name) for forwarding."""
     # Create include with LaunchConfiguration arguments
     include_path = Path("/tmp/sensor.launch.py")
 
@@ -111,10 +111,10 @@ def test_include_with_launch_configuration_arguments():
     # Visit the include
     visit_action(include, context, session)
 
-    # Verify substitution occurred
+    # Phase 9.4: Verify LaunchConfiguration is preserved as $(arg_name) for argument forwarding
     assert len(session.includes) == 1
     assert session.includes[0].arguments == {
-        "device": "/dev/ttyUSB0",
+        "device": "$(sensor_device)",
     }
 
 
@@ -244,3 +244,29 @@ def test_include_argument_type_inference():
     assert args["count"] == {"!i64": 42}
     assert args["rate"] == {"!f64": 10.5}
     assert args["name"] == "robot"
+
+
+def test_include_with_argument_forwarding():
+    """Test that argument references ($(arg_name)) are preserved for forwarding."""
+    # Phase 9.4: Verify argument forwarding with $(arg_name) syntax
+    includes = [
+        IncludeMetadata(
+            file_path=Path("/tmp/sensor.launch.py"),
+            arguments={
+                "device": "$(parent_device)",  # Argument forwarding
+                "rate": "100",  # Literal value
+                "enable": "$(use_sensor)",  # Another forwarding
+            },
+            condition_expr=None,
+        ),
+    ]
+
+    # Build plan
+    builder = PlanBuilder()
+    plan = builder.build_plan(nodes=[], inferred_sockets={}, includes=includes)
+
+    # Verify argument forwarding is preserved
+    args = plan["include"]["sensor"]["arg"]
+    assert args["device"] == "$(parent_device)"  # Preserved
+    assert args["rate"] == {"!i64": 100}  # Inferred type
+    assert args["enable"] == "$(use_sensor)"  # Preserved

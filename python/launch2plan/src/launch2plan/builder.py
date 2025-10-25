@@ -147,18 +147,29 @@ class PlanBuilder:
             if include.arguments:
                 arg_dict = {}
                 for arg_name, arg_value in include.arguments.items():
-                    # Infer type and convert value
-                    type_tag, converted_value = infer_argument_type(arg_value)
+                    # Phase 9.4: Check if value is an argument reference ($(arg_name))
+                    is_arg_ref = (
+                        isinstance(arg_value, str)
+                        and arg_value.startswith("$(")
+                        and arg_value.endswith(")")
+                    )
 
-                    if type_tag == "!bool":
-                        arg_dict[arg_name] = {type_tag: converted_value == "true"}
-                    elif type_tag == "!i64":
-                        arg_dict[arg_name] = {type_tag: int(converted_value)}
-                    elif type_tag == "!f64":
-                        arg_dict[arg_name] = {type_tag: float(converted_value)}
-                    else:
-                        # String or substitution
+                    if is_arg_ref:
+                        # This is an argument forwarding - keep as-is
                         arg_dict[arg_name] = arg_value
+                    else:
+                        # Infer type and convert value for literal values
+                        type_tag, converted_value = infer_argument_type(arg_value)
+
+                        if type_tag == "!bool":
+                            arg_dict[arg_name] = {type_tag: converted_value == "true"}
+                        elif type_tag == "!i64":
+                            arg_dict[arg_name] = {type_tag: int(converted_value)}
+                        elif type_tag == "!f64":
+                            arg_dict[arg_name] = {type_tag: float(converted_value)}
+                        else:
+                            # String or substitution
+                            arg_dict[arg_name] = arg_value
 
                 include_def["arg"] = arg_dict
 

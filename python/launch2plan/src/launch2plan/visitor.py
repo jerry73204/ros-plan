@@ -488,12 +488,24 @@ def visit_include_launch_description(
         launch_arguments = {}
         if include.launch_arguments is not None:
             for name, value in include.launch_arguments:
-                # Perform substitution
+                # Perform substitution for name
                 name_str = perform_substitutions(context, normalize_to_list_of_substitutions(name))
-                value_str = perform_substitutions(
-                    context, normalize_to_list_of_substitutions(value)
-                )
-                launch_arguments[name_str] = value_str
+
+                # Phase 9.4: Check if value is a LaunchConfiguration reference
+                # If so, preserve it as $(arg_name) for argument forwarding
+                from launch.substitutions import LaunchConfiguration
+
+                value_substs = normalize_to_list_of_substitutions(value)
+
+                # Check if this is a simple LaunchConfiguration reference
+                if len(value_substs) == 1 and isinstance(value_substs[0], LaunchConfiguration):
+                    # Preserve as $(arg_name) for argument forwarding
+                    arg_name = _extract_variable_name(value_substs[0])
+                    launch_arguments[name_str] = f"$({arg_name})"
+                else:
+                    # Perform substitution for literal values
+                    value_str = perform_substitutions(context, value_substs)
+                    launch_arguments[name_str] = value_str
 
         # Get current condition
         condition_expr = session.get_current_condition()

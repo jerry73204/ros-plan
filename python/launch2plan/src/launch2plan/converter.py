@@ -136,6 +136,10 @@ def convert_launch_file_tree(
     1. Pass 1: Visit root file, collect nodes and include references
     2. Pass 2: Recursively process each unique include separately
 
+    Phase 9.5: Implements file deduplication - each unique launch file
+    generates exactly one plan file, regardless of how many times included
+    or with what arguments.
+
     Args:
         root_launch_file: Path to the root launch file to convert
         output_dir: Output directory for plan files
@@ -156,8 +160,12 @@ def convert_launch_file_tree(
     # Map from canonical path -> ConversionResult
     file_results: Dict[Path, ConversionResult] = {}
 
-    # Track visited files to prevent infinite loops
+    # Track visited files to prevent infinite loops (Phase 9.5)
     visited = set()
+
+    # Track arguments used for each file (Phase 9.5)
+    # Map from canonical path -> list of argument dicts
+    file_arguments: Dict[Path, List[Dict[str, str]]] = {}
 
     # Collect errors across all files
     all_errors = []
@@ -166,11 +174,30 @@ def convert_launch_file_tree(
     while to_process:
         current_file, current_args = to_process.pop(0)
 
-        # Canonicalize path
+        # Canonicalize path (Phase 9.5: deduplication key)
         canonical_path = current_file.resolve()
 
-        # Skip if already visited
+        # Phase 9.5: Track all argument sets for this file
+        if canonical_path not in file_arguments:
+            file_arguments[canonical_path] = []
+        file_arguments[canonical_path].append(current_args)
+
+        # Skip if already visited (Phase 9.5: deduplication)
         if canonical_path in visited:
+            # Phase 9.5: Check if arguments differ and warn
+            previous_args = file_arguments[canonical_path]
+            if len(previous_args) > 1:
+                # Check if all argument sets are identical
+                first_args = previous_args[0]
+                for args in previous_args[1:]:
+                    if args != first_args:
+                        # Warn about different arguments
+                        warning = (
+                            f"Warning: {canonical_path.name} is included multiple times "
+                            f"with different arguments. Using first argument set: {first_args}"
+                        )
+                        all_errors.append(warning)
+                        break  # Only warn once per file
             continue
 
         visited.add(canonical_path)
