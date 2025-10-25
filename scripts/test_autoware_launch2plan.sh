@@ -9,6 +9,18 @@
 
 set -e
 
+# Cleanup function to kill orphaned ROS nodes from introspection
+cleanup_orphaned_nodes() {
+    echo "Cleaning up orphaned ROS nodes from previous runs..."
+    local count=$(pkill -9 -f "autoware.*--ros-args" 2>/dev/null | wc -l || echo 0)
+    if [ $count -gt 0 ]; then
+        echo "Killed $count orphaned nodes"
+    fi
+}
+
+# Trap to ensure cleanup on exit
+trap cleanup_orphaned_nodes EXIT
+
 # Determine script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -34,8 +46,10 @@ fi
 
 # Configuration
 MAP_PATH="${HOME}/autoware_map/sample-map-planning"
-OUTPUT_DIR="$SCRIPT_DIR/autoware_output"
-OUTPUT_FILE="$OUTPUT_DIR/planning_simulator.plan.yaml"
+OUTPUT_DIR="$SCRIPT_DIR/autoware/output"
+
+# Clean up any existing orphaned nodes before starting
+cleanup_orphaned_nodes
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
@@ -49,36 +63,26 @@ if [ ! -f "$LAUNCH_FILE" ]; then
     exit 1
 fi
 
+echo "NOTE: This conversion may take several minutes due to introspection of many nodes."
+echo ""
+
 (cd "$REPO_ROOT/python/launch2plan" && uv run launch2plan convert \
     "$LAUNCH_FILE" \
     map_path:="$MAP_PATH" \
     vehicle_model:=sample_vehicle \
     sensor_model:=sample_sensor_kit \
-    -o "$OUTPUT_FILE")
+    --output-dir "$OUTPUT_DIR")
 
 echo ""
 echo "=== Conversion Complete ==="
-echo "Plan file: $OUTPUT_FILE"
-echo "Metadata:  ${OUTPUT_FILE%.yaml}.meta.json"
+echo "Output directory: $OUTPUT_DIR"
 echo ""
 
-# Display summary if metadata exists
-META_FILE="${OUTPUT_FILE%.plan.yaml}.plan.meta.json"
-if [ -f "$META_FILE" ]; then
-    echo "=== Metadata Summary ==="
-    python3 -c "
-import json
-import sys
+# Count generated files
+PLAN_COUNT=$(find "$OUTPUT_DIR" -name "*.plan.yaml" -type f | wc -l)
+echo "Generated $PLAN_COUNT plan files"
+echo ""
 
-with open('$META_FILE') as f:
-    meta = json.load(f)
-
-stats = meta.get('stats', {})
-print(f\"Nodes:     {stats.get('total_nodes', 0)}\")
-print(f\"Links:     {stats.get('total_links', 0)}\")
-print(f\"Arguments: {stats.get('total_arguments', 0)}\")
-print(f\"Includes:  {stats.get('total_includes', 0)}\")
-print(f\"TODOs:     {stats.get('total_todos', 0)} ({stats.get('pending_todos', 0)} pending, {stats.get('completed_todos', 0)} completed)\")
-print(f\"Completion: {stats.get('completion_rate', 0)*100:.1f}%\")
-"
-fi
+# Display generated files
+echo "=== Generated Plan Files ==="
+find "$OUTPUT_DIR" -name "*.plan.yaml" -type f | sort
