@@ -11,6 +11,7 @@ from .builder import PlanBuilder
 from .converter import MultiFileConversionResult
 from .inference import infer_sockets_for_nodes
 from .introspection import IntrospectionService
+from .progress import get_progress_tracker
 
 
 def write_all_plans(
@@ -31,9 +32,14 @@ def write_all_plans(
     """
     written_files: Dict[Path, Path] = {}
     builder = PlanBuilder()
+    progress = get_progress_tracker()
 
     # Get file mapping from registry
     file_mapping = result.file_registry.get_all_files()
+
+    # Count total nodes for progress reporting
+    total_nodes = sum(len(fr.nodes) for fr in result.file_results.values())
+    nodes_processed = 0
 
     for source_path, output_path in file_mapping.items():
         # Get conversion result for this file
@@ -45,6 +51,13 @@ def write_all_plans(
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Perform socket inference for this file's nodes
+        # This is the slow part - introspect each node
+        if file_result.nodes:
+            for node in file_result.nodes:
+                nodes_processed += 1
+                node_name = f"{node.package}::{node.executable}"
+                progress.update(f"[{nodes_processed}/{total_nodes}] {node_name}")
+
         inferred_sockets = infer_sockets_for_nodes(file_result.nodes, introspection_service)
 
         # Build plan for this file

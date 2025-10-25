@@ -21,6 +21,7 @@ from .metadata import (
     NodeSource,
     TodoStatusUpdater,
 )
+from .progress import get_progress_tracker
 from .reporting import print_conversion_summary
 from .statistics import calculate_stats
 from .writer import ensure_output_directory, write_all_plans
@@ -68,6 +69,7 @@ def handle_multi_file_convert(
         Exit code (0 for success, 1 for error)
     """
     output_dir = Path(output_dir_str)
+    progress = get_progress_tracker()
 
     print(f"Converting (multi-file): {launch_file}")
     if launch_arguments:
@@ -81,17 +83,18 @@ def handle_multi_file_convert(
 
         # Convert launch file tree
         print("Phase 1: Discovering files and nodes...")
+        progress.start_phase("Discovering launch files")
         result = convert_launch_file_tree(launch_file, output_dir, launch_arguments)
-
-        print(f"✓ Discovered {len(result.file_registry)} launch files")
+        progress.end_phase(f"✓ Discovered {len(result.file_registry)} launch files")
         print()
 
         # Phase 2: Introspection and plan generation
-        print("Phase 2: Performing introspection and generating plans...")
+        total_nodes = sum(len(fr.nodes) for fr in result.file_results.values())
+        print(f"Phase 2: Introspecting {total_nodes} nodes and generating plans...")
+        progress.start_phase("Introspecting nodes", total=total_nodes)
         introspection_service = IntrospectionService()
         written_files = write_all_plans(result, introspection_service)
-
-        print(f"✓ Generated {len(written_files)} plan files")
+        progress.end_phase(f"✓ Generated {len(written_files)} plan files")
         print()
 
         # Phase 3: Display summary (Phase 9.6)

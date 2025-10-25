@@ -14,6 +14,7 @@ from launch.launch_description_sources import AnyLaunchDescriptionSource
 
 from .file_registry import FileRegistry
 from .package_detector import detect_package
+from .progress import get_progress_tracker
 from .visitor import (
     BranchExplorerSession,
     IncludeMetadata,
@@ -170,6 +171,9 @@ def convert_launch_file_tree(
     # Collect errors across all files
     all_errors = []
 
+    # Progress tracking
+    progress = get_progress_tracker()
+
     # Process queue
     while to_process:
         current_file, current_args = to_process.pop(0)
@@ -201,6 +205,9 @@ def convert_launch_file_tree(
             continue
 
         visited.add(canonical_path)
+
+        # Progress: Show which file is being processed
+        progress.update(f"Processing: {canonical_path.name}")
 
         # Convert this single file
         try:

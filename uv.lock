@@ -70,7 +70,7 @@ requires-dist = [
     { name = "lark", specifier = ">=1.2.2" },
     { name = "packaging", specifier = ">=24.1" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "ros2-introspect", editable = "external/rmw_introspect/ros2_introspect" },
+    { name = "ros2-introspect", directory = "external/rmw_introspect/ros2_introspect" },
     { name = "ruamel-yaml", specifier = ">=0.18.6" },
 ]
 
@@ -101,7 +101,7 @@ dev = [
 requires-dist = [
     { name = "lark", specifier = ">=1.1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "ros2-introspect", editable = "external/rmw_introspect/ros2_introspect" },
+    { name = "ros2-introspect", directory = "external/rmw_introspect/ros2_introspect" },
     { name = "ruamel-yaml", specifier = ">=0.18.6" },
 ]
 
@@ -176,7 +176,7 @@ wheels = [
 [[package]]
 name = "ros2-introspect"
 version = "0.1.0"
-source = { editable = "external/rmw_introspect/ros2_introspect" }
+source = { directory = "external/rmw_introspect/ros2_introspect" }
 dependencies = [
     { name = "pyyaml" },
 ]
