@@ -436,9 +436,10 @@ def visit_include_launch_description(
     session: BranchExplorerSession,
 ) -> Optional[List[LaunchDescriptionEntity]]:
     """
-    Visit an include and recursively process the included launch file.
+    Visit an include and record metadata for separate processing.
 
-    Phase 7: Implements recursive conversion with cycle detection.
+    Phase 9.3: Stop inlining - just record include reference for deferred processing.
+    Each included file will be processed separately to generate its own plan file.
     """
     try:
         # Try to get the file path
@@ -507,38 +508,12 @@ def visit_include_launch_description(
 
         session.add_include(metadata)
 
-        # Recursively process the included file
-        # Push file onto include stack for cycle detection
-        session.include_stack.append(file_path)
-        session.visited_files.add(file_path)
+        # Phase 9.3 Change: DO NOT recurse into the included file
+        # The included file will be processed separately in a two-pass approach
+        # This allows us to generate separate plan files for each launch file
 
-        try:
-            # Load and execute the included launch description
-            # This returns the entities from the included file
-            returned_entities = include.execute(context)
-
-            # Recursively visit the returned entities
-            if returned_entities:
-                from launch import LaunchDescription
-
-                for entity in returned_entities:
-                    # If it's a LaunchDescription, visit its entities
-                    if isinstance(entity, LaunchDescription):
-                        for action in entity.entities:
-                            child_entities = visit_action(action, context, session)
-                            # Recursively visit children returned from actions like GroupAction
-                            if child_entities:
-                                for child in child_entities:
-                                    if hasattr(child, "condition"):
-                                        visit_action(child, context, session)
-                    # If it's an Action, visit it directly
-                    elif hasattr(entity, "condition"):
-                        visit_action(entity, context, session)
-
-            return returned_entities
-        finally:
-            # Pop from stack when done
-            session.include_stack.pop()
+        # Don't execute the include - we'll process it separately
+        return None
 
     except Exception as e:
         session.add_error(f"Error processing include: {e}")

@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ruamel.yaml import YAML
 
 from .arg_inference import infer_argument_type
+from .file_registry import FileRegistry
 from .inference import InferredSocket
 from .metadata import TodoContext, TodoItem, TodoReason, TodoStatus
 from .visitor import IncludeMetadata, LaunchArgumentMetadata, NodeMetadata
@@ -31,13 +32,25 @@ class PlanLink:
 class PlanBuilder:
     """Builder for generating ROS-Plan YAML from launch file metadata."""
 
-    def __init__(self):
-        """Initialize the plan builder."""
+    def __init__(
+        self,
+        file_registry: Optional[FileRegistry] = None,
+        output_dir: Optional[Path] = None,
+    ):
+        """
+        Initialize the plan builder.
+
+        Args:
+            file_registry: File registry for resolving output paths (Phase 9.3+)
+            output_dir: Output directory for relative path generation (Phase 9.3+)
+        """
         self.yaml = YAML()
         self.yaml.default_flow_style = False
         self.yaml.preserve_quotes = True
         self.yaml.width = 100
         self.todos: List[TodoItem] = []  # Collect TODOs during build
+        self.file_registry = file_registry  # For multi-file generation
+        self.output_dir = output_dir  # For relative path generation
 
     def build_plan(
         self,
@@ -83,11 +96,14 @@ class PlanBuilder:
         """
         Build include section from launch includes.
 
+        Phase 9.3: Generate file references instead of inlining content.
+        Uses FileRegistry to resolve output paths for included files.
+
         Args:
             includes: List of include metadata
 
         Returns:
-            Dictionary of include definitions
+            Dictionary of include definitions with file references
         """
         include_section = {}
 
@@ -104,8 +120,28 @@ class PlanBuilder:
             if include_name in include_section:
                 include_name = f"{include_name}_{idx}"
 
+            # Determine file reference path
+            if self.file_registry and self.output_dir:
+                # Phase 9.3+: Use FileRegistry to get output path
+                # Register the file if not already registered
+                output_path = self.file_registry.register_file(
+                    include.file_path,
+                    package_info=include.package_info,
+                )
+
+                # Generate relative path from output_dir
+                try:
+                    rel_path = output_path.relative_to(self.output_dir)
+                    file_ref = str(rel_path)
+                except ValueError:
+                    # output_path is not relative to output_dir (shouldn't happen)
+                    file_ref = str(output_path)
+            else:
+                # Fallback to simple stem-based naming (backward compatibility)
+                file_ref = f"{stem}.plan.yaml"
+
             # Build include definition
-            include_def = {"file": f"{stem}.plan.yaml"}
+            include_def = {"file": file_ref}
 
             # Add arguments if any
             if include.arguments:

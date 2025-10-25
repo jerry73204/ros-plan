@@ -6,15 +6,18 @@ This module provides the main entry point for converting launch files to plans.
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from launch import LaunchDescription, LaunchService
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import AnyLaunchDescriptionSource
 
+from .file_registry import FileRegistry
+from .package_detector import detect_package
 from .visitor import (
     BranchExplorerSession,
     IncludeMetadata,
+    LaunchArgumentMetadata,
     NodeMetadata,
     visit_action,
 )
@@ -22,10 +25,25 @@ from .visitor import (
 
 @dataclass
 class ConversionResult:
-    """Result of converting a launch file."""
+    """Result of converting a single launch file."""
 
     nodes: List[NodeMetadata]
     includes: List[IncludeMetadata]
+    launch_arguments: List[LaunchArgumentMetadata]
+    errors: List[str]
+
+
+@dataclass
+class MultiFileConversionResult:
+    """Result of converting a launch file tree (Phase 9.3+)."""
+
+    # Map from source file path -> ConversionResult
+    file_results: Dict[Path, ConversionResult]
+    # File registry tracking all generated files
+    file_registry: FileRegistry
+    # Root launch file
+    root_file: Path
+    # Errors across all files
     errors: List[str]
 
 
@@ -33,10 +51,10 @@ def convert_launch_file(
     launch_file: Path, launch_arguments: Optional[Dict[str, str]] = None
 ) -> ConversionResult:
     """
-    Convert a launch file to plan format.
+    Convert a single launch file to plan format.
 
-    This is Phase 12.1 - basic visitor that discovers nodes and includes.
-    Future phases will add introspection, plan generation, etc.
+    Phase 9.3+: This only processes a single file without recursing into includes.
+    Use convert_launch_file_tree() for multi-file conversion.
 
     Args:
         launch_file: Path to the launch file to convert
@@ -98,4 +116,92 @@ def convert_launch_file(
         # Otherwise skip (e.g., events)
 
     # Return the collected data
-    return ConversionResult(nodes=session.nodes, includes=session.includes, errors=session.errors)
+    return ConversionResult(
+        nodes=session.nodes,
+        includes=session.includes,
+        launch_arguments=session.launch_arguments,
+        errors=session.errors,
+    )
+
+
+def convert_launch_file_tree(
+    root_launch_file: Path,
+    output_dir: Path,
+    launch_arguments: Optional[Dict[str, str]] = None,
+) -> MultiFileConversionResult:
+    """
+    Convert a launch file tree to plan format (Phase 9.3+).
+
+    Two-pass processing:
+    1. Pass 1: Visit root file, collect nodes and include references
+    2. Pass 2: Recursively process each unique include separately
+
+    Args:
+        root_launch_file: Path to the root launch file to convert
+        output_dir: Output directory for plan files
+        launch_arguments: Arguments to pass to root launch file (key-value pairs)
+
+    Returns:
+        MultiFileConversionResult with all processed files
+    """
+    if launch_arguments is None:
+        launch_arguments = {}
+
+    # Initialize file registry
+    file_registry = FileRegistry(output_dir)
+
+    # Track all files to process (queue)
+    to_process: List[Tuple[Path, Dict[str, str]]] = [(root_launch_file, launch_arguments)]
+
+    # Map from canonical path -> ConversionResult
+    file_results: Dict[Path, ConversionResult] = {}
+
+    # Track visited files to prevent infinite loops
+    visited = set()
+
+    # Collect errors across all files
+    all_errors = []
+
+    # Process queue
+    while to_process:
+        current_file, current_args = to_process.pop(0)
+
+        # Canonicalize path
+        canonical_path = current_file.resolve()
+
+        # Skip if already visited
+        if canonical_path in visited:
+            continue
+
+        visited.add(canonical_path)
+
+        # Convert this single file
+        try:
+            result = convert_launch_file(canonical_path, current_args)
+            file_results[canonical_path] = result
+
+            # Register this file in the registry
+            pkg_info = detect_package(canonical_path)
+            file_registry.register_file(canonical_path, package_info=pkg_info)
+
+            # Collect errors
+            all_errors.extend(result.errors)
+
+            # Add includes to processing queue
+            for include in result.includes:
+                # Extract include path
+                include_path = include.file_path
+
+                # Add to queue (note: arguments are already resolved in the include metadata)
+                to_process.append((include_path, include.arguments))
+
+        except Exception as e:
+            error_msg = f"Error converting {canonical_path}: {e}"
+            all_errors.append(error_msg)
+
+    return MultiFileConversionResult(
+        file_results=file_results,
+        file_registry=file_registry,
+        root_file=root_launch_file.resolve(),
+        errors=all_errors,
+    )
