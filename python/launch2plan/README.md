@@ -65,6 +65,27 @@ cd python/launch2plan
 uv run pytest
 ```
 
+## Troubleshooting
+
+### Script Hangs After Completion
+
+**Problem:** The tool was hanging after printing "✓ Multi-file conversion complete!", requiring Ctrl+C to terminate.
+
+**Root Cause:** Python's `sys.exit()` waits for all threads to terminate in `threading._shutdown()`. The ROS 2 LaunchService creates background threads that never terminate cleanly, causing an indefinite hang.
+
+**Solution:** The tool now uses `os._exit()` to bypass Python's threading shutdown. This is safe because:
+- All plan files are written before exit
+- Output streams are explicitly flushed
+- No cleanup handlers are needed
+- The conversion is 100% complete
+
+**Technical Details:**
+- `handle_multi_file_convert()` calls `os._exit(0)` directly instead of returning
+- `converter.py` calls `launch_service.shutdown()` in a finally block
+- Module-level exit also uses `os._exit()` for all commands
+
+This issue has been resolved and the tool should exit immediately after completion.
+
 ## References
 
 See `book/src/launch2plan.md` for complete design documentation.
